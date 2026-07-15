@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { drawWinners, normalizeParticipants } from "@/lib/lottery";
 
-const STORAGE_KEY = "hermes-tools:lottery:v1";
+const STORAGE_KEY = "toolverse:lottery:v1";
+const LEGACY_STORAGE_KEY = "hermes-tools:lottery:v1";
 type StoredState = { raw: string; count: number; dedupe: boolean; exclude: boolean; previousWinners: string[]; history: string[][] };
 
 export function LotteryTool() {
@@ -20,9 +21,10 @@ export function LotteryTool() {
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
       if (!saved) return;
       const data = JSON.parse(saved) as StoredState;
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
       // Restoring device-local preferences requires a one-time client hydration.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRaw(data.raw ?? ""); setCount(data.count ?? 1); setDedupe(data.dedupe ?? true); setExclude(data.exclude ?? true); setPreviousWinners(data.previousWinners ?? []); setHistory(data.history ?? []);

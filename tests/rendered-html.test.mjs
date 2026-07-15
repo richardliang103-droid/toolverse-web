@@ -9,11 +9,11 @@ async function render(pathname = "/") {
   return worker.fetch(new Request(`http://localhost${pathname}`, { headers: { accept: "text/html" } }), { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } }, { waitUntil() {}, passThroughOnException() {} });
 }
 
-test("server-renders the Hermes Tools homepage", async () => {
+test("server-renders the ToolVerse homepage", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Hermes Tools/i);
+  assert.match(html, /ToolVerse/i);
   assert.match(html, /把麻煩的小事/);
   assert.match(html, /公平抽獎/);
   assert.match(html, /圖片去背/);

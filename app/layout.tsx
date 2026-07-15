@@ -15,10 +15,10 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: base,
-    title: { default: "Hermes Tools｜俐落好用的網頁工具", template: "%s｜Hermes Tools" },
+    title: { default: "ToolVerse｜俐落好用的網頁工具", template: "%s｜ToolVerse" },
     description: "免安裝、免登入的實用網頁工具：公平抽獎、圖片去背，以及更多即將加入的日常工具。",
-    openGraph: { title: "Hermes Tools", description: "把麻煩的小事，變成俐落的一步。", type: "website", locale: "zh_TW", images: [{ url: image, width: 1200, height: 630, alt: "Hermes Tools" }] },
-    twitter: { card: "summary_large_image", title: "Hermes Tools", description: "把麻煩的小事，變成俐落的一步。", images: [image] },
+    openGraph: { title: "ToolVerse", description: "把麻煩的小事，變成俐落的一步。", type: "website", locale: "zh_TW", images: [{ url: image, width: 1200, height: 630, alt: "ToolVerse" }] },
+    twitter: { card: "summary_large_image", title: "ToolVerse", description: "把麻煩的小事，變成俐落的一步。", images: [image] },
   };
 }
 

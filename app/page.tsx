@@ -8,7 +8,7 @@ export default function Home() {
       <SiteHeader />
       <section className="hero page-shell">
         <div className="hero-copy">
-          <p className="eyebrow">HERMES TOOLS · 瀏覽器即開即用</p>
+          <p className="eyebrow">TOOLVERSE · 瀏覽器即開即用</p>
           <h1>把麻煩的小事，<br />變成俐落的一步。</h1>
           <p className="hero-lede">
             一組專注、快速又尊重隱私的網頁工具。免安裝、免登入，現在就能開始。
@@ -73,7 +73,7 @@ export default function Home() {
           <article><span>03</span><h3>小工具也值得好體驗</h3><p>手機、鍵盤與觸控都好用，沒有廣告迷宮。</p></article>
         </div>
       </section>
-      <footer className="site-footer page-shell"><strong>HERMES TOOLS</strong><span>讓工具回到工具本身。</span><span>© 2026</span></footer>
+      <footer className="site-footer page-shell"><strong>TOOLVERSE</strong><span>讓工具回到工具本身。</span><span>© 2026</span></footer>
     </main>
   );
 }

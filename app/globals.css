@@ -135,9 +135,13 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .compare-range { width: 100%; margin-top: 14px; accent-color: var(--blue); }
 .preview-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .processing-state { display: grid; place-items: center; text-align: center; color: var(--muted); }
+.processing-content { width: min(300px, 88%); }
 .processing-disc { width: 64px; height: 64px; margin-bottom: 20px; border: 5px solid var(--blue-soft); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .service-notice { margin-top: 16px; padding: 14px; border: 1px solid #e4bb65; border-radius: 10px; background: #fff3d7; color: #76510b; font-size: 13px; line-height: 1.55; }
+.service-notice-private { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: start; border-color: #83b89a; background: #e8f8ef; color: #245c3c; }
+.model-progress { height: 9px; margin: 18px 0 8px; overflow: hidden; border: 1px solid #9da6cc; border-radius: 999px; background: white; }
+.model-progress span { display: block; height: 100%; border-radius: inherit; background: var(--blue); transition: width .2s ease; }
 
 @media (max-width: 860px) {
   .site-nav a:not(.nav-pill) { display: none; }
