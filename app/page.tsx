@@ -14,8 +14,8 @@ export default function Home() {
             一組專注、快速又尊重隱私的網頁工具。免安裝、免登入，現在就能開始。
           </p>
           <div className="hero-actions">
-            <Link className="button button-primary" href="/tools/lottery">開始抽獎</Link>
-            <Link className="button button-secondary" href="/tools/background-remover">圖片去背</Link>
+            <Link className="button button-primary" href="/tools/ai-flowchart">試用 AI 流程圖</Link>
+            <Link className="button button-secondary" href="#tools">瀏覽所有工具</Link>
           </div>
           <div className="trust-row" aria-label="產品特色">
             <span>免註冊</span><span>手機可用</span><span>清楚透明</span>
@@ -26,11 +26,12 @@ export default function Home() {
           <div className="orbit orbit-two" />
           <div className="hero-card hero-card-main">
             <span className="mini-label">今日好用</span>
-            <strong>2 個工具</strong>
+            <strong>3 個工具</strong>
             <small>更多工具，持續加入</small>
           </div>
           <div className="hero-chip chip-lottery">✦ 公平抽選</div>
           <div className="hero-chip chip-image">◐ 透明去背</div>
+          <div className="hero-chip chip-flow">⌘ AI 流程圖</div>
         </div>
       </section>
 
@@ -56,7 +57,7 @@ export default function Home() {
             </Link>
           ))}
           <div className="tool-card tool-card-coming">
-            <div className="tool-card-top"><span className="tool-number">03</span><span className="tool-status">COMING</span></div>
+            <div className="tool-card-top"><span className="tool-number">04</span><span className="tool-status">COMING</span></div>
             <div className="tool-symbol" aria-hidden="true">＋</div>
             <h3>下一個工具</h3>
             <p>圖片壓縮、QR Code 或文字整理？工具箱會持續長大。</p>
@@ -69,7 +70,7 @@ export default function Home() {
         <p className="eyebrow">BUILT WITH CARE</p>
         <div className="principle-grid">
           <article><span>01</span><h3>能在裝置上完成，就不離開裝置</h3><p>抽獎名單只保留在你的瀏覽器，不會上傳到伺服器。</p></article>
-          <article><span>02</span><h3>每一步都說清楚</h3><p>需要上傳圖片時，會明確告訴你資料如何處理。</p></article>
+          <article><span>02</span><h3>每一步都說清楚</h3><p>需要交給外部 AI 的內容與金鑰處理方式，都會在操作前明確標示。</p></article>
           <article><span>03</span><h3>小工具也值得好體驗</h3><p>手機、鍵盤與觸控都好用，沒有廣告迷宮。</p></article>
         </div>
       </section>
