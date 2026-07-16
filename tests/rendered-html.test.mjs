@@ -15,7 +15,7 @@ test("server-renders the ToolVerse homepage", async () => {
   const html = await response.text();
   assert.match(html, /ToolVerse/i);
   assert.match(html, /選一個，直接開始/);
-  assert.match(html, /線上抽獎/);
+  assert.match(html, /隨機抽名單/);
   assert.match(html, /圖片去背/);
   assert.match(html, /流程圖/);
   assert.doesNotMatch(html, /BUILT WITH CARE|更多工具，持續加入|把麻煩的小事/);
@@ -25,7 +25,7 @@ test("server-renders the ToolVerse homepage", async () => {
 test("server-renders all tool routes", async () => {
   const [lottery, remover, flowchart] = await Promise.all([render("/tools/lottery"), render("/tools/background-remover"), render("/tools/ai-flowchart")]);
   assert.equal(lottery.status, 200); assert.equal(remover.status, 200); assert.equal(flowchart.status, 200);
-  assert.match(await lottery.text(), /開始抽獎/);
+  assert.match(await lottery.text(), /開始抽選/);
   assert.match(await remover.text(), /把圖片拖到這裡/);
   assert.match(await flowchart.text(), /描述你的流程/);
 });

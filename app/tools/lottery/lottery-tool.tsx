@@ -109,7 +109,7 @@ export function LotteryTool() {
       setHistory((value) => [result, ...value].slice(0, 5));
       if (exclude) setPreviousWinners((value) => [...new Set([...value, ...result])]);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "抽獎時發生錯誤");
+      setError(caught instanceof Error ? caught.message : "抽選時發生錯誤");
     } finally {
       setDrawing(false);
     }
@@ -122,19 +122,19 @@ export function LotteryTool() {
 
   function resetWinners() { setPreviousWinners([]); setWinners([]); setRevealed([]); setHistory([]); setError(""); }
 
-  return <section className="workspace lottery-neon page-shell" aria-label="抽獎工具">
-    <div className="panel"><div className="panel-header"><h2>參加者名單</h2><span className="panel-meta">{participants.length} 人 · {eligible.length} 人可抽</span></div><label className="sr-only" htmlFor="participants">參加者名單，一行一位</label><textarea id="participants" className="participant-input participant-input-compact" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder={'一行輸入一位參加者\n例如：\n小明\n小美\nAlex'} /><div className="form-controls"><label className="check-row"><input type="checkbox" checked={dedupe} onChange={(event) => setDedupe(event.target.checked)} />移除重複名字</label><label className="check-row"><input type="checkbox" checked={exclude} onChange={(event) => setExclude(event.target.checked)} />排除已中獎者</label><label className="number-field" htmlFor="winner-count">中獎人數<input id="winner-count" className="number-input" type="number" min="1" max={Math.max(1, eligible.length)} value={count} onChange={(event) => setCount(Number(event.target.value))} /></label></div><button className="button button-blue draw-button" type="button" onClick={handleDraw} disabled={drawing}>{drawing ? "轉盤轉動中…" : "開始抽獎 ✦"}</button>{error && <p className="error-message" role="alert">{error}</p>}</div>
-    <div className="panel panel-tinted lottery-stage-panel"><div className="panel-header"><h2>抽獎轉盤</h2></div>
+  return <section className="workspace lottery-neon page-shell" aria-label="隨機抽名單工具">
+    <div className="panel lottery-controls-panel"><div className="panel-header"><h2>參加名單</h2><span className="panel-meta">共 {participants.length} 人 · 可抽 {eligible.length} 人</span></div><p className="lottery-panel-note">每行一位，名單會留在你的裝置中。</p><label className="sr-only" htmlFor="participants">參加者名單，一行一位</label><textarea id="participants" className="participant-input participant-input-compact" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder={'輸入或貼上名單，每行一位\n例如：\n小明\n小美\nAlex'} /><div className="form-controls"><label className="check-row"><input type="checkbox" checked={dedupe} onChange={(event) => setDedupe(event.target.checked)} />移除重複名字</label><label className="check-row"><input type="checkbox" checked={exclude} onChange={(event) => setExclude(event.target.checked)} />排除已抽出者</label><label className="number-field" htmlFor="winner-count">抽出人數<input id="winner-count" className="number-input" type="number" min="1" max={Math.max(1, eligible.length)} value={count} onChange={(event) => setCount(Number(event.target.value))} /></label></div><button className="button button-blue draw-button" type="button" onClick={handleDraw} disabled={drawing}>{drawing ? "正在抽選…" : "開始抽選"}</button>{error && <p className="error-message" role="alert">{error}</p>}</div>
+    <div className="panel panel-tinted lottery-stage-panel"><div className="panel-header"><h2>抽選轉盤</h2><span className="lottery-fairness">公平隨機抽選</span></div>
       <div className="lottery-wheel-area">
         {justRevealed && <div className="lottery-flash-winner">🎉 {justRevealed}</div>}
         <LotteryWheel ref={wheelRef} segments={displaySegments} />
       </div>
-      {drawing && <p className="lottery-spin-hint">轉盤轉動中…</p>}
+      {drawing && <p className="lottery-spin-hint">正在從名單中隨機抽選…</p>}
       {revealed.length > 0
         ? <div ref={winnerListRef} className="winner-list">{revealed.map((winner, index) => <div className="winner-item" key={`${winner}-${index}`}>{winner}</div>)}</div>
-        : !drawing && <div className="result-empty"><strong>好運正在待命</strong>輸入名單並按下抽獎，轉盤會停在得獎者身上。</div>}
-      {winners.length > 0 && !drawing && <div className="result-actions"><button className="button button-small button-secondary" type="button" onClick={copyResults}>{copied ? "已複製 ✓" : "複製結果"}</button><button className="button button-small button-secondary" type="button" onClick={handleDraw}>再抽一次</button></div>}
-      {(previousWinners.length > 0 || history.length > 0) && <div className="history"><div className="panel-header"><h3>最近結果</h3><button className="button button-small button-secondary" type="button" onClick={resetWinners}>全部重設</button></div><ol>{history.map((item, index) => <li key={`${item.join("-")}-${index}`}>{item.join("、")}</li>)}</ol></div>}
+        : !drawing && <div className="result-empty"><strong>轉盤等待名單</strong>在左側輸入成員後，即可開始公平隨機抽選。</div>}
+      {winners.length > 0 && !drawing && <div className="result-actions"><button className="button button-small button-secondary" type="button" onClick={copyResults}>{copied ? "已複製 ✓" : "複製結果"}</button><button className="button button-small button-secondary" type="button" onClick={handleDraw}>再次抽選</button></div>}
+      {(previousWinners.length > 0 || history.length > 0) && <div className="history"><div className="panel-header"><h3>抽出紀錄</h3><button className="button button-small button-secondary" type="button" onClick={resetWinners}>全部重設</button></div><ol>{history.map((item, index) => <li key={`${item.join("-")}-${index}`}>{item.join("、")}</li>)}</ol></div>}
     </div>
   </section>;
 }

@@ -12,7 +12,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: base,
     title: { default: "ToolVerse｜網頁工具", template: "%s｜ToolVerse" },
-    description: "流程圖、線上抽獎與圖片去背。",
+    description: "流程圖、隨機抽名單與圖片去背。",
     openGraph: { title: "ToolVerse", description: "簡單、直接的網頁工具。", type: "website", locale: "zh_TW", images: [{ url: image, width: 1200, height: 630, alt: "ToolVerse 工具目錄" }] },
     twitter: { card: "summary_large_image", title: "ToolVerse", description: "簡單、直接的網頁工具。", images: [image] },
   };

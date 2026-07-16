@@ -125,47 +125,51 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .note-card h3 { margin: 0 0 8px; font-size: 16px; }
 .note-card p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
 
-/* Lottery — dark neutral (zinc) base with a single locked gold accent,
-   scoped to this tool's workspace only. One accent, used everywhere: the
-   button, the focus rings, the winner cards, the pointer, the wheel's
-   recurring highlight slice — no mixed neon hues. */
-.lottery-neon { background: linear-gradient(160deg, #17171b 0%, #0e0e11 60%, #0a0a0c 100%); border-color: #3f3f46; box-shadow: 8px 8px 0 #050505, 0 0 46px rgba(198,138,46,.16); }
-.lottery-neon .panel { background: rgba(24,24,27,.82); border-color: #3f3f46; }
-.lottery-neon .panel-tinted { background: rgba(30,30,34,.86); }
-.lottery-neon .panel-header h2 { color: #f4f4f5; }
-.lottery-neon .panel-meta { color: #a1a1aa; }
-.lottery-neon h3, .lottery-neon strong { color: #f4f4f5; }
-.lottery-neon .participant-input { background: rgba(9,9,11,.7); border-color: #3f3f46; color: #e4e4e7; }
-.lottery-neon .participant-input::placeholder { color: #71717a; }
-.lottery-neon .participant-input:focus { border-color: #c68a2e; box-shadow: 0 0 0 3px rgba(198,138,46,.22), 0 0 18px rgba(198,138,46,.22); }
-.lottery-neon .check-row { color: #b6b6bd; }
-.lottery-neon .check-row input { accent-color: #c68a2e; }
-.lottery-neon .number-field { color: #b6b6bd; }
-.lottery-neon .number-input { background: rgba(9,9,11,.7); border-color: #3f3f46; color: #f4f4f5; }
-.lottery-neon .number-input:focus { border-color: #c68a2e; box-shadow: 0 0 0 3px rgba(198,138,46,.22); }
-.lottery-neon .error-message { color: #f3a6a6; }
-.lottery-neon .history { border-top-color: #3f3f46; }
-.lottery-neon .history h3 { color: #f4f4f5; }
-.lottery-neon .history ol { color: #a1a1aa; }
-.lottery-neon .draw-button { background: linear-gradient(135deg,#f2c169,#c68a2e); border-color: #8a5f1f; color: #1c1408; font-weight: 850; box-shadow: 0 8px 22px rgba(198,138,46,.35); }
-.lottery-neon .draw-button:hover { box-shadow: 0 10px 28px rgba(198,138,46,.48); }
-.lottery-neon .draw-button:disabled { background: linear-gradient(135deg,#4a4a52,#333338); box-shadow: none; color: #a1a1aa; }
-.lottery-neon .button-secondary { border-color: #52525b; color: #e4e4e7; }
-.lottery-neon .button-secondary:hover { box-shadow: 4px 4px 0 #3f3f46; }
-.lottery-neon .result-empty { color: #a1a1aa; }
-.lottery-neon .result-empty strong { color: #f4f4f5; }
-.lottery-neon .winner-item { background: linear-gradient(135deg,#f2c169,#c68a2e); border-color: #8a5f1f; color: #1c1408; box-shadow: 0 6px 16px rgba(198,138,46,.3); }
+/* Lottery — Midnight Studio Selector: a calm event-tool finish, using deep
+   navy panels and restrained champagne accents rather than a prize-wheel look. */
+.lottery-neon { position: relative; overflow: hidden; background: radial-gradient(circle at 76% 9%, rgba(84,112,164,.22), transparent 30%), radial-gradient(circle at 18% 100%, rgba(194,147,70,.14), transparent 31%), linear-gradient(145deg, #0a101b 0%, #111a2a 48%, #08101c 100%); border-color: #263753; box-shadow: 0 22px 52px rgba(13,20,34,.2); }
+.lottery-neon .panel { position: relative; background: rgba(12,20,34,.78); border-color: rgba(223,234,255,.16); box-shadow: inset 0 1px 0 rgba(255,255,255,.035); }
+.lottery-neon .panel-tinted { background: rgba(17,28,46,.76); }
+.lottery-neon .panel-header { width: 100%; margin-bottom: 10px; }
+.lottery-neon .panel-header h2 { color: #f7f3e9; letter-spacing: -.025em; }
+.lottery-neon .panel-meta { color: #a9b8d1; }
+.lottery-neon h3, .lottery-neon strong { color: #f7f3e9; }
+.lottery-panel-note { width: 100%; margin: 0 0 16px; color: #91a2bf; font-size: 12px; line-height: 1.6; }
+.lottery-neon .participant-input { background: rgba(4,10,18,.74); border-color: rgba(228,236,255,.2); color: #edf3ff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.015); }
+.lottery-neon .participant-input::placeholder { color: #6f809c; }
+.lottery-neon .participant-input:focus { border-color: #d9b15b; box-shadow: 0 0 0 3px rgba(217,177,91,.16), 0 0 26px rgba(217,177,91,.13); }
+.lottery-neon .check-row { color: #c4cfdf; }
+.lottery-neon .check-row input { accent-color: #d9b15b; }
+.lottery-neon .number-field { color: #c4cfdf; }
+.lottery-neon .number-input { background: rgba(4,10,18,.74); border-color: rgba(228,236,255,.2); color: #f7f3e9; }
+.lottery-neon .number-input:focus { border-color: #d9b15b; box-shadow: 0 0 0 3px rgba(217,177,91,.16); }
+.lottery-neon .error-message { color: #ffb4b4; }
+.lottery-neon .history { width: 100%; border-top-color: rgba(223,234,255,.16); }
+.lottery-neon .history h3 { color: #f7f3e9; }
+.lottery-neon .history ol { color: #a9b8d1; }
+.lottery-neon .draw-button { background: linear-gradient(135deg,#f0cf83,#bd8b37); border-color: #e7c36e; color: #12100b; font-weight: 850; box-shadow: 0 10px 28px rgba(208,157,64,.24); }
+.lottery-neon .draw-button:hover { box-shadow: 0 14px 34px rgba(208,157,64,.34); }
+.lottery-neon .draw-button:disabled { background: #2a3548; border-color: #40506a; box-shadow: none; color: #9ba8bc; }
+.lottery-neon .button-secondary { border-color: #53637c; color: #e8eef9; }
+.lottery-neon .button-secondary:hover { background: rgba(255,255,255,.06); box-shadow: none; }
+.lottery-neon .result-empty { color: #a9b8d1; }
+.lottery-neon .result-empty strong { color: #f7f3e9; }
+.lottery-neon .winner-item { background: linear-gradient(135deg,#f2d78f,#bd8831); border-color: #efd584; color: #171108; box-shadow: 0 8px 22px rgba(208,157,64,.22); }
 
 /* Give the wheel side more room than the plain form panel. */
 .workspace.lottery-neon { grid-template-columns: minmax(0,.86fr) minmax(400px,1.14fr); }
-
+.lottery-controls-panel { align-self: stretch; }
 .lottery-stage-panel { display: grid; gap: 16px; justify-items: center; text-align: center; }
-.lottery-wheel-area { position: relative; display: grid; place-items: center; padding: 10px 22px 6px 4px; }
-.lottery-wheel-shell { position: relative; width: min(380px, 82vw); aspect-ratio: 1 / 1; filter: drop-shadow(0 0 24px rgba(198,138,46,.28)); }
+.lottery-fairness { padding: 6px 9px; border: 1px solid rgba(217,177,91,.42); border-radius: 999px; color: #e8ca83; font-size: 11px; font-weight: 720; letter-spacing: .02em; white-space: nowrap; }
+.lottery-wheel-area { position: relative; display: grid; place-items: center; padding: 16px 34px 8px 6px; }
+.lottery-wheel-shell { position: relative; width: min(398px, 82vw); aspect-ratio: 1 / 1; filter: drop-shadow(0 0 30px rgba(183,137,59,.25)); }
+.lottery-wheel-shell::before { content: ""; position: absolute; inset: -13px; z-index: -1; border: 1px solid rgba(231,195,110,.22); border-radius: 50%; box-shadow: inset 0 0 24px rgba(231,195,110,.09), 0 0 34px rgba(106,136,195,.1); }
 .lottery-wheel-svg { display: block; width: 100%; height: 100%; }
 .lottery-wheel-label { font-size: 16px; font-weight: 800; font-family: Inter, "Noto Sans TC", sans-serif; pointer-events: none; }
-.lottery-wheel-pointer { position: absolute; top: 50%; right: -10px; width: 28px; height: 32px; transform: translateY(-50%) rotate(-90deg); z-index: 2; background: linear-gradient(160deg,#fdf0cf,#d9a441 55%,#a5731f); clip-path: polygon(50% 100%, 0 0, 100% 0); filter: drop-shadow(0 0 9px rgba(217,164,65,.7)); }
-.lottery-spin-hint { margin: 0; color: #c9975a; font-size: 13px; letter-spacing: .06em; animation: lottery-pulse 1s ease-in-out infinite; }
+/* At 3 o'clock the pointer must face left, into the wheel. The spin target
+   remains 90° (right side), so this visual correction matches the target math. */
+.lottery-wheel-pointer { position: absolute; top: 50%; right: -15px; width: 32px; height: 36px; transform: translateY(-50%) rotate(90deg); z-index: 2; background: linear-gradient(160deg,#fff2cc,#dfb75d 55%,#9e702c); clip-path: polygon(50% 100%, 0 0, 100% 0); filter: drop-shadow(0 0 10px rgba(231,195,110,.7)); }
+.lottery-spin-hint { margin: 0; color: #dfc27a; font-size: 13px; letter-spacing: .04em; animation: lottery-pulse 1s ease-in-out infinite; }
 @keyframes lottery-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 .lottery-flash-winner { position: absolute; top: -4px; left: 50%; transform: translate(-50%,-100%); padding: 10px 18px; border-radius: 999px; background: linear-gradient(135deg,#f2c169,#c68a2e); color: #1c1408; font-weight: 800; font-size: 15px; white-space: nowrap; box-shadow: 0 8px 20px rgba(198,138,46,.4); animation: lottery-flash-pop 1.8s ease forwards; pointer-events: none; z-index: 3; }
 @keyframes lottery-flash-pop {

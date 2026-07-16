@@ -16,12 +16,12 @@ const VIEWBOX = 360;
 // there reads horizontally instead of sideways/vertical.
 const POINTER_ANGLE = 90;
 
-// Alternating charcoal / gold, roulette-style — one locked accent (gold)
-// against a neutral zinc base, not a rainbow of neon hues.
+// Alternating midnight navy / champagne accents keep the wheel readable while
+// feeling like an event-selection tool instead of a prize wheel.
 const SLICE_TONES = [
-  { fill: "#1b1b20", text: "#f3ead2" },
-  { fill: "#2c2c33", text: "#f6efdc" },
-  { fill: "#c68a2e", text: "#1c1408" },
+  { fill: "#101927", text: "#f7f3e9" },
+  { fill: "#1b2940", text: "#f7f3e9" },
+  { fill: "#b98a42", text: "#16100a" },
 ];
 
 function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
@@ -110,7 +110,7 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[] 
   return (
     <div className="lottery-wheel-shell">
       <div className="lottery-wheel-pointer" aria-hidden="true" />
-      <svg className="lottery-wheel-svg" viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} role="img" aria-label="抽獎轉盤">
+      <svg className="lottery-wheel-svg" viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} role="img" aria-label="抽選轉盤">
         <defs>
           <radialGradient id="wheelHub" cx="50%" cy="50%" r="60%">
             <stop offset="0%" stopColor="#fff8e6" />
@@ -120,11 +120,11 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[] 
         </defs>
         <g ref={rotorRef}>
           {segments.length === 0 ? (
-            <circle cx={cx} cy={cy} r={r} fill="#1b1b20" stroke="#3f3f46" strokeWidth={2} />
+            <circle cx={cx} cy={cy} r={r} fill="#101927" stroke="#46536a" strokeWidth={2} />
           ) : (
             slices.map((slice) => (
               <g key={slice.key}>
-                <path d={slice.path} fill={slice.fill} stroke="#0c0c0e" strokeWidth={1.5} />
+                <path d={slice.path} fill={slice.fill} stroke="#080d16" strokeWidth={1.5} />
                 {showLabels && (
                   <text
                     x={slice.labelPos.x}

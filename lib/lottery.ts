@@ -12,8 +12,8 @@ function cryptoRandomIndex(maxExclusive: number) {
 }
 
 export function drawWinners(participants: string[], count: number) {
-  if (!Number.isInteger(count) || count < 1) throw new Error("中獎人數至少要有 1 位");
-  if (count > participants.length) throw new Error("中獎人數不能超過可抽選人數");
+  if (!Number.isInteger(count) || count < 1) throw new Error("抽出人數至少要有 1 位");
+  if (count > participants.length) throw new Error("抽出人數不能超過可抽選人數");
   const pool = [...participants];
   for (let index = pool.length - 1; index > 0; index -= 1) {
     const randomIndex = cryptoRandomIndex(index + 1);
