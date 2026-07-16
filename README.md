@@ -5,6 +5,7 @@
 - 線上抽獎：真的轉盤動畫，使用 Web Crypto API 抽選，名單與紀錄只存在瀏覽器。
 - 圖片去背：使用 Transformers.js 與 MODNet，圖片不會上傳伺服器。
 - 流程圖：中文需求轉成經驗證的節點與連線，可匯出 Mermaid、PNG、SVG 與 draw.io。
+- 甘特圖：拖曳排出任務、里程碑與依賴關係，時程只存在瀏覽器，可匯出 PNG、CSV、Mermaid 與 JSON。
 
 ## 開發
 
