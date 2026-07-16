@@ -221,3 +221,44 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Compact directory layout */
+.directory-page { min-height: 100vh; display: flex; flex-direction: column; background: var(--white); }
+.directory-page .site-header { border-bottom-color: #e5e1d8; }
+.directory-heading { padding: 74px 0 28px; }
+.directory-heading h1 { margin: 0; font-size: clamp(34px, 5vw, 52px); line-height: 1; letter-spacing: -.055em; }
+.directory-heading p { margin: 13px 0 0; color: var(--muted); font-size: 15px; }
+.compact-tool-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; padding-bottom: 90px; }
+.compact-tool { min-width: 0; min-height: 138px; display: grid; grid-template-columns: 48px minmax(0,1fr) auto; align-items: center; gap: 15px; padding: 18px; border: 1px solid #d8d3c9; border-radius: 14px; background: white; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.compact-tool:hover { transform: translateY(-2px); border-color: var(--ink); }
+.compact-tool-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 12px; background: #eceef6; color: var(--ink); font-size: 24px; font-weight: 800; }
+.compact-tool-blue .compact-tool-icon { background: var(--blue-soft); color: var(--blue); }
+.compact-tool-coral .compact-tool-icon { background: #ffd9ce; color: #c63f22; }
+.compact-tool-mint .compact-tool-icon { background: #dff6e9; color: #23734a; }
+.compact-tool-copy { min-width: 0; display: grid; gap: 7px; }
+.compact-tool-copy strong { font-size: 17px; letter-spacing: -.02em; }
+.compact-tool-copy small { display: -webkit-box; overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.55; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.compact-tool-arrow { color: #9b9da4; font-size: 18px; }
+.directory-footer { min-height: 74px; display: flex; align-items: center; justify-content: space-between; margin-top: auto; border-top: 1px solid #e5e1d8; color: var(--muted); font-size: 12px; }
+.compact-tool-heading { padding: 34px 0 22px; }
+.compact-tool-heading .back-link { margin-bottom: 22px; }
+.compact-tool-heading > div { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.compact-tool-heading h1 { margin: 0; font-size: clamp(34px, 5vw, 50px); line-height: 1; letter-spacing: -.055em; }
+.compact-tool-heading .privacy-badge { padding: 9px 12px; font-size: 12px; }
+.tool-page .workspace, .tool-page .flowchart-workspace { margin-bottom: 64px; }
+
+@media (max-width: 860px) {
+  .site-nav a:not(.nav-pill) { display: inline-flex; }
+  .compact-tool-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+
+@media (max-width: 560px) {
+  .directory-heading { padding: 48px 0 22px; }
+  .compact-tool-grid { grid-template-columns: 1fr; gap: 9px; padding-bottom: 54px; }
+  .compact-tool { min-height: 96px; padding: 14px; }
+  .compact-tool-copy small { -webkit-line-clamp: 1; }
+  .directory-footer { min-height: 64px; flex-direction: row; padding-block: 0; }
+  .compact-tool-heading { padding: 28px 0 18px; }
+  .compact-tool-heading .back-link { margin-bottom: 18px; }
+  .compact-tool-heading > div { align-items: flex-start; flex-direction: column; gap: 12px; }
+}

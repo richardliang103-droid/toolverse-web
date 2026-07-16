@@ -14,10 +14,11 @@ test("server-renders the ToolVerse homepage", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /ToolVerse/i);
-  assert.match(html, /把麻煩的小事/);
+  assert.match(html, /選一個，直接開始/);
   assert.match(html, /公平抽獎/);
   assert.match(html, /圖片去背/);
   assert.match(html, /AI 流程圖/);
+  assert.doesNotMatch(html, /BUILT WITH CARE|更多工具，持續加入|把麻煩的小事/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/i);
 });
 
