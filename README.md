@@ -24,13 +24,18 @@ npm test
 
 ## AI 流程圖
 
-流程圖工具在瀏覽器內直接呼叫 OpenAI Responses API，API 金鑰只保留在頁面記憶體，不會寫入瀏覽器儲存空間或 ToolVerse 伺服器。AI 回傳的節點與連線會先通過本機正規化，再生成 Mermaid 與 draw.io XML。
+流程圖工具支援兩種 AI 來源，切換鈕都在頁面上，兩種金鑰都只暫存在瀏覽器頁面記憶體，直接從瀏覽器送往對應的 AI 服務，不會經過 ToolVerse 伺服器，也不需要在部署平台額外設定任何環境變數：
+
+- **Gemini（免費額度）**：預設模式。到 [Google AI Studio](https://aistudio.google.com/apikey) 免費申請一組 API 金鑰（不需信用卡），貼到頁面上的「Gemini API 金鑰」欄位即可使用。要注意 Gemini 免費額度的請求內容可能會被 Google 用於改進模型，跟 OpenAI 模式的隱私假設不同。
+- **OpenAI**：需要自己的 OpenAI API 金鑰，用量依 OpenAI 帳戶計費。
+
+兩種模式產生的節點與連線都會先經過同一套本機正規化（`lib/flowchart.ts`），再生成 Mermaid 與 draw.io XML。
 
 ## 專案結構
 
 - `app/`：首頁與工具頁
 - `components/`：共用導覽元件
-- `lib/`：工具註冊表與抽獎核心邏輯
+- `lib/`：工具註冊表、抽獎核心邏輯、流程圖 schema 與正規化
 - `tests/`：伺服器渲染驗證
 
 ## 驗證

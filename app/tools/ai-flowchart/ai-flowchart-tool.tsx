@@ -1,12 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { SAMPLE_GRAPH, generateDrawioXml, generateMermaid, normalizeGraph } from "@/lib/flowchart";
+import { FLOWCHART_JSON_SCHEMA, FLOWCHART_SYSTEM_PROMPT, SAMPLE_GRAPH, generateDrawioXml, generateMermaid, normalizeGraph } from "@/lib/flowchart";
 import type { FlowGraph } from "@/lib/flowchart";
+
+const GEMINI_MODEL = "gemini-flash-latest";
 
 type ApiOutput = {
   output_text?: string;
   output?: Array<{ content?: Array<{ type?: string; text?: string; refusal?: string }> }>;
+  error?: { message?: string };
+};
+
+type GeminiOutput = {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  promptFeedback?: { blockReason?: string };
   error?: { message?: string };
 };
 
@@ -71,9 +79,13 @@ function downloadBlob(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+type FlowchartMode = "gemini" | "openai";
+
 export function AiFlowchartTool() {
   const [prompt, setPrompt] = useState("建立一個請假申請流程：員工送出申請，主管審核；通過後通知員工並登記，退回則補充資料後重新送出。");
   const [apiKey, setApiKey] = useState("");
+  const [geminiKey, setGeminiKey] = useState("");
+  const [mode, setMode] = useState<FlowchartMode>("gemini");
   const [direction, setDirection] = useState<"TD" | "LR">("TD");
   const [graph, setGraph] = useState<FlowGraph | null>(null);
   const [mermaidCode, setMermaidCode] = useState("");
@@ -103,8 +115,36 @@ export function AiFlowchartTool() {
     if (graph) void renderGraph(graph, repairs, nextDirection).catch(() => setError("重新排列流程圖時發生錯誤"));
   }
 
-  async function generate() {
-    if (prompt.trim().length < 10) { setError("請多描述幾個步驟、判斷或角色"); return; }
+  async function generateWithGemini() {
+    if (geminiKey.trim().length < 10) { setError("請輸入有效的 Gemini API 金鑰；金鑰只會暫存在這個頁面"); return; }
+    setLoading(true); setError(""); setCopied(false);
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey.trim() },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: FLOWCHART_SYSTEM_PROMPT }] },
+          contents: [{ role: "user", parts: [{ text: prompt.trim().slice(0, 3000) }] }],
+          generationConfig: { responseMimeType: "application/json", responseSchema: FLOWCHART_JSON_SCHEMA },
+        }),
+      });
+      const data = await response.json() as GeminiOutput;
+      if (!response.ok) throw new Error(data.error?.message || `AI 服務暫時無法使用（${response.status}）`);
+      if (data.promptFeedback?.blockReason) throw new Error("這個描述被安全機制擋下，請換個方式描述流程");
+      const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("");
+      if (!text) throw new Error("AI 沒有回傳可用結果");
+      const raw = JSON.parse(text) as unknown;
+      const normalized = normalizeGraph(raw);
+      await renderGraph(normalized.graph, normalized.repairs);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "流程圖產生失敗";
+      setError(message.includes("Failed to fetch") ? "無法直接連上 Gemini，請檢查網路或 API 金鑰權限" : message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function generateWithOpenAI() {
     if (apiKey.trim().length < 20) { setError("請輸入有效的 OpenAI API 金鑰；金鑰只會暫存在這個頁面"); return; }
     setLoading(true); setError(""); setCopied(false);
     try {
@@ -133,6 +173,12 @@ export function AiFlowchartTool() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function generate() {
+    if (prompt.trim().length < 10) { setError("請多描述幾個步驟、判斷或角色"); return; }
+    if (mode === "gemini") await generateWithGemini();
+    else await generateWithOpenAI();
   }
 
   async function loadSample() {
@@ -191,8 +237,13 @@ export function AiFlowchartTool() {
       <div className="flow-options">
         <label className="field-label" htmlFor="flow-direction">排列方向<select id="flow-direction" value={direction} onChange={(event) => changeDirection(event.target.value as "TD" | "LR")}><option value="TD">由上到下</option><option value="LR">由左到右</option></select></label>
       </div>
-      <label className="field-label" htmlFor="openai-key">OpenAI API 金鑰<input id="openai-key" className="key-input" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="off" spellCheck={false} placeholder="sk-…" /></label>
-      <p className="key-note">只暫存在目前頁面，直接送往 OpenAI；ToolVerse 不會儲存金鑰。流程文字會交由 OpenAI 產生結構。</p>
+      <div className="flow-mode-toggle" role="radiogroup" aria-label="AI 來源">
+        <button type="button" className={`button button-small ${mode === "gemini" ? "button-blue" : "button-secondary"}`} aria-pressed={mode === "gemini"} onClick={() => setMode("gemini")} disabled={loading}>Gemini（免費額度）</button>
+        <button type="button" className={`button button-small ${mode === "openai" ? "button-blue" : "button-secondary"}`} aria-pressed={mode === "openai"} onClick={() => setMode("openai")} disabled={loading}>OpenAI</button>
+      </div>
+      {mode === "gemini"
+        ? <><label className="field-label" htmlFor="gemini-key">Gemini API 金鑰<input id="gemini-key" className="key-input" type="password" value={geminiKey} onChange={(event) => setGeminiKey(event.target.value)} autoComplete="off" spellCheck={false} placeholder="AIza…" /></label><p className="key-note">只暫存在目前頁面，直接送往 Google；ToolVerse 不會儲存金鑰。到 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> 免費申請，不需要信用卡；免費額度的內容可能會被 Google 用於改進模型。</p></>
+        : <><label className="field-label" htmlFor="openai-key">OpenAI API 金鑰<input id="openai-key" className="key-input" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="off" spellCheck={false} placeholder="sk-…" /></label><p className="key-note">只暫存在目前頁面，直接送往 OpenAI；ToolVerse 不會儲存金鑰。流程文字會交由 OpenAI 產生結構。</p></>}
       <div className="flow-generate-actions"><button className="button button-blue" type="button" onClick={generate} disabled={loading}>{loading ? "AI 正在整理流程…" : "用 AI 產生流程圖 ✦"}</button><button className="button button-secondary" type="button" onClick={loadSample} disabled={loading}>先看範例</button></div>
       {error && <p className="error-message" role="alert">{error}</p>}
       {graph && <div className="validation-card"><strong>✓ 結構驗證完成</strong><span>{graph.nodes.length} 個節點 · {graph.edges.length} 條連線</span>{repairs.length > 0 && <details><summary>{repairs.length} 項自動整理</summary><ul>{repairs.map((repair) => <li key={repair}>{repair}</li>)}</ul></details>}</div>}

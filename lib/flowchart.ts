@@ -18,6 +18,49 @@ export type FlowGraph = {
   edges: FlowEdge[];
 };
 
+export const FLOWCHART_SYSTEM_PROMPT =
+  "你是流程分析師。把使用者的中文需求轉成清楚、精簡、可執行的流程圖資料。節點 ID 必須是短英文或數字且不重複；每條連線的 source 與 target 必須引用存在的節點 ID；判斷節點要有清楚的分支標籤；不要加入使用者未提及的敏感資料；最多 18 個節點。";
+
+/**
+ * JSON schema for the flowchart graph, written using only the schema keywords
+ * that Gemini's structured-output mode reliably supports (no
+ * `additionalProperties`, which OpenAI's stricter `json_schema` mode needs
+ * but Gemini does not accept in the same way).
+ */
+export const FLOWCHART_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+    nodes: {
+      type: "array",
+      maxItems: 24,
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          label: { type: "string" },
+          shape: { type: "string", enum: ["process", "decision", "start", "end", "database", "document"] },
+        },
+        required: ["id", "label", "shape"],
+      },
+    },
+    edges: {
+      type: "array",
+      maxItems: 48,
+      items: {
+        type: "object",
+        properties: {
+          source: { type: "string" },
+          target: { type: "string" },
+          label: { type: "string" },
+        },
+        required: ["source", "target", "label"],
+      },
+    },
+  },
+  required: ["title", "nodes", "edges"],
+} as const;
+
 const SHAPES = new Set<FlowNodeShape>(["process", "decision", "start", "end", "database", "document"]);
 
 function cleanText(value: unknown, fallback: string, maxLength = 80) {

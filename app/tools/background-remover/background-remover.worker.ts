@@ -24,7 +24,15 @@ async function createEngine(forceWasm = false) {
 
 let enginePromise: ReturnType<typeof createEngine> | null = null;
 function getEngine(forceWasm = false) {
-  if (forceWasm || !enginePromise) enginePromise = createEngine(forceWasm);
+  if (forceWasm || !enginePromise) {
+    // If model setup fails (e.g. a transient network hiccup while downloading
+    // the model), forget the cached promise so the next attempt actually
+    // retries instead of instantly re-throwing the same stale rejection.
+    enginePromise = createEngine(forceWasm).catch((error) => {
+      enginePromise = null;
+      throw error;
+    });
+  }
   return enginePromise;
 }
 
@@ -45,9 +53,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     const blob = await output.toBlob("image/png");
     self.postMessage({ type: "result", blob, backend: engine.backend });
   } catch (error) {
+    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
     const message = error instanceof Error && /memory|allocation/i.test(error.message)
       ? "裝置記憶體不足，請改用尺寸較小的圖片"
       : "本機去背失敗，請確認網路連線或換一張圖片再試";
-    self.postMessage({ type: "error", message });
+    self.postMessage({ type: "error", message, detail });
   }
 };

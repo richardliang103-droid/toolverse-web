@@ -11,7 +11,7 @@ type WorkerResponse =
   | { type: "progress"; progress: number; stage: string }
   | { type: "ready"; backend: "WebGPU" | "WASM" }
   | { type: "result"; blob: Blob; backend: "WebGPU" | "WASM" }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string; detail?: string };
 
 export function BackgroundRemover() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -24,6 +24,7 @@ export function BackgroundRemover() {
   const [processing, setProcessing] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
+  const [errorDetail, setErrorDetail] = useState("");
   const [compare, setCompare] = useState(50);
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState("準備本機模型");
@@ -68,14 +69,23 @@ export function BackgroundRemover() {
         worker.removeEventListener("message", onMessage);
         worker.removeEventListener("error", onWorkerError);
       };
-      const onWorkerError = () => { cleanup(); reject(new Error("本機模型無法啟動，請重新整理後再試")); };
+      const onWorkerError = (event: ErrorEvent) => {
+        cleanup();
+        const failure = new Error("本機模型無法啟動，請重新整理後再試");
+        if (event?.message) (failure as Error & { detail?: string }).detail = event.message;
+        reject(failure);
+      };
       const onMessage = (event: MessageEvent<WorkerResponse>) => {
         const message = event.data;
         if (message.type === "progress") { setProgress(message.progress); setStage(message.stage); return; }
         if (message.type === "ready") { setBackend(message.backend); setModelReady(true); setStage("正在辨識主體與背景"); return; }
         cleanup();
         if (message.type === "result") { setBackend(message.backend); resolve(message.blob); }
-        if (message.type === "error") reject(new Error(message.message));
+        if (message.type === "error") {
+          const failure = new Error(message.message);
+          if (message.detail) (failure as Error & { detail?: string }).detail = message.detail;
+          reject(failure);
+        }
       };
       worker.addEventListener("message", onMessage);
       worker.addEventListener("error", onWorkerError);
@@ -85,7 +95,7 @@ export function BackgroundRemover() {
 
   async function removeBackground() {
     if (!file) return;
-    setProcessing(true); setError(""); setProgress(modelReady ? 100 : 0); setStage(modelReady ? "正在辨識主體與背景" : "正在下載本機模型");
+    setProcessing(true); setError(""); setErrorDetail(""); setProgress(modelReady ? 100 : 0); setStage(modelReady ? "正在辨識主體與背景" : "正在下載本機模型");
     try {
       const blob = await runLocally(file);
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
@@ -93,6 +103,7 @@ export function BackgroundRemover() {
       setResultUrl(resultUrlRef.current);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "圖片去背失敗");
+      setErrorDetail(caught instanceof Error ? (caught as Error & { detail?: string }).detail ?? "" : "");
     } finally {
       setProcessing(false);
     }
@@ -103,7 +114,7 @@ export function BackgroundRemover() {
     if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
     originalUrlRef.current = "";
     resultUrlRef.current = "";
-    setFile(null); setOriginalUrl(""); setResultUrl(""); setError(""); setProgress(0);
+    setFile(null); setOriginalUrl(""); setResultUrl(""); setError(""); setErrorDetail(""); setProgress(0);
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -113,7 +124,7 @@ export function BackgroundRemover() {
         <div><div className="drop-icon" aria-hidden="true">↥</div><h2>{file ? file.name : "把圖片拖到這裡"}</h2><p>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB · 已準備好` : "或從裝置選擇一張圖片"}</p><span className="button button-secondary">{file ? "更換圖片" : "選擇圖片"}</span><input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={onFileChange} aria-label="選擇要去背的圖片" /><small className="file-note">JPG、PNG、WebP · 最大 10 MB</small></div>
       </div>
       {file && <div className="preview-actions"><button className="button button-coral" type="button" onClick={removeBackground} disabled={processing}>{processing ? "本機處理中…" : "開始本機去背"}</button><button className="button button-secondary" type="button" onClick={clear} disabled={processing}>清除</button></div>}
-      {error && <p className="error-message" role="alert">{error}</p>}
+      {error && <p className="error-message" role="alert">{error}{errorDetail && <><br /><small>技術細節：{errorDetail}</small></>}</p>}
       <div className="service-notice service-notice-private"><strong>100% 本機處理</strong><span>圖片不會上傳。首次使用會下載約數十 MB 的 AI 模型，之後由瀏覽器快取。</span></div>
     </div>
     <div className="panel panel-tinted preview-shell">
