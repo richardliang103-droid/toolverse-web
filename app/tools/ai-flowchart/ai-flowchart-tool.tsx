@@ -183,7 +183,11 @@ export function AiFlowchartTool() {
 
   async function loadSample() {
     setError(""); setCopied(false);
-    await renderGraph(SAMPLE_GRAPH, ["範例已通過節點與連線驗證"]);
+    try {
+      await renderGraph(SAMPLE_GRAPH, ["範例已通過節點與連線驗證"]);
+    } catch {
+      setError("範例載入失敗，請重新整理後再試");
+    }
   }
 
   async function copyMermaid() {
@@ -229,7 +233,7 @@ export function AiFlowchartTool() {
     window.open(`https://app.diagrams.net/?splash=0&mode=device#create=${create}`, "_blank", "noopener,noreferrer");
   }
 
-  return <section className="flowchart-workspace page-shell" aria-label="AI 流程圖工具">
+  return <section className="flowchart-workspace page-shell" aria-label="流程圖工具">
     <div className="panel flowchart-controls">
       <div className="panel-header"><h2>描述你的流程</h2><span className="panel-meta">中文即可</span></div>
       <label className="field-label" htmlFor="flow-prompt">流程需求</label>

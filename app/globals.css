@@ -90,6 +90,8 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .tool-title h1 { margin: 0; font-size: clamp(48px, 6vw, 78px); line-height: 1; letter-spacing: -.07em; }
 .tool-title p:last-child { max-width: 650px; margin: 24px 0 0; color: var(--muted); font-size: 17px; line-height: 1.7; }
 .privacy-badge { padding: 12px 15px; border: 1px solid var(--ink); border-radius: 999px; font-size: 13px; font-weight: 700; background: var(--mint); white-space: nowrap; }
+.privacy-badge.uploads { background: var(--coral); }
+.background-remover-badge { display: inline-block; margin-bottom: 16px; }
 .workspace { display: grid; grid-template-columns: minmax(0,1.08fr) minmax(340px,.92fr); gap: 20px; padding: 24px; border: 1px solid var(--ink); border-radius: 24px; background: var(--white); box-shadow: 8px 8px 0 var(--ink); margin-bottom: 90px; }
 .panel { min-width: 0; padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: white; }
 .panel-tinted { background: #f0f3ff; }
@@ -97,6 +99,7 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .panel-header h2 { margin: 0; font-size: 20px; }
 .panel-meta { color: var(--muted); font-size: 12px; }
 .participant-input { width: 100%; min-height: 330px; resize: vertical; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: #faf9f6; color: var(--ink); line-height: 1.75; outline: none; }
+.participant-input-compact { min-height: 168px; }
 .participant-input:focus, .number-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
 .form-controls { display: flex; flex-wrap: wrap; gap: 16px 22px; align-items: center; padding-top: 18px; }
 .check-row { display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 14px; }
@@ -109,8 +112,9 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .result-empty strong { display: block; margin-bottom: 8px; color: var(--ink); font-size: 20px; }
 .winner-list { width: 100%; display: grid; gap: 10px; }
 .winner-item { padding: 14px 16px; border: 1px solid var(--ink); border-radius: 10px; background: var(--coral); font-size: 18px; font-weight: 800; box-shadow: 3px 3px 0 var(--ink); }
-.drawing-word { font-size: 32px; font-weight: 850; animation: pulse .55s ease-in-out infinite alternate; }
-@keyframes pulse { to { transform: scale(1.05); opacity: .58; } }
+.drawing-stage { display: grid; justify-items: center; gap: 12px; }
+.drawing-word { font-size: 32px; font-weight: 850; min-height: 1.2em; }
+.drawing-hint { color: var(--muted); font-size: 13px; letter-spacing: .04em; }
 .result-actions { display: flex; gap: 10px; margin-top: 16px; }
 .error-message { margin: 13px 0 0; color: #b72a22; font-size: 14px; }
 .history { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--line); }
@@ -208,6 +212,7 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
   .flowchart-workspace { padding: 10px; border-radius: 17px; }
   .panel { padding: 16px; }
   .participant-input { min-height: 260px; }
+  .participant-input-compact { min-height: 150px; }
   .form-controls { align-items: flex-start; flex-direction: column; }
   .number-field { margin-left: 0; }
   .result-actions, .preview-actions { flex-direction: column; }

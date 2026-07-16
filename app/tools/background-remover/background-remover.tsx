@@ -13,6 +13,8 @@ type WorkerResponse =
   | { type: "result"; blob: Blob; backend: "WebGPU" | "WASM" }
   | { type: "error"; message: string; detail?: string };
 
+type RemoveBgMode = "local" | "removebg";
+
 export function BackgroundRemover() {
   const inputRef = useRef<HTMLInputElement>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -30,6 +32,8 @@ export function BackgroundRemover() {
   const [stage, setStage] = useState("準備本機模型");
   const [backend, setBackend] = useState<"WebGPU" | "WASM" | "">("");
   const [modelReady, setModelReady] = useState(false);
+  const [mode, setMode] = useState<RemoveBgMode>("local");
+  const [removeBgKey, setRemoveBgKey] = useState("");
 
   useEffect(() => () => {
     workerRef.current?.terminate();
@@ -93,11 +97,27 @@ export function BackgroundRemover() {
     });
   }
 
+  async function runWithRemoveBg(image: File) {
+    if (removeBgKey.trim().length < 10) throw new Error("請輸入有效的 remove.bg API 金鑰");
+    const form = new FormData();
+    form.set("image", image);
+    form.set("apiKey", removeBgKey.trim());
+    const response = await fetch("/api/remove-background", { method: "POST", body: form });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null) as { error?: string } | null;
+      throw new Error(data?.error || `remove.bg 服務暫時無法使用（${response.status}）`);
+    }
+    return response.blob();
+  }
+
   async function removeBackground() {
     if (!file) return;
-    setProcessing(true); setError(""); setErrorDetail(""); setProgress(modelReady ? 100 : 0); setStage(modelReady ? "正在辨識主體與背景" : "正在下載本機模型");
+    setProcessing(true); setError(""); setErrorDetail("");
+    if (mode === "local") { setProgress(modelReady ? 100 : 0); setStage(modelReady ? "正在辨識主體與背景" : "正在下載本機模型"); }
+    else { setStage("正在呼叫 remove.bg…"); }
     try {
-      const blob = await runLocally(file);
+      const blob = mode === "local" ? await runLocally(file) : await runWithRemoveBg(file);
+      if (mode === "removebg") setBackend("");
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
       resultUrlRef.current = URL.createObjectURL(blob);
       setResultUrl(resultUrlRef.current);
@@ -120,16 +140,24 @@ export function BackgroundRemover() {
 
   return <section className="workspace upload-workspace page-shell" aria-label="圖片去背工具">
     <div className="panel">
+      <span className={`privacy-badge background-remover-badge ${mode === "removebg" ? "uploads" : ""}`}>{mode === "local" ? "◐ 圖片不上傳" : "● 圖片會上傳至 remove.bg"}</span>
       <div className={`drop-zone ${dragging ? "dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} onClick={() => inputRef.current?.click()} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") inputRef.current?.click(); }}>
         <div><div className="drop-icon" aria-hidden="true">↥</div><h2>{file ? file.name : "把圖片拖到這裡"}</h2><p>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB · 已準備好` : "或從裝置選擇一張圖片"}</p><span className="button button-secondary">{file ? "更換圖片" : "選擇圖片"}</span><input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={onFileChange} aria-label="選擇要去背的圖片" /><small className="file-note">JPG、PNG、WebP · 最大 10 MB</small></div>
       </div>
-      {file && <div className="preview-actions"><button className="button button-coral" type="button" onClick={removeBackground} disabled={processing}>{processing ? "本機處理中…" : "開始本機去背"}</button><button className="button button-secondary" type="button" onClick={clear} disabled={processing}>清除</button></div>}
+      <div className="flow-mode-toggle" role="radiogroup" aria-label="去背方式">
+        <button type="button" className={`button button-small ${mode === "local" ? "button-coral" : "button-secondary"}`} aria-pressed={mode === "local"} onClick={() => setMode("local")} disabled={processing}>本機 AI（免費、圖片不上傳）</button>
+        <button type="button" className={`button button-small ${mode === "removebg" ? "button-coral" : "button-secondary"}`} aria-pressed={mode === "removebg"} onClick={() => setMode("removebg")} disabled={processing}>remove.bg API</button>
+      </div>
+      {mode === "removebg" && <label className="field-label" htmlFor="removebg-key">remove.bg API 金鑰<input id="removebg-key" className="key-input" type="password" value={removeBgKey} onChange={(event) => setRemoveBgKey(event.target.value)} autoComplete="off" spellCheck={false} placeholder="貼上你的金鑰" /></label>}
+      {file && <div className="preview-actions"><button className="button button-coral" type="button" onClick={removeBackground} disabled={processing}>{processing ? (mode === "local" ? "本機處理中…" : "呼叫 remove.bg 中…") : (mode === "local" ? "開始本機去背" : "用 remove.bg 去背")}</button><button className="button button-secondary" type="button" onClick={clear} disabled={processing}>清除</button></div>}
       {error && <p className="error-message" role="alert">{error}{errorDetail && <><br /><small>技術細節：{errorDetail}</small></>}</p>}
-      <div className="service-notice service-notice-private"><strong>100% 本機處理</strong><span>圖片不會上傳。首次使用會下載約數十 MB 的 AI 模型，之後由瀏覽器快取。</span></div>
+      {mode === "local"
+        ? <div className="service-notice service-notice-private"><strong>100% 本機處理</strong><span>圖片不會上傳。首次使用會下載約數十 MB 的 AI 模型，之後由瀏覽器快取。</span></div>
+        : <div className="service-notice"><strong>需要金鑰，圖片會經過 remove.bg</strong><span>金鑰只暫存在這個頁面。圖片會先經過 ToolVerse 伺服器轉送一次（remove.bg 不支援瀏覽器直接呼叫），再送到 remove.bg 處理，不會被儲存。到 <a href="https://www.remove.bg/api" target="_blank" rel="noopener noreferrer">remove.bg</a> 免費申請，每月 50 次免費額度，超過需付費；免費額度可能只回傳較低解析度的預覽圖。</span></div>}
     </div>
     <div className="panel panel-tinted preview-shell">
-      <div className="panel-header"><h2>{resultUrl ? "去背結果" : "圖片預覽"}</h2><span className="panel-meta">{backend ? `${backend} 本機運算` : "WebGPU／WASM"}</span></div>
-      {processing ? <div className="preview-canvas processing-state"><div className="processing-content"><div className="processing-disc" /><strong>{stage}</strong><p>{modelReady ? "所有運算都在這台裝置完成" : "首次載入時間取決於網路速度"}</p><div className="model-progress" role="progressbar" aria-label="模型下載進度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}><span style={{ width: `${Math.max(4, progress)}%` }} /></div><small>{modelReady ? "AI 模型已就緒" : `${Math.round(progress)}%`}</small></div></div> : originalUrl ? <><div className="preview-canvas">{resultUrl ? <><img src={resultUrl} alt="去背結果預覽" /><div className="compare-original" style={{ width: `${compare}%`, ["--compare-width" as string]: `${10000 / compare}%` }}><img src={originalUrl} alt="原始圖片預覽" /></div></> : <img src={originalUrl} alt="原始圖片預覽" />}</div>{resultUrl && <><label className="sr-only" htmlFor="compare-slider">原圖與去背結果比較</label><input id="compare-slider" className="compare-range" type="range" min="1" max="99" value={compare} onChange={(event) => setCompare(Number(event.target.value))} /><div className="preview-actions"><a className="button button-blue" href={resultUrl} download="toolverse-background-removed.png">下載透明 PNG</a><button className="button button-secondary" type="button" onClick={removeBackground}>重新處理</button></div></>}</> : <div className="preview-canvas"><div className="result-empty"><strong>預覽區</strong>選擇圖片後，原圖與去背結果會顯示在這裡。</div></div>}
+      <div className="panel-header"><h2>{resultUrl ? "去背結果" : "圖片預覽"}</h2><span className="panel-meta">{mode === "removebg" ? "remove.bg" : backend ? `${backend} 本機運算` : "WebGPU／WASM"}</span></div>
+      {processing ? <div className="preview-canvas processing-state"><div className="processing-content"><div className="processing-disc" /><strong>{stage}</strong><p>{mode === "removebg" ? "圖片正在透過 ToolVerse 轉送給 remove.bg" : modelReady ? "所有運算都在這台裝置完成" : "首次載入時間取決於網路速度"}</p>{mode === "local" && <><div className="model-progress" role="progressbar" aria-label="模型下載進度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}><span style={{ width: `${Math.max(4, progress)}%` }} /></div><small>{modelReady ? "AI 模型已就緒" : `${Math.round(progress)}%`}</small></>}</div></div> : originalUrl ? <><div className="preview-canvas">{resultUrl ? <><img src={resultUrl} alt="去背結果預覽" /><div className="compare-original" style={{ width: `${compare}%`, ["--compare-width" as string]: `${10000 / compare}%` }}><img src={originalUrl} alt="原始圖片預覽" /></div></> : <img src={originalUrl} alt="原始圖片預覽" />}</div>{resultUrl && <><label className="sr-only" htmlFor="compare-slider">原圖與去背結果比較</label><input id="compare-slider" className="compare-range" type="range" min="1" max="99" value={compare} onChange={(event) => setCompare(Number(event.target.value))} /><div className="preview-actions"><a className="button button-blue" href={resultUrl} download="toolverse-background-removed.png">下載透明 PNG</a><button className="button button-secondary" type="button" onClick={removeBackground}>重新處理</button></div></>}</> : <div className="preview-canvas"><div className="result-empty"><strong>預覽區</strong>選擇圖片後，原圖與去背結果會顯示在這裡。</div></div>}
     </div>
   </section>;
 }

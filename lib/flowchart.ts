@@ -69,10 +69,21 @@ function cleanText(value: unknown, fallback: string, maxLength = 80) {
   return (cleaned || fallback).slice(0, maxLength);
 }
 
+// Mermaid's flowchart grammar treats these as reserved keywords (block
+// terminators, direction/style directives, etc.) even when they're used as a
+// node id — e.g. `end(["Done"])` fails to parse because `end` closes a
+// subgraph. Node ids that collide with one of these must be renamed, or
+// mermaid.parse() throws and the whole diagram silently fails to render.
+const MERMAID_RESERVED_IDS = new Set([
+  "graph", "flowchart", "subgraph", "end", "start", "class", "classDef",
+  "click", "style", "linkStyle", "direction", "default",
+]);
+
 function cleanId(value: unknown, index: number) {
   const base = typeof value === "string" ? value : `step_${index + 1}`;
   const cleaned = base.normalize("NFKD").replace(/[^a-zA-Z0-9_]/g, "_").replace(/^_+|_+$/g, "");
-  return /^[a-zA-Z]/.test(cleaned) ? cleaned.slice(0, 36) : `step_${cleaned || index + 1}`.slice(0, 36);
+  const safe = /^[a-zA-Z]/.test(cleaned) ? cleaned.slice(0, 36) : `step_${cleaned || index + 1}`.slice(0, 36);
+  return MERMAID_RESERVED_IDS.has(safe) ? `${safe}_node` : safe;
 }
 
 export function normalizeGraph(input: unknown): { graph: FlowGraph; repairs: string[] } {
@@ -189,18 +200,20 @@ export function generateDrawioXml(graph: FlowGraph, direction: "TD" | "LR") {
 
 export const SAMPLE_GRAPH: FlowGraph = {
   title: "請假申請流程",
+  // Node ids avoid mermaid's reserved words (e.g. bare `start`/`end`) — see
+  // MERMAID_RESERVED_IDS above; those break mermaid.parse() if used as-is.
   nodes: [
-    { id: "start", label: "提出請假申請", shape: "start" },
+    { id: "start_node", label: "提出請假申請", shape: "start" },
     { id: "check", label: "主管審核", shape: "decision" },
     { id: "approve", label: "通知申請人並登記", shape: "process" },
     { id: "revise", label: "補充資料後重新送出", shape: "process" },
-    { id: "end", label: "流程完成", shape: "end" },
+    { id: "end_node", label: "流程完成", shape: "end" },
   ],
   edges: [
-    { source: "start", target: "check", label: "" },
+    { source: "start_node", target: "check", label: "" },
     { source: "check", target: "approve", label: "通過" },
     { source: "check", target: "revise", label: "退回" },
     { source: "revise", target: "check", label: "重新送出" },
-    { source: "approve", target: "end", label: "" },
+    { source: "approve", target: "end_node", label: "" },
   ],
 };
