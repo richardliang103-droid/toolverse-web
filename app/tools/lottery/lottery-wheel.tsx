@@ -6,11 +6,23 @@ import gsap from "gsap";
 export type LotteryWheelHandle = { spinTo: (targetIndex: number, duration: number) => Promise<void> };
 
 // Above this many participants, per-slice name labels stop being legible, so
-// the wheel falls back to a plain neon-rainbow ring (still lands on the
-// exact correct slice — the winner is revealed via the flash card + list
-// instead of being read off the wheel itself).
-const TEXT_LABEL_LIMIT = 14;
+// the wheel falls back to a plain alternating charcoal/gold ring (still lands
+// on the exact correct slice — the winner is revealed via the flash card +
+// list instead of being read off the wheel itself).
+const TEXT_LABEL_LIMIT = 12;
 const VIEWBOX = 360;
+
+// The pointer sits at the 3 o'clock position (not 12 o'clock): a name landing
+// there reads horizontally instead of sideways/vertical.
+const POINTER_ANGLE = 90;
+
+// Alternating charcoal / gold, roulette-style — one locked accent (gold)
+// against a neutral zinc base, not a rainbow of neon hues.
+const SLICE_TONES = [
+  { fill: "#1b1b20", text: "#f3ead2" },
+  { fill: "#2c2c33", text: "#f6efdc" },
+  { fill: "#c68a2e", text: "#1c1408" },
+];
 
 function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
@@ -45,7 +57,7 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[] 
           // Land somewhere within the middle ~70% of the slice, never right on the seam.
           const jitter = anglePer * (0.16 + Math.random() * 0.68);
           const stopAngle = targetIndex * anglePer + jitter;
-          const desiredMod = (((360 - stopAngle) % 360) + 360) % 360;
+          const desiredMod = (((POINTER_ANGLE - stopAngle) % 360) + 360) % 360;
           const currentRotation = (gsap.getProperty(node, "rotation") as number) || 0;
           const currentMod = ((currentRotation % 360) + 360) % 360;
           const forwardDelta = ((desiredMod - currentMod) % 360 + 360) % 360;
@@ -76,15 +88,15 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[] 
         const startAngle = index * anglePer;
         const endAngle = startAngle + anglePer;
         const midAngle = startAngle + anglePer / 2;
-        const hue = Math.round((index / count) * 320 + 300) % 360;
-        const light = index % 2 === 0 ? 57 : 45;
-        const label = name.length > 7 ? `${name.slice(0, 6)}…` : name;
+        const tone = SLICE_TONES[index % SLICE_TONES.length];
+        const label = name.length > 6 ? `${name.slice(0, 5)}…` : name;
         const flip = midAngle > 90 && midAngle < 270;
-        const labelPos = polarToCartesian(cx, cy, r * 0.64, midAngle);
+        const labelPos = polarToCartesian(cx, cy, r * 0.62, midAngle);
         const labelRotate = flip ? midAngle - 90 + 180 : midAngle - 90;
         return {
           path: describeSlice(cx, cy, r, startAngle, endAngle),
-          fill: `hsl(${hue} 88% ${light}%)`,
+          fill: tone.fill,
+          textColor: tone.text,
           key: `${name}-${index}`,
           labelPos,
           labelRotate,
@@ -92,7 +104,7 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[] 
           flip,
         };
       }),
-    [segments, anglePer, count, cx, cy, r],
+    [segments, anglePer, cx, cy, r],
   );
 
   return (
@@ -101,18 +113,18 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[] 
       <svg className="lottery-wheel-svg" viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} role="img" aria-label="抽獎轉盤">
         <defs>
           <radialGradient id="wheelHub" cx="50%" cy="50%" r="60%">
-            <stop offset="0%" stopColor="#fff7ff" />
-            <stop offset="55%" stopColor="#f4baff" />
-            <stop offset="100%" stopColor="#a855f7" />
+            <stop offset="0%" stopColor="#fff8e6" />
+            <stop offset="55%" stopColor="#f0c869" />
+            <stop offset="100%" stopColor="#a5731f" />
           </radialGradient>
         </defs>
         <g ref={rotorRef}>
           {segments.length === 0 ? (
-            <circle cx={cx} cy={cy} r={r} fill="#221033" stroke="#4c2a73" strokeWidth={2} />
+            <circle cx={cx} cy={cy} r={r} fill="#1b1b20" stroke="#3f3f46" strokeWidth={2} />
           ) : (
             slices.map((slice) => (
               <g key={slice.key}>
-                <path d={slice.path} fill={slice.fill} stroke="#150a24" strokeWidth={1.5} />
+                <path d={slice.path} fill={slice.fill} stroke="#0c0c0e" strokeWidth={1.5} />
                 {showLabels && (
                   <text
                     x={slice.labelPos.x}
@@ -120,6 +132,7 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[] 
                     transform={`rotate(${slice.labelRotate} ${slice.labelPos.x} ${slice.labelPos.y})`}
                     textAnchor={slice.flip ? "end" : "start"}
                     dominantBaseline="middle"
+                    fill={slice.textColor}
                     className="lottery-wheel-label"
                   >
                     {slice.label}
@@ -128,7 +141,7 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[] 
               </g>
             ))
           )}
-          <circle cx={cx} cy={cy} r={r * 0.16} fill="url(#wheelHub)" stroke="#fff" strokeWidth={2} />
+          <circle cx={cx} cy={cy} r={r * 0.16} fill="url(#wheelHub)" stroke="#fff8e6" strokeWidth={2} />
         </g>
       </svg>
     </div>

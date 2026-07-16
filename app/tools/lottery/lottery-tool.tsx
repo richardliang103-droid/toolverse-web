@@ -116,22 +116,22 @@ export function LotteryTool() {
   }
 
   async function copyResults() {
-    await navigator.clipboard.writeText(winners.map((name, index) => `${index + 1}. ${name}`).join("\n"));
+    await navigator.clipboard.writeText(winners.join("\n"));
     setCopied(true);
   }
 
-  function resetWinners() { setPreviousWinners([]); setWinners([]); setRevealed([]); setError(""); }
+  function resetWinners() { setPreviousWinners([]); setWinners([]); setRevealed([]); setHistory([]); setError(""); }
 
   return <section className="workspace lottery-neon page-shell" aria-label="抽獎工具">
     <div className="panel"><div className="panel-header"><h2>參加者名單</h2><span className="panel-meta">{participants.length} 人 · {eligible.length} 人可抽</span></div><label className="sr-only" htmlFor="participants">參加者名單，一行一位</label><textarea id="participants" className="participant-input participant-input-compact" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder={'一行輸入一位參加者\n例如：\n小明\n小美\nAlex'} /><div className="form-controls"><label className="check-row"><input type="checkbox" checked={dedupe} onChange={(event) => setDedupe(event.target.checked)} />移除重複名字</label><label className="check-row"><input type="checkbox" checked={exclude} onChange={(event) => setExclude(event.target.checked)} />排除已中獎者</label><label className="number-field" htmlFor="winner-count">中獎人數<input id="winner-count" className="number-input" type="number" min="1" max={Math.max(1, eligible.length)} value={count} onChange={(event) => setCount(Number(event.target.value))} /></label></div><button className="button button-blue draw-button" type="button" onClick={handleDraw} disabled={drawing}>{drawing ? "轉盤轉動中…" : "開始抽獎 ✦"}</button>{error && <p className="error-message" role="alert">{error}</p>}</div>
-    <div className="panel panel-tinted lottery-stage-panel"><div className="panel-header"><h2>抽獎轉盤</h2><span className="panel-meta">Crypto random</span></div>
+    <div className="panel panel-tinted lottery-stage-panel"><div className="panel-header"><h2>抽獎轉盤</h2></div>
       <div className="lottery-wheel-area">
         {justRevealed && <div className="lottery-flash-winner">🎉 {justRevealed}</div>}
         <LotteryWheel ref={wheelRef} segments={displaySegments} />
       </div>
       {drawing && <p className="lottery-spin-hint">轉盤轉動中…</p>}
       {revealed.length > 0
-        ? <div ref={winnerListRef} className="winner-list">{revealed.map((winner, index) => <div className="winner-item" key={`${winner}-${index}`}>{index + 1}. {winner}</div>)}</div>
+        ? <div ref={winnerListRef} className="winner-list">{revealed.map((winner, index) => <div className="winner-item" key={`${winner}-${index}`}>{winner}</div>)}</div>
         : !drawing && <div className="result-empty"><strong>好運正在待命</strong>輸入名單並按下抽獎，轉盤會停在得獎者身上。</div>}
       {winners.length > 0 && !drawing && <div className="result-actions"><button className="button button-small button-secondary" type="button" onClick={copyResults}>{copied ? "已複製 ✓" : "複製結果"}</button><button className="button button-small button-secondary" type="button" onClick={handleDraw}>再抽一次</button></div>}
       {(previousWinners.length > 0 || history.length > 0) && <div className="history"><div className="panel-header"><h3>最近結果</h3><button className="button button-small button-secondary" type="button" onClick={resetWinners}>全部重設</button></div><ol>{history.map((item, index) => <li key={`${item.join("-")}-${index}`}>{item.join("、")}</li>)}</ol></div>}
