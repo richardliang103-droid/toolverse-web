@@ -97,6 +97,51 @@ export function BackgroundRemover() {
     });
   }
 
+  function isDecodeFailure(caught: unknown) {
+    const detail = caught instanceof Error ? `${(caught as Error & { detail?: string }).detail ?? ""} ${caught.message}` : String(caught);
+    return /InvalidStateError|could not be decoded|unusable/i.test(detail);
+  }
+
+  /** Worker 內的 createImageBitmap 支援的格式較少（HEIC、CMYK JPEG 會失敗）；
+      改用 <img> 在主執行緒解碼後轉成標準 PNG 再重試。 */
+  async function reencodeAsPng(source: File) {
+    const url = URL.createObjectURL(source);
+    try {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d");
+      if (!context || canvas.width === 0 || canvas.height === 0) throw new Error("canvas unavailable");
+      context.drawImage(image, 0, 0);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("png encoding failed");
+      return new File([blob], `${source.name.replace(/\.[^.]+$/, "")}.png`, { type: "image/png" });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  async function runLocallyWithDecodeFallback(image: File) {
+    try {
+      return await runLocally(image);
+    } catch (caught) {
+      if (!isDecodeFailure(caught)) throw caught;
+      setStage("圖片格式特殊，正在轉檔重試");
+      let normalized: File;
+      try {
+        normalized = await reencodeAsPng(image);
+      } catch {
+        const failure = new Error("瀏覽器無法解碼這張圖片 — 檔案可能已損壞，或是改了副檔名的 HEIC 等特殊格式。請先轉存成一般的 JPG 或 PNG 再試。");
+        (failure as Error & { detail?: string }).detail = caught instanceof Error ? (caught as Error & { detail?: string }).detail ?? caught.message : String(caught);
+        throw failure;
+      }
+      return runLocally(normalized);
+    }
+  }
+
   async function runWithRemoveBg(image: File) {
     if (removeBgKey.trim().length < 10) throw new Error("請輸入有效的 remove.bg API 金鑰");
     const form = new FormData();
@@ -116,7 +161,7 @@ export function BackgroundRemover() {
     if (mode === "local") { setProgress(modelReady ? 100 : 0); setStage(modelReady ? "正在辨識主體與背景" : "正在下載本機模型"); }
     else { setStage("正在呼叫 remove.bg…"); }
     try {
-      const blob = mode === "local" ? await runLocally(file) : await runWithRemoveBg(file);
+      const blob = mode === "local" ? await runLocallyWithDecodeFallback(file) : await runWithRemoveBg(file);
       if (mode === "removebg") setBackend("");
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
       resultUrlRef.current = URL.createObjectURL(blob);

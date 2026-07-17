@@ -54,9 +54,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     self.postMessage({ type: "result", blob, backend: engine.backend });
   } catch (error) {
     const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-    const message = error instanceof Error && /memory|allocation/i.test(error.message)
-      ? "裝置記憶體不足，請改用尺寸較小的圖片"
-      : "本機去背失敗，請確認網路連線或換一張圖片再試";
+    const message = /InvalidStateError|could not be decoded|unusable/i.test(detail)
+      ? "瀏覽器無法解碼這張圖片"
+      : error instanceof Error && /memory|allocation/i.test(error.message)
+        ? "裝置記憶體不足，請改用尺寸較小的圖片"
+        : "本機去背失敗，請確認網路連線或換一張圖片再試";
     self.postMessage({ type: "error", message, detail });
   }
 };
