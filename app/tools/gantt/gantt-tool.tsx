@@ -30,7 +30,8 @@ export function GanttTool() {
   const [project, setProject] = useState<GanttProject | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editorId, setEditorId] = useState<string | null>(null);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{ message: string; tone: "info" | "error" } | null>(null);
+  const [historyDepth, setHistoryDepth] = useState({ undo: 0, redo: 0 });
   const [copied, setCopied] = useState(false);
   const [today] = useState(() => todayIso());
 
@@ -62,23 +63,28 @@ export function GanttTool() {
 
   useEffect(() => () => { if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current); }, []);
 
-  function showNotice(message: string) {
-    setNotice(message);
+  function showNotice(message: string, tone: "info" | "error" = "info") {
+    setNotice({ message, tone });
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
-    noticeTimerRef.current = setTimeout(() => setNotice(""), 3200);
+    noticeTimerRef.current = setTimeout(() => setNotice(null), 3200);
+  }
+
+  function syncHistoryDepth() {
+    setHistoryDepth({ undo: undoRef.current.length, redo: redoRef.current.length });
   }
 
   function pushSnapshot(snapshot: GanttProject) {
     undoRef.current = [...undoRef.current.slice(-49), snapshot];
     redoRef.current = [];
+    syncHistoryDepth();
   }
 
+  // 快照操作放在 setProject 的 updater 外：updater 必須是純函式
+  //（StrictMode 會重跑 updater，副作用會讓快照被推兩次）。
   function commit(updater: (previous: GanttProject) => GanttProject) {
-    setProject((previous) => {
-      if (!previous) return previous;
-      pushSnapshot(previous);
-      return updater(previous);
-    });
+    if (!project) return;
+    pushSnapshot(project);
+    setProject(updater(project));
   }
 
   /** 編輯抽屜內的連續輸入不逐字進 undo 堆疊；開抽屜時已存過快照。 */
@@ -87,24 +93,25 @@ export function GanttTool() {
   }
 
   function undo() {
-    setProject((previous) => {
-      const snapshot = undoRef.current.at(-1);
-      if (!previous || !snapshot) return previous;
-      undoRef.current = undoRef.current.slice(0, -1);
-      redoRef.current = [...redoRef.current, previous];
-      return snapshot;
-    });
+    const snapshot = undoRef.current.at(-1);
+    if (!project || !snapshot) return;
+    undoRef.current = undoRef.current.slice(0, -1);
+    redoRef.current = [...redoRef.current, project];
+    setProject(snapshot);
+    syncHistoryDepth();
   }
 
   function redo() {
-    setProject((previous) => {
-      const snapshot = redoRef.current.at(-1);
-      if (!previous || !snapshot) return previous;
-      redoRef.current = redoRef.current.slice(0, -1);
-      undoRef.current = [...undoRef.current, previous];
-      return snapshot;
-    });
+    const snapshot = redoRef.current.at(-1);
+    if (!project || !snapshot) return;
+    redoRef.current = redoRef.current.slice(0, -1);
+    undoRef.current = [...undoRef.current, project];
+    setProject(snapshot);
+    syncHistoryDepth();
   }
+
+  const keyboardActionsRef = useRef({ undo, redo });
+  useEffect(() => { keyboardActionsRef.current = { undo, redo }; });
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
@@ -112,7 +119,8 @@ export function GanttTool() {
       const target = event.target as HTMLElement;
       if (target.closest("input, textarea, select, [contenteditable]")) return;
       event.preventDefault();
-      if (event.shiftKey) redo(); else undo();
+      if (event.shiftKey) keyboardActionsRef.current.redo();
+      else keyboardActionsRef.current.undo();
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -176,7 +184,7 @@ export function GanttTool() {
     const task = project.tasks.find((item) => item.id === taskId);
     if (!task) return;
     if (task.dependsOn.includes(dependencyId)) { showNotice("這條依賴已經存在"); return; }
-    if (wouldCreateCycle(project.tasks, taskId, dependencyId)) { showNotice("加入這條依賴會形成循環，已略過"); return; }
+    if (wouldCreateCycle(project.tasks, taskId, dependencyId)) { showNotice("加入這條依賴會形成循環，已略過", "error"); return; }
     commit((previous) => ({ ...previous, tasks: previous.tasks.map((item) => (item.id === taskId ? { ...item, dependsOn: [...item.dependsOn, dependencyId] } : item)) }));
     showNotice("已建立依賴關係");
   }
@@ -187,7 +195,7 @@ export function GanttTool() {
 
   function exportSvgMarkup() {
     const markup = chartRef.current?.exportSvg();
-    if (!markup) { showNotice("圖表尚未就緒，請再試一次"); return null; }
+    if (!markup) { showNotice("圖表尚未就緒，請再試一次", "error"); return null; }
     return markup;
   }
 
@@ -218,7 +226,7 @@ export function GanttTool() {
       canvas.toBlob((blob) => { if (blob) downloadBlob(blob, `${safeFilename(project.title)}.png`); }, "image/png");
       URL.revokeObjectURL(source);
     };
-    image.onerror = () => { URL.revokeObjectURL(source); showNotice("PNG 產生失敗，請改下載 SVG"); };
+    image.onerror = () => { URL.revokeObjectURL(source); showNotice("PNG 產生失敗，請改下載 SVG", "error"); };
     image.src = source;
   }
 
@@ -234,21 +242,25 @@ export function GanttTool() {
 
   async function copyMermaid() {
     if (!project) return;
-    await navigator.clipboard.writeText(toMermaid(project));
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2400);
+    try {
+      await navigator.clipboard.writeText(toMermaid(project));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2400);
+    } catch {
+      showNotice("無法複製到剪貼簿，請展開下方原始碼手動複製", "error");
+    }
   }
 
   async function importJson(file: File) {
     try {
       const normalized = normalizeProject(JSON.parse(await file.text()));
-      if (!normalized) { showNotice("這個檔案不是有效的甘特圖 JSON"); return; }
+      if (!normalized) { showNotice("這個檔案不是有效的甘特圖 JSON", "error"); return; }
       commit(() => normalized.project);
       setSelectedId(null);
       setEditorId(null);
       showNotice(normalized.repairs.length > 0 ? `已匯入，並自動整理 ${normalized.repairs.length} 個問題` : "已匯入專案");
     } catch {
-      showNotice("讀取 JSON 失敗，請確認檔案內容");
+      showNotice("讀取 JSON 失敗，請確認檔案內容", "error");
     }
   }
 
@@ -277,14 +289,14 @@ export function GanttTool() {
           ))}
         </div>
         <button className="button button-small button-secondary" type="button" disabled={!project} onClick={() => chartRef.current?.scrollToToday()}>今天</button>
-        <button className="button button-small button-secondary" type="button" disabled={!project} onClick={undo} aria-label="復原">↺ 復原</button>
-        <button className="button button-small button-secondary" type="button" disabled={!project} onClick={redo} aria-label="重做">↻ 重做</button>
+        <button className="button button-small button-secondary" type="button" disabled={!project || historyDepth.undo === 0} onClick={undo} aria-label="復原">↺ 復原</button>
+        <button className="button button-small button-secondary" type="button" disabled={!project || historyDepth.redo === 0} onClick={redo} aria-label="重做">↻ 重做</button>
         <span className="gantt-toolbar-spring" />
         <button className="button button-small button-secondary" type="button" disabled={!project} onClick={addGroup}>＋ 群組</button>
         <button className="button button-small button-secondary" type="button" disabled={!project} onClick={() => addTask(true)}>＋ 里程碑</button>
         <button className="button button-small button-blue" type="button" disabled={!project} onClick={() => addTask(false)}>＋ 新增任務</button>
       </div>
-      {notice && <p className="error-message gantt-notice" role="status">{notice}</p>}
+      {notice && <p className={`gantt-notice gantt-notice-${notice.tone}`} role="status">{notice.message}</p>}
       {project ? (
         <div className="gantt-body">
           <div className="gantt-table" role="grid" aria-label="任務列表">
@@ -355,7 +367,7 @@ export function GanttTool() {
               <input id="gantt-edit-name" className="key-input" value={editingTask.name} maxLength={80} onChange={(event) => patchTask(editingTask.id, { name: event.target.value }, { snapshot: false })} />
             </label>
             <label className="check-row gantt-editor-check">
-              <input type="checkbox" checked={editingTask.milestone === true} onChange={(event) => patchTask(editingTask.id, event.target.checked ? { milestone: true, durationDays: 0 } : { milestone: undefined, durationDays: 3 }, { snapshot: false })} />
+              <input type="checkbox" checked={editingTask.milestone === true} onChange={(event) => patchTask(editingTask.id, event.target.checked ? { milestone: true } : { milestone: undefined, durationDays: Math.max(1, editingTask.durationDays || 3) }, { snapshot: false })} />
               里程碑（單一日期）
             </label>
             <label className="field-label" htmlFor="gantt-edit-start">開始日期
@@ -403,7 +415,7 @@ export function GanttTool() {
                         disabled={blocked}
                         onChange={(event) => patchTask(editingTask.id, { dependsOn: event.target.checked ? [...editingTask.dependsOn, task.id] : editingTask.dependsOn.filter((id) => id !== task.id) }, { snapshot: false })}
                       />
-                      {task.milestone ? "◆ " : ""}{task.name}{blocked ? "（循環）" : ""}
+                      <span>{task.milestone ? "◆ " : ""}{task.name}{blocked ? "（循環）" : ""}</span>
                     </label>
                   );
                 })}

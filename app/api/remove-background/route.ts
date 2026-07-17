@@ -10,7 +10,31 @@ export const runtime = "nodejs";
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SIZE = 10 * 1024 * 1024;
 
+// 輕量 in-memory 頻率限制：這條 route 會轉送到付費的 remove.bg，避免單一
+// 來源灌爆。每個執行個體各自計數（serverless 下非全域），足以擋住暴力濫用。
+const RATE_LIMIT = 12;
+const RATE_WINDOW_MS = 60_000;
+const requestLog = new Map<string, number[]>();
+
+function isRateLimited(clientId: string) {
+  const now = Date.now();
+  if (requestLog.size > 1000) {
+    for (const [key, hits] of requestLog) {
+      if (hits.every((time) => now - time >= RATE_WINDOW_MS)) requestLog.delete(key);
+    }
+  }
+  const recent = (requestLog.get(clientId) ?? []).filter((time) => now - time < RATE_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT) { requestLog.set(clientId, recent); return true; }
+  recent.push(now);
+  requestLog.set(clientId, recent);
+  return false;
+}
+
 export async function POST(request: NextRequest) {
+  const clientId = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (isRateLimited(clientId)) {
+    return NextResponse.json({ error: "請求太頻繁，請稍後再試" }, { status: 429 });
+  }
   let form: FormData;
   try {
     form = await request.formData();
@@ -27,7 +51,8 @@ export async function POST(request: NextRequest) {
   if (!(image instanceof File)) {
     return NextResponse.json({ error: "請選擇要去背的圖片" }, { status: 400 });
   }
-  if (!ALLOWED_TYPES.has(image.type)) {
+  const acceptableType = ALLOWED_TYPES.has(image.type) || (image.type === "" && /\.(jpe?g|png|webp)$/i.test(image.name));
+  if (!acceptableType) {
     return NextResponse.json({ error: "只支援 JPG、PNG 與 WebP 圖片" }, { status: 400 });
   }
   if (image.size > MAX_SIZE) {

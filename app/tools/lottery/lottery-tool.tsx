@@ -10,6 +10,23 @@ const STORAGE_KEY = "toolverse:lottery:v1";
 const LEGACY_STORAGE_KEY = "hermes-tools:lottery:v1";
 type StoredState = { raw: string; count: number; dedupe: boolean; exclude: boolean; previousWinners: string[]; history: string[][] };
 
+function stringList(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+/** localStorage 可能被寫壞；逐欄驗證，救得回多少是多少，避免整頁 render 掛掉。 */
+function sanitizeStoredState(value: unknown): StoredState {
+  const data = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
+  return {
+    raw: typeof data.raw === "string" ? data.raw : "",
+    count: Number.isFinite(Number(data.count)) ? Math.max(1, Math.round(Number(data.count))) : 1,
+    dedupe: data.dedupe !== false,
+    exclude: data.exclude !== false,
+    previousWinners: stringList(data.previousWinners),
+    history: Array.isArray(data.history) ? data.history.map(stringList).filter((round) => round.length > 0) : [],
+  };
+}
+
 function fireConfetti(finale: boolean) {
   const shared = { spread: 68, ticks: 130, startVelocity: 34, scalar: finale ? 0.95 : 0.75 };
   if (!finale) {
@@ -48,11 +65,11 @@ export function LotteryTool() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
       if (!saved) return;
-      const data = JSON.parse(saved) as StoredState;
+      const data = sanitizeStoredState(JSON.parse(saved));
       localStorage.removeItem(LEGACY_STORAGE_KEY);
       // Restoring device-local preferences requires a one-time client hydration.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setRaw(data.raw ?? ""); setCount(data.count ?? 1); setDedupe(data.dedupe ?? true); setExclude(data.exclude ?? true); setPreviousWinners(data.previousWinners ?? []); setHistory(data.history ?? []);
+      setRaw(data.raw); setCount(data.count); setDedupe(data.dedupe); setExclude(data.exclude); setPreviousWinners(data.previousWinners); setHistory(data.history);
     } catch { localStorage.removeItem(STORAGE_KEY); }
   }, []);
 
@@ -116,14 +133,18 @@ export function LotteryTool() {
   }
 
   async function copyResults() {
-    await navigator.clipboard.writeText(winners.join("\n"));
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(winners.join("\n"));
+      setCopied(true);
+    } catch {
+      setError("無法複製到剪貼簿，請手動選取名單複製");
+    }
   }
 
   function resetWinners() { setPreviousWinners([]); setWinners([]); setRevealed([]); setHistory([]); setError(""); }
 
   return <section className="workspace lottery-neon page-shell" aria-label="隨機抽名單工具">
-    <div className="panel lottery-controls-panel"><div className="panel-header"><h2>參加名單</h2><span className="panel-meta">共 {participants.length} 人 · 可抽 {eligible.length} 人</span></div><p className="lottery-panel-note">每行一位，名單會留在你的裝置中。</p><label className="sr-only" htmlFor="participants">參加者名單，一行一位</label><textarea id="participants" className="participant-input participant-input-compact" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder={'輸入或貼上名單，每行一位\n例如：\n小明\n小美\nAlex'} /><div className="form-controls"><label className="check-row"><input type="checkbox" checked={dedupe} onChange={(event) => setDedupe(event.target.checked)} />移除重複名字</label><label className="check-row"><input type="checkbox" checked={exclude} onChange={(event) => setExclude(event.target.checked)} />排除已抽出者</label><label className="number-field" htmlFor="winner-count">抽出人數<input id="winner-count" className="number-input" type="number" min="1" max={Math.max(1, eligible.length)} value={count} onChange={(event) => setCount(Number(event.target.value))} /></label></div><button className="button button-blue draw-button" type="button" onClick={handleDraw} disabled={drawing}>{drawing ? "正在抽選…" : "開始抽選"}</button>{error && <p className="error-message" role="alert">{error}</p>}</div>
+    <div className="panel lottery-controls-panel"><div className="panel-header"><h2>參加名單</h2><span className="panel-meta">共 {participants.length} 人 · 可抽 {eligible.length} 人</span></div><p className="lottery-panel-note">每行一位，名單會留在你的裝置中。</p><label className="sr-only" htmlFor="participants">參加者名單，一行一位</label><textarea id="participants" className="participant-input participant-input-compact" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder={'輸入或貼上名單，每行一位\n例如：\n小明\n小美\nAlex'} /><div className="form-controls"><label className="check-row"><input type="checkbox" checked={dedupe} onChange={(event) => setDedupe(event.target.checked)} />移除重複名字</label><label className="check-row"><input type="checkbox" checked={exclude} onChange={(event) => setExclude(event.target.checked)} />排除已抽出者</label><label className="number-field" htmlFor="winner-count">抽出人數<input id="winner-count" className="number-input" type="number" min="1" max={Math.max(1, eligible.length)} value={count} onChange={(event) => setCount(Math.max(1, Math.round(Number(event.target.value)) || 1))} /></label></div><button className="button button-blue draw-button" type="button" onClick={handleDraw} disabled={drawing}>{drawing ? "正在抽選…" : "開始抽選"}</button>{error && <p className="error-message" role="alert">{error}</p>}</div>
     <div className="panel panel-tinted lottery-stage-panel"><div className="panel-header"><h2>抽選轉盤</h2><span className="lottery-fairness">公平隨機抽選</span></div>
       <div className="lottery-wheel-area">
         {justRevealed && <div className="lottery-flash-winner">🎉 {justRevealed}</div>}

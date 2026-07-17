@@ -191,8 +191,12 @@ export function AiFlowchartTool() {
   }
 
   async function copyMermaid() {
-    await navigator.clipboard.writeText(mermaidCode);
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(mermaidCode);
+      setCopied(true);
+    } catch {
+      setError("無法複製到剪貼簿，請直接選取上方原始碼複製");
+    }
   }
 
   function downloadSvg() {
