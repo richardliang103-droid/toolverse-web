@@ -51,7 +51,9 @@ export function BackgroundRemover() {
   function selectFile(candidate?: File) {
     if (!candidate) return;
     setError("");
-    if (!ALLOWED_TYPES.has(candidate.type)) { setError("只支援 JPG、PNG 與 WebP 圖片"); return; }
+    // 部分來源（網路磁碟、某些軟體）拖出的檔案 MIME type 是空字串，改看副檔名。
+    const acceptable = ALLOWED_TYPES.has(candidate.type) || (candidate.type === "" && /\.(jpe?g|png|webp)$/i.test(candidate.name));
+    if (!acceptable) { setError("只支援 JPG、PNG 與 WebP 圖片"); return; }
     if (candidate.size > MAX_SIZE) { setError("圖片大小不能超過 10 MB"); return; }
     if (originalUrlRef.current) URL.revokeObjectURL(originalUrlRef.current);
     if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);

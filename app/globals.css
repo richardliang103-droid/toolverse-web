@@ -340,7 +340,9 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .gantt-seg button { padding: 8px 15px; border: none; border-right: 1px solid var(--ink); background: transparent; font-size: 13px; font-weight: 700; cursor: pointer; }
 .gantt-seg button:last-child { border-right: none; }
 .gantt-seg button.on { background: var(--ink); color: var(--paper); }
-.gantt-notice { margin: 0; }
+.gantt-notice { margin: 0; padding: 10px 14px; border: 1px solid; border-radius: 10px; font-size: 14px; font-weight: 600; }
+.gantt-notice-info { background: #e8f8ef; border-color: #83b89a; color: #245c3c; }
+.gantt-notice-error { background: #fdecea; border-color: #e0a9a4; color: #b72a22; }
 .gantt-body { display: flex; align-items: stretch; overflow: hidden; border: 1px solid var(--ink); border-radius: 14px; background: var(--white); }
 .gantt-loading { min-height: 320px; align-items: center; justify-content: center; color: var(--muted); }
 .gantt-table { position: relative; flex: 0 0 318px; overflow: hidden; border-right: 1px solid var(--ink); font-size: 13px; }
