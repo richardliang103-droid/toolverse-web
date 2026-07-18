@@ -1,12 +1,34 @@
-// 明確的 .ts 副檔名讓 node --experimental-strip-types 的測試也能解析這個模組。
-import { cryptoShuffle, normalizeParticipants } from "./lottery.ts";
-
 export type GroupingMode = "byCount" | "bySize";
 
 export type GroupingResult = {
   groups: string[][];
   groupCount: number;
 };
+
+// 這個模組刻意零依賴（不 import 其他 lib）：node --test 可直接載入，
+// 也避免跨檔 .ts 副檔名 import 需要動 tsconfig。洗牌邏輯與 lib/lottery 相同。
+function cryptoRandomIndex(maxExclusive: number) {
+  const range = 0x1_0000_0000;
+  const limit = range - (range % maxExclusive);
+  const values = new Uint32Array(1);
+  do { crypto.getRandomValues(values); } while (values[0] >= limit);
+  return values[0] % maxExclusive;
+}
+
+/** Fisher–Yates 洗牌，使用 Web Crypto 的安全隨機來源。 */
+function cryptoShuffle<T>(items: T[]) {
+  const pool = [...items];
+  for (let index = pool.length - 1; index > 0; index -= 1) {
+    const randomIndex = cryptoRandomIndex(index + 1);
+    [pool[index], pool[randomIndex]] = [pool[randomIndex], pool[index]];
+  }
+  return pool;
+}
+
+export function normalizeParticipants(rawText: string, removeDuplicates = true) {
+  const participants = rawText.split(/\r?\n/).map((name) => name.trim()).filter(Boolean);
+  return removeDuplicates ? [...new Set(participants)] : participants;
+}
 
 /** 依模式換算實際組數；名單為空回傳 0。 */
 export function resolveGroupCount(memberTotal: number, mode: GroupingMode, value: number) {
@@ -41,5 +63,3 @@ export function groupsToCsv(groups: string[][]) {
   // 前置 BOM 讓 Excel 以 UTF-8 開啟中文欄位。
   return `\uFEFF${rows.map((row) => row.map(field).join(",")).join("\r\n")}`;
 }
-
-export { normalizeParticipants };
