@@ -23,8 +23,10 @@ export async function generateMetadata(): Promise<Metadata> {
       shortcut: "/favicon.png",
       apple: "/apple-touch-icon.png",
     },
-    openGraph: { title: "ToolVerse", description: "簡單、直接的網頁工具。", type: "website", locale: "zh_TW", images: [{ url: image, width: 1200, height: 630, alt: "ToolVerse 工具目錄" }] },
-    twitter: { card: "summary_large_image", title: "ToolVerse", description: "簡單、直接的網頁工具。", images: [image] },
+    // 不寫死 openGraph/twitter 的 title 與 description：留空時 Next 會回退到各頁自己的
+    // title（含「%s｜ToolVerse」模板）與 description，讓每個工具分享時顯示自己的名稱。
+    openGraph: { type: "website", locale: "zh_TW", siteName: "ToolVerse", images: [{ url: image, width: 1200, height: 630, alt: "ToolVerse 工具目錄" }] },
+    twitter: { card: "summary_large_image", images: [image] },
   };
 }
 

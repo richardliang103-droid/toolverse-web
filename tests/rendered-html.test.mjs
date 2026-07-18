@@ -43,3 +43,23 @@ test("server-renders all tool routes", async () => {
     assert.match(await response.text(), pattern, `${pathname} 缺少預期內容`);
   }
 });
+
+test("serves a sitemap covering every tool", async () => {
+  const response = await render("/sitemap.xml");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /xml/);
+  const xml = await response.text();
+  assert.match(xml, /<urlset/);
+  assert.match(xml, /toolverse-web\.vercel\.app\/<\/loc>|toolverse-web\.vercel\.app\/</);
+  for (const slug of ["gantt", "qr-code", "chinese-converter", "pdf-toolkit"]) {
+    assert.match(xml, new RegExp(`/tools/${slug}</loc>`), `sitemap 缺少 ${slug}`);
+  }
+});
+
+test("serves robots.txt pointing at the sitemap", async () => {
+  const response = await render("/robots.txt");
+  assert.equal(response.status, 200);
+  const body = await response.text();
+  assert.match(body, /User-agent: \*/);
+  assert.match(body, /Sitemap: https:\/\/toolverse-web\.vercel\.app\/sitemap\.xml/);
+});
