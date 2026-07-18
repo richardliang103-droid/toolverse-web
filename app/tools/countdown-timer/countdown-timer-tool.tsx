@@ -13,6 +13,19 @@ const PRESETS = [
 
 type Phase = "idle" | "running" | "paused" | "finished";
 
+type Segment = { label: string; minutes: number };
+
+function sanitizeSegments(value: unknown): Segment[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+    .map((item) => ({
+      label: typeof item.label === "string" ? item.label.slice(0, 20) : "",
+      minutes: Number.isFinite(Number(item.minutes)) ? Math.min(Math.max(Math.round(Number(item.minutes)), 1), 99) : 1,
+    }))
+    .slice(0, 8);
+}
+
 function sanitizeDuration(value: unknown) {
   const parsed = clampTimerMs(Number(value));
   return parsed >= 1000 ? parsed : 300_000;
@@ -47,6 +60,8 @@ export function CountdownTimerTool() {
   const [remainingMs, setRemainingMs] = useState(300_000);
   const [phase, setPhase] = useState<Phase>("idle");
   const [soundOn, setSoundOn] = useState(true);
+  const [segments, setSegments] = useState<Segment[]>([]);
+  const [segmentIndex, setSegmentIndex] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const endAtRef = useRef(0);
@@ -58,7 +73,7 @@ export function CountdownTimerTool() {
         const data = JSON.parse(saved) as Record<string, unknown>;
         // 還原上次使用的時長需要一次性的 client hydration。
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setTotalMs(sanitizeDuration(data.totalMs)); setRemainingMs(sanitizeDuration(data.totalMs)); setSoundOn(data.soundOn !== false);
+        setTotalMs(sanitizeDuration(data.totalMs)); setRemainingMs(sanitizeDuration(data.totalMs)); setSoundOn(data.soundOn !== false); setSegments(sanitizeSegments(data.segments));
       }
     } catch { localStorage.removeItem(STORAGE_KEY); }
      
@@ -66,8 +81,8 @@ export function CountdownTimerTool() {
   }, []);
 
   useEffect(() => {
-    if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify({ totalMs, soundOn }));
-  }, [hydrated, totalMs, soundOn]);
+    if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify({ totalMs, soundOn, segments }));
+  }, [hydrated, totalMs, soundOn, segments]);
 
   // 以結束時間戳計算剩餘，interval 只負責重繪 — 背景分頁或節流也不會不準。
   useEffect(() => {
@@ -76,6 +91,15 @@ export function CountdownTimerTool() {
       const left = Math.max(0, endAtRef.current - Date.now());
       setRemainingMs(left);
       if (left <= 0) {
+        if (segments.length > 0 && segmentIndex < segments.length - 1) {
+          // 進入下一段：以「上一段理論結束時間」為基準，多段總長不漂移。
+          const next = segments[segmentIndex + 1];
+          endAtRef.current += next.minutes * 60_000;
+          setSegmentIndex(segmentIndex + 1);
+          setRemainingMs(Math.max(0, endAtRef.current - Date.now()));
+          if (soundOn) playFinishSound();
+          return;
+        }
         setPhase("finished");
         if (soundOn) playFinishSound();
       }
@@ -85,7 +109,7 @@ export function CountdownTimerTool() {
     const onVisible = () => tick();
     document.addEventListener("visibilitychange", onVisible);
     return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
-  }, [phase, soundOn]);
+  }, [phase, soundOn, segments, segmentIndex]);
 
   useEffect(() => {
     const original = document.title;
@@ -102,9 +126,18 @@ export function CountdownTimerTool() {
   }
 
   function start() {
-    const base = phase === "paused" ? remainingMs : totalMs;
-    if (base <= 0) return;
-    endAtRef.current = Date.now() + base;
+    if (phase === "paused") {
+      endAtRef.current = Date.now() + remainingMs;
+      setPhase("running");
+      return;
+    }
+    if (segments.length > 0) {
+      setSegmentIndex(0);
+      endAtRef.current = Date.now() + segments[0].minutes * 60_000;
+    } else {
+      if (totalMs <= 0) return;
+      endAtRef.current = Date.now() + totalMs;
+    }
     setPhase("running");
   }
 
@@ -115,7 +148,8 @@ export function CountdownTimerTool() {
 
   function reset() {
     setPhase("idle");
-    setRemainingMs(totalMs);
+    setSegmentIndex(0);
+    setRemainingMs(segments.length > 0 ? segments[0].minutes * 60_000 : totalMs);
   }
 
   function adjustMinutes(delta: number) {
@@ -131,8 +165,9 @@ export function CountdownTimerTool() {
     } catch { /* 不支援全螢幕就維持原樣 */ }
   }
 
-  const warning = phase === "running" && isWarningZone(remainingMs, totalMs);
-  const display = formatClock(phase === "idle" ? totalMs : remainingMs);
+  const segmentTotalMs = segments.length > 0 ? segments[Math.min(segmentIndex, segments.length - 1)].minutes * 60_000 : totalMs;
+  const warning = phase === "running" && isWarningZone(remainingMs, segmentTotalMs);
+  const display = formatClock(phase === "idle" ? (segments.length > 0 ? segments[0].minutes * 60_000 : totalMs) : remainingMs);
   const minutesTotal = Math.round(totalMs / 60_000);
 
   return <section className="workspace timer-workspace page-shell" aria-label="倒數計時器">
@@ -148,11 +183,27 @@ export function CountdownTimerTool() {
         <span className="timer-custom-value">{minutesTotal} 分鐘</span>
         <button className="button button-small button-secondary" type="button" onClick={() => adjustMinutes(1)} disabled={phase === "running" || totalMs >= MAX_TIMER_MS - 59_000} aria-label="增加一分鐘">＋1 分</button>
       </div>
+      <details className="timer-segments" open={segments.length > 0}>
+        <summary>多段模式{segments.length > 0 ? `（${segments.length} 段）` : "（選用）"}</summary>
+        {segments.map((segment, index) => (
+          <div className="timer-segment-row" key={index}>
+            <input className="key-input" aria-label={`第 ${index + 1} 段名稱`} placeholder={`第 ${index + 1} 段`} maxLength={20} value={segment.label} disabled={phase === "running"} onChange={(event) => setSegments((previous) => previous.map((item, at) => (at === index ? { ...item, label: event.target.value } : item)))} />
+            <input className="number-input" aria-label={`第 ${index + 1} 段分鐘數`} type="number" min={1} max={99} value={segment.minutes} disabled={phase === "running"} onChange={(event) => setSegments((previous) => previous.map((item, at) => (at === index ? { ...item, minutes: Math.min(Math.max(Math.round(Number(event.target.value)) || 1, 1), 99) } : item)))} />
+            <span className="timer-segment-unit">分</span>
+            <button className="gantt-row-delete" type="button" aria-label={`刪除第 ${index + 1} 段`} disabled={phase === "running"} onClick={() => setSegments((previous) => previous.filter((_, at) => at !== index))}>✕</button>
+          </div>
+        ))}
+        <button className="button button-small button-secondary" type="button" disabled={phase === "running" || segments.length >= 8} onClick={() => setSegments((previous) => [...previous, { label: "", minutes: 3 }])}>＋ 加一段</button>
+        {segments.length > 0 && <p className="key-note">每段結束會響提示音並自動接續下一段；單段的快速預設此時不生效。</p>}
+      </details>
       <label className="check-row timer-sound"><input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} />結束時播放提示音</label>
       <p className="key-note">計時以系統時間為準，切到其他分頁或螢幕休眠也不會漏秒；分頁標題會同步顯示剩餘時間。</p>
     </div>
     <div className="panel panel-tinted timer-stage-panel">
       <div ref={stageRef} className={`timer-stage${warning ? " timer-warning" : ""}${phase === "finished" ? " timer-finished" : ""}`}>
+        {segments.length > 0 && phase !== "idle" && phase !== "finished" && (
+          <div className="timer-segment-indicator">{segments[segmentIndex].label || `第 ${segmentIndex + 1} 段`}（{segmentIndex + 1}/{segments.length}）</div>
+        )}
         <output className="timer-display" aria-live="polite">{phase === "finished" ? "時間到" : display}</output>
         <div className="timer-actions">
           {phase === "running"
