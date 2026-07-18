@@ -73,11 +73,13 @@ export function PdfToolkitTool() {
     }
   }
 
-  /** 用 pdf.js 畫前幾頁縮圖；任何失敗都靜默略過（縮圖是輔助，不擋功能）。 */
+  /** 用 pdf.js 畫前幾頁縮圖；整段包 12 秒逾時，任何失敗或懸掛都靜默降級（縮圖是輔助，不擋功能）。 */
   async function renderThumbnails(buffer: ArrayBuffer, pageCount: number) {
-    try {
+    const work = async () => {
       const pdfjs = await import("pdfjs-dist");
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+      // worker 以靜態資產提供（public/pdf.worker.min.mjs，需與 pdfjs-dist 版本一起更新；
+      // vinext 與 next build 兩套打包器對 node_modules URL 的解析不一致，靜態路徑最穩）。
+      pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
       const documentProxy = await pdfjs.getDocument({ data: buffer.slice(0) }).promise;
       const images: string[] = [];
       for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
@@ -95,6 +97,12 @@ export function PdfToolkitTool() {
         setThumbnails([...images]);
       }
       void documentProxy.cleanup();
+    };
+    try {
+      await Promise.race([
+        work(),
+        new Promise<never>((_, reject) => { setTimeout(() => reject(new Error("thumbnail timeout")), 12_000); }),
+      ]);
     } catch { /* 縮圖失敗不影響取頁 */ }
   }
 
