@@ -31,6 +31,7 @@ export function PdfToolkitTool() {
   const [mergeItems, setMergeItems] = useState<MergeItem[]>([]);
   const [splitFile, setSplitFile] = useState<File | null>(null);
   const [splitPages, setSplitPages] = useState<number | null>(null);
+  const [thumbnails, setThumbnails] = useState<string[]>([]);
   const [range, setRange] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -59,14 +60,51 @@ export function PdfToolkitTool() {
     if (file.size > MAX_SIZE) { setError("檔案超過 50 MB 上限"); return; }
     setSplitFile(file);
     setSplitPages(null);
+    setThumbnails([]);
     try {
+      const buffer = await file.arrayBuffer();
       const { PDFDocument } = await import("pdf-lib");
-      const document = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: false });
+      const document = await PDFDocument.load(buffer.slice(0), { ignoreEncryption: false });
       setSplitPages(document.getPageCount());
+      void renderThumbnails(buffer, Math.min(document.getPageCount(), 12));
     } catch {
       setSplitFile(null);
       setError("無法讀取這份 PDF — 檔案可能已加密或損壞");
     }
+  }
+
+  /** 用 pdf.js 畫前幾頁縮圖；任何失敗都靜默略過（縮圖是輔助，不擋功能）。 */
+  async function renderThumbnails(buffer: ArrayBuffer, pageCount: number) {
+    try {
+      const pdfjs = await import("pdfjs-dist");
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+      const documentProxy = await pdfjs.getDocument({ data: buffer.slice(0) }).promise;
+      const images: string[] = [];
+      for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+        const page = await documentProxy.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 1 });
+        const scale = 120 / viewport.width;
+        const scaled = page.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(scaled.width);
+        canvas.height = Math.ceil(scaled.height);
+        const context = canvas.getContext("2d");
+        if (!context) break;
+        await page.render({ canvas, canvasContext: context, viewport: scaled }).promise;
+        images.push(canvas.toDataURL("image/jpeg", 0.7));
+        setThumbnails([...images]);
+      }
+      void documentProxy.cleanup();
+    } catch { /* 縮圖失敗不影響取頁 */ }
+  }
+
+  function toggleThumbnailPage(pageNumber: number) {
+    setRange((previous) => {
+      const parts = previous.split(/[,，、]/).map((part) => part.trim()).filter(Boolean);
+      const token = String(pageNumber);
+      if (parts.includes(token)) return parts.filter((part) => part !== token).join(",");
+      return [...parts, token].join(",");
+    });
   }
 
   function moveItem(id: string, direction: -1 | 1) {
@@ -152,7 +190,18 @@ export function PdfToolkitTool() {
         : <>
             <button className="button button-secondary pdf-add-button" type="button" onClick={() => splitInputRef.current?.click()} disabled={busy}>{splitFile ? `已選：${splitFile.name}` : "選擇 PDF"}</button>
             <input ref={splitInputRef} className="file-input" type="file" accept="application/pdf,.pdf" onChange={chooseSplitFile} aria-label="選擇要取頁的 PDF" />
-            {splitPages !== null && <p className="pdf-page-count">共 {splitPages} 頁</p>}
+            {splitPages !== null && <p className="pdf-page-count">共 {splitPages} 頁{thumbnails.length > 0 ? "（點縮圖可加入／移除頁碼）" : ""}</p>}
+            {thumbnails.length > 0 && (
+              <div className="pdf-thumb-grid">
+                {thumbnails.map((thumbnail, index) => (
+                  <button type="button" className="pdf-thumb" key={index} onClick={() => toggleThumbnailPage(index + 1)} title={`第 ${index + 1} 頁`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- 本機 data URL 縮圖 */}
+                    <img src={thumbnail} alt={`第 ${index + 1} 頁縮圖`} />
+                    <span>{index + 1}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <label className="field-label" htmlFor="pdf-range">要取出的頁碼
               <input id="pdf-range" className="key-input" value={range} onChange={(event) => setRange(event.target.value)} placeholder="例如 1-3,5" spellCheck={false} />
             </label>

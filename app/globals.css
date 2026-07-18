@@ -528,3 +528,9 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .timer-warning .timer-segment-indicator, .timer-finished .timer-segment-indicator { background: rgba(0,0,0,.18); }
 
 .qr-logo-row { display: inline-flex; align-items: center; gap: 8px; }
+
+.pdf-thumb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; margin-top: 12px; }
+.pdf-thumb { position: relative; display: block; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: white; cursor: pointer; }
+.pdf-thumb:hover { border-color: var(--blue); }
+.pdf-thumb img { display: block; width: 100%; height: auto; }
+.pdf-thumb span { position: absolute; right: 4px; bottom: 4px; padding: 1px 7px; border-radius: 999px; background: var(--ink); color: var(--paper); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 10px; }
