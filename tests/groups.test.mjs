@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { groupsToCsv, groupsToText, resolveGroupCount, splitIntoGroups } from "../lib/groups.ts";
+import { groupsToCsv, groupsToText, parseSeparationRules, resolveGroupCount, splitIntoGroups } from "../lib/groups.ts";
 
 const NAMES = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"];
 
@@ -58,4 +58,25 @@ test("text and csv exports include every group and member", () => {
   assert.match(csv, /第 1 組,小明/);
   assert.match(csv, /第 2 組,Alex/);
   assert.equal(csv.split("\r\n").length, 4); // 表頭 + 3 位成員
+});
+
+test("separation rules keep listed members in different groups", () => {
+  const groupOf = (groups, name) => groups.findIndex((group) => group.includes(name));
+  for (let round = 0; round < 12; round += 1) {
+    const { groups } = splitIntoGroups(NAMES, "byCount", 3, [["甲", "乙"], ["甲", "丙"]]);
+    assert.notEqual(groupOf(groups, "甲"), groupOf(groups, "乙"));
+    assert.notEqual(groupOf(groups, "甲"), groupOf(groups, "丙"));
+    assert.deepEqual(groups.flat().sort(), [...NAMES].sort());
+    const sizes = groups.map((group) => group.length);
+    assert.ok(Math.max(...sizes) - Math.min(...sizes) <= 1, `組距超過 1：${sizes}`);
+  }
+});
+
+test("separation rules reject impossible constraints", () => {
+  assert.throws(() => splitIntoGroups(NAMES, "byCount", 2, [["甲", "乙", "丙"]]), /請增加組數/);
+});
+
+test("parseSeparationRules filters unknown names and short rules", () => {
+  const rules = parseSeparationRules("甲, 乙\n路人, 甲\n丙、丁\n甲", ["甲", "乙", "丙", "丁"]);
+  assert.deepEqual(rules, [["甲", "乙"], ["丙", "丁"]]);
 });

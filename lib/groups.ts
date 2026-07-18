@@ -37,16 +37,64 @@ export function resolveGroupCount(memberTotal: number, mode: GroupingMode, value
   return Math.ceil(memberTotal / value);
 }
 
+/** 解析「不同組」約束：一行一條，成員用逗號分隔；只保留名單裡實際存在的人。 */
+export function parseSeparationRules(rawText: string, members: string[]) {
+  const memberSet = new Set(members);
+  return rawText
+    .split(/\r?\n/)
+    .map((line) => [...new Set(line.split(/[,，、]/).map((name) => name.trim()).filter((name) => memberSet.has(name)))])
+    .filter((rule) => rule.length >= 2);
+}
+
 /**
  * 公平隨機分組：先用 Web Crypto 洗牌，再輪流發牌（round-robin），
  * 各組人數最多差 1，人數多的組排在前面。
+ * separationRules（選填）：每條規則裡的人保證被放進不同組。
  */
-export function splitIntoGroups(members: string[], mode: GroupingMode, value: number): GroupingResult {
+export function splitIntoGroups(members: string[], mode: GroupingMode, value: number, separationRules: string[][] = []): GroupingResult {
   const groupCount = resolveGroupCount(members.length, mode, value);
   if (groupCount === 0) throw new Error("請先輸入名單並設定有效的分組數字");
-  const shuffled = cryptoShuffle(members);
+  for (const rule of separationRules) {
+    if (rule.length > groupCount) throw new Error(`「${rule.join("、")}」有 ${rule.length} 人要分開，但只有 ${groupCount} 組 — 請增加組數`);
+  }
+
   const groups: string[][] = Array.from({ length: groupCount }, () => []);
-  shuffled.forEach((member, index) => { groups[index % groupCount].push(member); });
+  const placed = new Set<string>();
+
+  // 先安置有約束的人：每條規則先標記已被前面規則放置者占用的組，
+  // 剩下的人洗牌後放進目前人數最少、且該規則尚未占用的組。
+  for (const rule of separationRules) {
+    const usedGroups = new Set<number>();
+    const unplaced: string[] = [];
+    for (const name of rule) {
+      if (placed.has(name)) {
+        const at = groups.findIndex((group) => group.includes(name));
+        if (usedGroups.has(at)) throw new Error(`「${rule.join("、")}」與其他規則衝突，無法同時滿足 — 請調整規則`);
+        usedGroups.add(at);
+      } else {
+        unplaced.push(name);
+      }
+    }
+    for (const name of cryptoShuffle(unplaced)) {
+      const candidates = groups.map((group, index) => ({ index, size: group.length })).filter(({ index }) => !usedGroups.has(index));
+      if (candidates.length === 0) throw new Error(`「${rule.join("、")}」與其他規則衝突，無法排出不同組 — 請增加組數或調整規則`);
+      candidates.sort((a, b) => a.size - b.size);
+      const pick = candidates[0].index;
+      groups[pick].push(name);
+      usedGroups.add(pick);
+      placed.add(name);
+    }
+  }
+
+  // 其餘的人洗牌後依「目前最缺人的組」填入，維持各組最多差 1。
+  const rest = cryptoShuffle(members.filter((name) => !placed.has(name)));
+  for (const name of rest) {
+    let pick = 0;
+    for (let index = 1; index < groupCount; index += 1) {
+      if (groups[index].length < groups[pick].length) pick = index;
+    }
+    groups[pick].push(name);
+  }
   return { groups, groupCount };
 }
 

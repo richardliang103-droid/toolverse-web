@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { groupsToCsv, groupsToText, normalizeParticipants, resolveGroupCount, splitIntoGroups } from "@/lib/groups";
+import { groupsToCsv, groupsToText, normalizeParticipants, parseSeparationRules, resolveGroupCount, splitIntoGroups } from "@/lib/groups";
 import type { GroupingMode } from "@/lib/groups";
 import { RosterPicker } from "@/components/roster-picker";
 
 const STORAGE_KEY = "toolverse:groups:v1";
 const TONE_COUNT = 4;
 
-type StoredState = { raw: string; dedupe: boolean; mode: GroupingMode; countValue: number; sizeValue: number; groups: string[][] };
+type StoredState = { raw: string; dedupe: boolean; mode: GroupingMode; countValue: number; sizeValue: number; groups: string[][]; separations: string };
 
 function positiveInt(value: unknown, fallback: number) {
   const parsed = Math.round(Number(value));
@@ -28,6 +28,7 @@ function sanitizeStoredState(value: unknown): StoredState {
     dedupe: data.dedupe !== false,
     mode: data.mode === "bySize" ? "bySize" : "byCount",
     countValue: positiveInt(data.countValue, 2),
+    separations: typeof data.separations === "string" ? data.separations : "",
     sizeValue: positiveInt(data.sizeValue, 4),
     groups,
   };
@@ -52,6 +53,7 @@ export function RandomGroupsTool() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [shuffleRound, setShuffleRound] = useState(0);
+  const [separations, setSeparations] = useState("");
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -61,7 +63,7 @@ export function RandomGroupsTool() {
         const data = sanitizeStoredState(JSON.parse(saved));
         // 還原此裝置的名單需要一次性的 client hydration。
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setRaw(data.raw); setDedupe(data.dedupe); setMode(data.mode); setCountValue(data.countValue); setSizeValue(data.sizeValue); setGroups(data.groups);
+        setRaw(data.raw); setDedupe(data.dedupe); setMode(data.mode); setCountValue(data.countValue); setSizeValue(data.sizeValue); setGroups(data.groups); setSeparations(data.separations);
       }
     } catch { localStorage.removeItem(STORAGE_KEY); }
      
@@ -71,8 +73,8 @@ export function RandomGroupsTool() {
   // hydrated 之前不寫入，避免初始空狀態在還原完成前蓋掉既有資料。
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ raw, dedupe, mode, countValue, sizeValue, groups }));
-  }, [hydrated, raw, dedupe, mode, countValue, sizeValue, groups]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ raw, dedupe, mode, countValue, sizeValue, groups, separations }));
+  }, [hydrated, raw, dedupe, mode, countValue, sizeValue, groups, separations]);
 
   const members = useMemo(() => normalizeParticipants(raw, dedupe), [raw, dedupe]);
   const currentValue = mode === "byCount" ? countValue : sizeValue;
@@ -81,7 +83,7 @@ export function RandomGroupsTool() {
   function handleSplit() {
     setError(""); setCopied(false);
     try {
-      const result = splitIntoGroups(members, mode, currentValue);
+      const result = splitIntoGroups(members, mode, currentValue, parseSeparationRules(separations, members));
       setGroups(result.groups);
       setShuffleRound((round) => round + 1); // 換 key 讓進場動畫重新播放
     } catch (caught) {
@@ -142,6 +144,9 @@ export function RandomGroupsTool() {
         </label>
         {sizeSummary && <span className="groups-forecast">{sizeSummary}</span>}
       </div>
+      <label className="field-label groups-separations" htmlFor="group-separations">不同組名單（選填）
+        <textarea id="group-separations" className="participant-input groups-separations-input" value={separations} onChange={(event) => setSeparations(event.target.value)} placeholder={"一行一條規則，成員用逗號分隔\n例如：小明,小美（兩人會被分進不同組）"} spellCheck={false} />
+      </label>
       <button className="button button-blue draw-button" type="button" onClick={handleSplit} disabled={members.length === 0}>開始分組 ⁘</button>
       {error && <p className="error-message" role="alert">{error}</p>}
       <p className="key-note">使用 Web Crypto 安全隨機來源洗牌後輪流分配，各組人數最多差 1 人；名單只留在你的瀏覽器。</p>

@@ -510,3 +510,6 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .lottery-neon .roster-chip { border-color: #53637c; background: rgba(12,20,34,.6); color: #e8eef9; }
 .lottery-neon .roster-chip-delete { color: #8fa0bd; }
 .lottery-neon .roster-save { border-color: #53637c; color: #e8eef9; }
+
+.groups-separations { margin-top: 16px; }
+.groups-separations-input { min-height: 74px; font-size: 13px; }
