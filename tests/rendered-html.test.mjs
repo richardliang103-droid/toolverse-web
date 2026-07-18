@@ -23,11 +23,21 @@ test("server-renders the ToolVerse homepage", async () => {
 });
 
 test("server-renders all tool routes", async () => {
-  const [lottery, remover, flowchart, gantt, groups] = await Promise.all([render("/tools/lottery"), render("/tools/background-remover"), render("/tools/ai-flowchart"), render("/tools/gantt"), render("/tools/random-groups")]);
-  assert.equal(lottery.status, 200); assert.equal(remover.status, 200); assert.equal(flowchart.status, 200); assert.equal(gantt.status, 200); assert.equal(groups.status, 200);
-  assert.match(await lottery.text(), /開始抽選/);
-  assert.match(await remover.text(), /把圖片拖到這裡/);
-  assert.match(await flowchart.text(), /描述你的流程/);
-  assert.match(await gantt.text(), /新增任務/);
-  assert.match(await groups.text(), /開始分組/);
+  const routes = [
+    ["/tools/lottery", /開始抽選/],
+    ["/tools/background-remover", /把圖片拖到這裡/],
+    ["/tools/ai-flowchart", /描述你的流程/],
+    ["/tools/gantt", /新增任務/],
+    ["/tools/random-groups", /開始分組/],
+    ["/tools/image-compressor", /開始壓縮/],
+    ["/tools/qr-code", /網址或文字/],
+    ["/tools/countdown-timer", /設定時間/],
+    ["/tools/pdf-toolkit", /合併多份 PDF/],
+    ["/tools/text-cleaner", /清理結果/],
+  ];
+  for (const [pathname, pattern] of routes) {
+    const response = await render(pathname);
+    assert.equal(response.status, 200, `${pathname} 應回 200`);
+    assert.match(await response.text(), pattern, `${pathname} 缺少預期內容`);
+  }
 });

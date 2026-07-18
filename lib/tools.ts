@@ -4,4 +4,9 @@ export const tools = [
   { slug: "ai-flowchart", name: "流程圖", description: "用中文描述流程，自動驗證並匯出 Mermaid、PNG、SVG 與 draw.io。", symbol: "⌘", accent: "mint", status: "BETA" },
   { slug: "gantt", name: "甘特圖", description: "拖曳排出專案時程：群組、里程碑與依賴關係，匯出 PNG、CSV、Mermaid 與 JSON。", symbol: "▤", accent: "fuji", status: "BETA" },
   { slug: "random-groups", name: "隨機分組", description: "貼上名單，公平隨機分成小組：可指定組數或每組人數，結果可複製或下載 CSV。", symbol: "⁘", accent: "toki", status: "READY" },
+  { slug: "image-compressor", name: "圖片壓縮", description: "本機批次壓縮與轉檔：JPG、PNG、WebP，可調品質與尺寸，圖片不上傳。", symbol: "◱", accent: "sora", status: "READY" },
+  { slug: "qr-code", name: "QR Code 產生器", description: "即時產生 QR Code，自訂顏色與容錯等級，下載 PNG、SVG 或直接複製。", symbol: "▦", accent: "sumi", status: "READY" },
+  { slug: "countdown-timer", name: "倒數計時器", description: "活動與簡報用的全螢幕倒數：快速預設、警示變色、結束提示音。", symbol: "◷", accent: "matsuba", status: "READY" },
+  { slug: "pdf-toolkit", name: "PDF 合併與取頁", description: "在瀏覽器本機合併多份 PDF、取出指定頁面，檔案不上傳。", symbol: "⧉", accent: "fuji", status: "BETA" },
+  { slug: "text-cleaner", name: "文字清理", description: "去空白、去重複行、排序與全形轉半形，即時統計字數，內容不上傳。", symbol: "¶", accent: "mint", status: "READY" },
 ] as const;
