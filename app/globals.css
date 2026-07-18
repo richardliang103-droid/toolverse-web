@@ -526,3 +526,5 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .timer-segments > .button { margin-top: 10px; }
 .timer-segment-indicator { padding: 6px 14px; border-radius: 999px; background: rgba(255,255,255,.14); color: var(--paper); font-size: 15px; font-weight: 750; }
 .timer-warning .timer-segment-indicator, .timer-finished .timer-segment-indicator { background: rgba(0,0,0,.18); }
+
+.qr-logo-row { display: inline-flex; align-items: center; gap: 8px; }
