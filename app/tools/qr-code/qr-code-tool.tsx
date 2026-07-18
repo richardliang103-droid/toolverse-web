@@ -1,0 +1,163 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { QR_MAX_LENGTH, contrastWarning, qrFilename } from "@/lib/qr";
+import type { QrErrorLevel } from "@/lib/qr";
+
+const STORAGE_KEY = "toolverse:qr-code:v1";
+const SIZES = [256, 512, 1024] as const;
+
+type StoredState = { text: string; dark: string; light: string; level: QrErrorLevel; size: number };
+
+function sanitizeStoredState(value: unknown): StoredState {
+  const data = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
+  const hex = (input: unknown, fallback: string) => (typeof input === "string" && /^#[0-9a-f]{6}$/i.test(input) ? input : fallback);
+  return {
+    text: typeof data.text === "string" ? data.text.slice(0, QR_MAX_LENGTH) : "",
+    dark: hex(data.dark, "#101628"),
+    light: hex(data.light, "#ffffff"),
+    level: data.level === "L" || data.level === "Q" || data.level === "H" ? data.level : "M",
+    size: data.size === 256 || data.size === 1024 ? data.size : 512,
+  };
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export function QrCodeTool() {
+  const [text, setText] = useState("https://toolverse-web.vercel.app");
+  const [dark, setDark] = useState("#101628");
+  const [light, setLight] = useState("#ffffff");
+  const [level, setLevel] = useState<QrErrorLevel>("M");
+  const [size, setSize] = useState(512);
+  const [dataUrl, setDataUrl] = useState("");
+  const [svgMarkup, setSvgMarkup] = useState("");
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const renderSeq = useRef(0);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const data = sanitizeStoredState(JSON.parse(saved));
+        if (data.text) {
+          // 還原此裝置的設定需要一次性的 client hydration。
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setText(data.text); setDark(data.dark); setLight(data.light); setLevel(data.level); setSize(data.size);
+        }
+      }
+    } catch { localStorage.removeItem(STORAGE_KEY); }
+     
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ text, dark, light, level, size }));
+  }, [hydrated, text, dark, light, level, size]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const trimmed = text.trim();
+    const sequence = ++renderSeq.current;
+    const timer = setTimeout(() => {
+      if (!trimmed) { setDataUrl(""); setSvgMarkup(""); setError(""); return; }
+      void (async () => {
+        try {
+          const QRCode = (await import("qrcode")).default;
+          const options = { errorCorrectionLevel: level, margin: 2, color: { dark, light } };
+          const [png, svg] = await Promise.all([
+            QRCode.toDataURL(trimmed, { ...options, width: size }),
+            QRCode.toString(trimmed, { ...options, type: "svg" as const }),
+          ]);
+          if (renderSeq.current !== sequence) return;
+          setDataUrl(png); setSvgMarkup(svg); setError("");
+        } catch {
+          if (renderSeq.current !== sequence) return;
+          setError("內容太長或無法編碼，請縮短文字或降低容錯等級");
+        }
+      })();
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [hydrated, text, dark, light, level, size]);
+
+  const warning = contrastWarning(dark, light);
+
+  function downloadPng() {
+    if (!dataUrl) return;
+    fetch(dataUrl).then((response) => response.blob()).then((blob) => downloadBlob(blob, `${qrFilename(text)}.png`)).catch(() => setError("下載失敗，請重試"));
+  }
+
+  function downloadSvg() {
+    if (!svgMarkup) return;
+    downloadBlob(new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" }), `${qrFilename(text)}.svg`);
+  }
+
+  async function copyPng() {
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2400);
+    } catch {
+      setError("無法複製到剪貼簿，請改用下載 PNG");
+    }
+  }
+
+  return <section className="workspace qr-workspace page-shell" aria-label="QR Code 產生器">
+    <div className="panel">
+      <div className="panel-header"><h2>內容與樣式</h2><span className="panel-meta">{text.trim().length}/{QR_MAX_LENGTH}</span></div>
+      <label className="field-label" htmlFor="qr-text">網址或文字
+        <textarea id="qr-text" className="participant-input qr-input" maxLength={QR_MAX_LENGTH} value={text} onChange={(event) => setText(event.target.value)} placeholder="https://example.com 或任何文字" />
+      </label>
+      <div className="qr-option-grid">
+        <label className="field-label" htmlFor="qr-dark">前景色
+          <span className="qr-color-row"><input id="qr-dark" type="color" value={dark} onChange={(event) => setDark(event.target.value)} /><code>{dark}</code></span>
+        </label>
+        <label className="field-label" htmlFor="qr-light">背景色
+          <span className="qr-color-row"><input id="qr-light" type="color" value={light} onChange={(event) => setLight(event.target.value)} /><code>{light}</code></span>
+        </label>
+        <label className="field-label" htmlFor="qr-level">容錯等級
+          <select id="qr-level" className="key-input" value={level} onChange={(event) => setLevel(event.target.value as QrErrorLevel)}>
+            <option value="L">L — 7%（內容可最多）</option>
+            <option value="M">M — 15%（一般用途）</option>
+            <option value="Q">Q — 25%</option>
+            <option value="H">H — 30%（髒污環境）</option>
+          </select>
+        </label>
+        <label className="field-label" htmlFor="qr-size">PNG 尺寸
+          <select id="qr-size" className="key-input" value={size} onChange={(event) => setSize(Number(event.target.value))}>
+            {SIZES.map((option) => <option key={option} value={option}>{option} px</option>)}
+          </select>
+        </label>
+      </div>
+      {warning && <p className="error-message" role="alert">{warning}</p>}
+      {error && <p className="error-message" role="alert">{error}</p>}
+      <p className="key-note">全部在瀏覽器本機產生，內容不會上傳；列印或深色背景建議容錯 M 以上。</p>
+    </div>
+    <div className="panel panel-tinted">
+      <div className="panel-header"><h2>預覽</h2><span className="panel-meta">即時更新</span></div>
+      {dataUrl
+        ? <>
+            <div className="qr-preview" style={{ background: light }}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- 本機 data URL 預覽 */}
+              <img src={dataUrl} alt="QR Code 預覽" />
+            </div>
+            <div className="result-actions">
+              <button className="button button-small button-blue" type="button" onClick={downloadPng}>下載 PNG</button>
+              <button className="button button-small button-secondary" type="button" onClick={downloadSvg}>下載 SVG</button>
+              <button className="button button-small button-secondary" type="button" onClick={copyPng}>{copied ? "已複製 ✓" : "複製圖片"}</button>
+            </div>
+          </>
+        : <div className="result-stage"><div className="result-empty"><strong>輸入內容就會出現</strong>QR Code 會即時產生，可下載 PNG、SVG 或直接複製。</div></div>}
+    </div>
+  </section>;
+}
