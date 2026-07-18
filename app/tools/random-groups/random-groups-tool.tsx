@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { groupsToCsv, groupsToText, normalizeParticipants, resolveGroupCount, splitIntoGroups } from "@/lib/groups";
 import type { GroupingMode } from "@/lib/groups";
+import { RosterPicker } from "@/components/roster-picker";
 
 const STORAGE_KEY = "toolverse:groups:v1";
 const TONE_COUNT = 4;
@@ -118,7 +119,7 @@ export function RandomGroupsTool() {
       <div className="panel-header"><h2>名單與規則</h2><span className="panel-meta">共 {members.length} 人</span></div>
       <label className="sr-only" htmlFor="group-members">參加者名單，一行一位</label>
       <textarea id="group-members" className="participant-input participant-input-compact" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder={'輸入或貼上名單，每行一位\n例如：\n小明\n小美\nAlex'} />
-      <div className="form-controls">
+      <RosterPicker currentText={raw} onLoad={setRaw} /><div className="form-controls">
         <label className="check-row"><input type="checkbox" checked={dedupe} onChange={(event) => setDedupe(event.target.checked)} />移除重複名字</label>
       </div>
       <div className="flow-mode-toggle" role="radiogroup" aria-label="分組方式">

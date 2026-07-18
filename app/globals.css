@@ -495,3 +495,18 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
   .qr-option-grid, .cleaner-toggles, .cleaner-selects { grid-template-columns: 1fr; }
   .timer-stage { min-height: 300px; }
 }
+
+/* Roster picker — 抽獎與分組共用的名單庫 */
+.roster-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.roster-picker-label { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; color: var(--muted); }
+.roster-chip { display: inline-flex; align-items: center; overflow: hidden; border: 1px solid var(--ink); border-radius: 999px; background: var(--paper); }
+.roster-chip-load { border: none; background: transparent; padding: 6px 4px 6px 12px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.roster-chip-load:hover { text-decoration: underline; }
+.roster-chip-delete { border: none; background: transparent; padding: 6px 10px 6px 4px; color: var(--muted); font-size: 11px; cursor: pointer; }
+.roster-chip-delete:hover { color: #b72a22; }
+.roster-save { border: 1px dashed var(--ink); border-radius: 999px; background: transparent; padding: 6px 12px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.roster-save:disabled { opacity: .45; cursor: not-allowed; }
+.lottery-neon .roster-picker-label { color: #a9b8d1; }
+.lottery-neon .roster-chip { border-color: #53637c; background: rgba(12,20,34,.6); color: #e8eef9; }
+.lottery-neon .roster-chip-delete { color: #8fa0bd; }
+.lottery-neon .roster-save { border-color: #53637c; color: #e8eef9; }
