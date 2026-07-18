@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored, minified PDF.js worker. It is served as a static asset rather
+    // than maintained source code, so linting it produces false positives.
+    "public/pdf.worker.min.mjs",
   ]),
 ]);
 
