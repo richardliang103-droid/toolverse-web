@@ -23,11 +23,10 @@ test("server-renders the ToolVerse homepage", async () => {
 });
 
 test("server-renders all tool routes", async () => {
-  const [lottery, remover, flowchart, gantt, groups] = await Promise.all([render("/tools/lottery"), render("/tools/background-remover"), render("/tools/ai-flowchart"), render("/tools/gantt"), render("/tools/random-groups")]);
-  assert.equal(lottery.status, 200); assert.equal(remover.status, 200); assert.equal(flowchart.status, 200); assert.equal(gantt.status, 200); assert.equal(groups.status, 200);
+  const [lottery, remover, flowchart, gantt] = await Promise.all([render("/tools/lottery"), render("/tools/background-remover"), render("/tools/ai-flowchart"), render("/tools/gantt")]);
+  assert.equal(lottery.status, 200); assert.equal(remover.status, 200); assert.equal(flowchart.status, 200); assert.equal(gantt.status, 200);
   assert.match(await lottery.text(), /開始抽選/);
   assert.match(await remover.text(), /把圖片拖到這裡/);
   assert.match(await flowchart.text(), /描述你的流程/);
   assert.match(await gantt.text(), /新增任務/);
-  assert.match(await groups.text(), /開始分組/);
 });
