@@ -9,4 +9,6 @@ export const tools = [
   { slug: "countdown-timer", name: "倒數計時器", description: "活動與簡報用的全螢幕倒數：快速預設、警示變色、結束提示音。", symbol: "◷", accent: "matsuba", status: "READY" },
   { slug: "pdf-toolkit", name: "PDF 合併與取頁", description: "在瀏覽器本機合併多份 PDF、取出指定頁面，檔案不上傳。", symbol: "⧉", accent: "fuji", status: "BETA" },
   { slug: "text-cleaner", name: "文字清理", description: "去空白、去重複行、排序與全形轉半形，即時統計字數，內容不上傳。", symbol: "¶", accent: "mint", status: "READY" },
+  { slug: "exif-cleaner", name: "照片隱私清除", description: "無損移除 EXIF、GPS 位置與拍攝資訊，畫質不變，照片不上傳。", symbol: "◉", accent: "coral", status: "READY" },
+  { slug: "chinese-converter", name: "繁簡轉換", description: "OpenCC 繁簡互轉，支援台灣用詞（軟件→軟體），本機處理不上傳。", symbol: "繁", accent: "blue", status: "READY" },
 ] as const;

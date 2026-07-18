@@ -34,6 +34,8 @@ test("server-renders all tool routes", async () => {
     ["/tools/countdown-timer", /設定時間/],
     ["/tools/pdf-toolkit", /合併多份 PDF/],
     ["/tools/text-cleaner", /清理結果/],
+    ["/tools/exif-cleaner", /把照片拖到這裡/],
+    ["/tools/chinese-converter", /轉換方向/],
   ];
   for (const [pathname, pattern] of routes) {
     const response = await render(pathname);
