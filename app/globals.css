@@ -513,3 +513,6 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 
 .groups-separations { margin-top: 16px; }
 .groups-separations-input { min-height: 74px; font-size: 13px; }
+
+.gantt-share-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 16px; border: 1px solid var(--ink); border-radius: 12px; background: var(--blue-soft); font-size: 14px; }
+.gantt-share-actions { display: inline-flex; gap: 8px; }

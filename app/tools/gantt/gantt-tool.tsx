@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { GANTT_COLORS, createSampleProject, isValidIsoDate, newId, normalizeProject, toCsv, toMermaid, todayIso, wouldCreateCycle } from "@/lib/gantt";
+import { GANTT_COLORS, collectDependents, createSampleProject, criticalPathIds, addDays, diffDays, isValidIsoDate, newId, normalizeProject, toCsv, toMermaid, todayIso, wouldCreateCycle } from "@/lib/gantt";
 import type { GanttColor, GanttProject, GanttTask, GanttView } from "@/lib/gantt";
 import { GanttChart, buildRows } from "./gantt-chart";
 import type { GanttChartHandle } from "./gantt-chart";
@@ -32,6 +32,9 @@ export function GanttTool() {
   const [editorId, setEditorId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ message: string; tone: "info" | "error" } | null>(null);
   const [historyDepth, setHistoryDepth] = useState({ undo: 0, redo: 0 });
+  const [autoShift, setAutoShift] = useState(true);
+  const [showCritical, setShowCritical] = useState(false);
+  const [sharedProject, setSharedProject] = useState<GanttProject | null>(null);
   const [copied, setCopied] = useState(false);
   const [today] = useState(() => todayIso());
 
@@ -62,6 +65,39 @@ export function GanttTool() {
   }, [view]);
 
   useEffect(() => () => { if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current); }, []);
+
+  // 分享連結：專案 JSON 壓縮後放進 URL fragment，零後端。
+  useEffect(() => {
+    if (!project) return;
+    const hash = window.location.hash;
+    if (!hash.startsWith("#share=")) return;
+    void (async () => {
+      try {
+        const decoded = await decodeShare(hash.slice("#share=".length));
+        const normalized = normalizeProject(decoded);
+        if (normalized) setSharedProject(normalized.project);
+        else showNotice("分享連結的內容無效", "error");
+      } catch {
+        showNotice("分享連結解析失敗，可能已損壞", "error");
+      }
+      window.history.replaceState(null, "", window.location.pathname);
+    })();
+    // 只在專案第一次就緒時檢查一次 hash。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project === null]);
+
+  async function shareLink() {
+    if (!project) return;
+    try {
+      const encoded = await encodeShare(project);
+      const url = `${window.location.origin}${window.location.pathname}#share=${encoded}`;
+      if (url.length > 8000) { showNotice("專案太大，連結超過長度上限 — 請改用「下載備份 JSON」分享", "error"); return; }
+      await navigator.clipboard.writeText(url);
+      showNotice("唯讀分享連結已複製 — 開啟的人可選擇載入這份專案");
+    } catch {
+      showNotice("無法產生或複製分享連結", "error");
+    }
+  }
 
   function showNotice(message: string, tone: "info" | "error" = "info") {
     setNotice({ message, tone });
@@ -264,6 +300,30 @@ export function GanttTool() {
     }
   }
 
+  function handleCommitTask(id: string, patch: Partial<GanttTask>) {
+    if (!project) { patchTask(id, patch); return; }
+    const task = project.tasks.find((item) => item.id === id);
+    if (task && autoShift && typeof patch.start === "string") {
+      const delta = diffDays(task.start, patch.start);
+      if (delta !== 0) {
+        const dependents = collectDependents(project.tasks, id);
+        commit((previous) => ({
+          ...previous,
+          tasks: previous.tasks.map((item) => {
+            if (item.id === id) return { ...item, ...patch };
+            if (dependents.has(item.id)) return { ...item, start: addDays(item.start, delta) };
+            return item;
+          }),
+        }));
+        if (dependents.size > 0) showNotice(`已連動順延 ${dependents.size} 個後續任務`);
+        return;
+      }
+    }
+    patchTask(id, patch);
+  }
+
+  const criticalIds = project && showCritical ? criticalPathIds(project.tasks) : null;
+
   const rows = project ? buildRows(project) : [];
   const editingTask = project?.tasks.find((task) => task.id === editorId) ?? null;
   const groupTaskCount = new Map<string, number>();
@@ -289,6 +349,8 @@ export function GanttTool() {
           ))}
         </div>
         <button className="button button-small button-secondary" type="button" disabled={!project} onClick={() => chartRef.current?.scrollToToday()}>今天</button>
+        <button className={`button button-small ${autoShift ? "button-blue" : "button-secondary"}`} type="button" aria-pressed={autoShift} title="移動任務時自動順延所有後續任務" disabled={!project} onClick={() => setAutoShift((value) => !value)}>連動後續</button>
+        <button className={`button button-small ${showCritical ? "button-coral" : "button-secondary"}`} type="button" aria-pressed={showCritical} title="高亮決定完工日的任務鏈" disabled={!project} onClick={() => setShowCritical((value) => !value)}>關鍵路徑</button>
         <button className="button button-small button-secondary" type="button" disabled={!project || historyDepth.undo === 0} onClick={undo} aria-label="復原">↺ 復原</button>
         <button className="button button-small button-secondary" type="button" disabled={!project || historyDepth.redo === 0} onClick={redo} aria-label="重做">↻ 重做</button>
         <span className="gantt-toolbar-spring" />
@@ -297,6 +359,15 @@ export function GanttTool() {
         <button className="button button-small button-blue" type="button" disabled={!project} onClick={() => addTask(false)}>＋ 新增任務</button>
       </div>
       {notice && <p className={`gantt-notice gantt-notice-${notice.tone}`} role="status">{notice.message}</p>}
+      {sharedProject && (
+        <div className="gantt-share-banner" role="dialog" aria-label="載入分享的專案">
+          <span>收到分享的專案「{sharedProject.title}」（{sharedProject.tasks.length} 個任務）。載入會取代目前內容，隨時可用復原還原。</span>
+          <span className="gantt-share-actions">
+            <button className="button button-small button-blue" type="button" onClick={() => { commit(() => sharedProject); setSharedProject(null); setSelectedId(null); setEditorId(null); showNotice("已載入分享的專案"); }}>載入</button>
+            <button className="button button-small button-secondary" type="button" onClick={() => setSharedProject(null)}>忽略</button>
+          </span>
+        </div>
+      )}
       {project ? (
         <div className="gantt-body">
           <div className="gantt-table" role="grid" aria-label="任務列表">
@@ -333,9 +404,10 @@ export function GanttTool() {
             project={project}
             todayIso={today}
             selectedId={selectedId}
+            highlightIds={criticalIds}
             onSelect={setSelectedId}
             onOpenEditor={openEditor}
-            onCommitTask={(id, patch) => patchTask(id, patch)}
+            onCommitTask={handleCommitTask}
             onAddDependency={addDependency}
             onDeleteTask={deleteTask}
           />
@@ -352,6 +424,7 @@ export function GanttTool() {
         <button className="button button-small button-secondary" type="button" disabled={!project} onClick={downloadCsv}>下載 CSV</button>
         <button className="button button-small button-secondary" type="button" disabled={!project} onClick={downloadJson}>下載備份 JSON</button>
         <button className="button button-small button-secondary" type="button" disabled={!project} onClick={() => fileInputRef.current?.click()}>匯入 JSON</button>
+        <button className="button button-small button-secondary" type="button" disabled={!project} onClick={shareLink}>分享唯讀連結</button>
         <button className="button button-small button-coral" type="button" disabled={!project} onClick={copyMermaid}>{copied ? "已複製 ✓" : "複製 Mermaid"}</button>
         <input ref={fileInputRef} className="file-input" type="file" accept="application/json,.json" aria-label="匯入 JSON 檔" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importJson(file); event.target.value = ""; }} />
       </div>
@@ -427,4 +500,39 @@ export function GanttTool() {
       )}
     </section>
   );
+}
+
+// --- 分享連結編解碼（deflate + base64url；不支援 CompressionStream 時退回純 JSON） ---
+
+function bytesToBase64Url(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index]);
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+
+function base64UrlToBytes(encoded: string) {
+  const binary = atob(encoded.replaceAll("-", "+").replaceAll("_", "/"));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+async function encodeShare(project: GanttProject) {
+  const json = new TextEncoder().encode(JSON.stringify(project));
+  if ("CompressionStream" in window) {
+    const stream = new Blob([json]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    return `d.${bytesToBase64Url(await new Response(stream).arrayBuffer())}`;
+  }
+  return `j.${bytesToBase64Url(json.buffer as ArrayBuffer)}`;
+}
+
+async function decodeShare(encoded: string): Promise<unknown> {
+  const [prefix, payload] = [encoded.slice(0, 2), encoded.slice(2)];
+  const bytes = base64UrlToBytes(payload);
+  if (prefix === "d.") {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return JSON.parse(await new Response(stream).text());
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
 }

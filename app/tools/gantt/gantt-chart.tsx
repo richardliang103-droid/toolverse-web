@@ -36,6 +36,7 @@ type GanttChartProps = {
   project: GanttProject;
   todayIso: string;
   selectedId: string | null;
+  highlightIds?: Set<string> | null;
   onSelect: (id: string) => void;
   onOpenEditor: (id: string) => void;
   onCommitTask: (id: string, patch: Partial<GanttTask>) => void;
@@ -44,7 +45,7 @@ type GanttChartProps = {
 };
 
 export const GanttChart = forwardRef<GanttChartHandle, GanttChartProps>(function GanttChart(
-  { project, todayIso, selectedId, onSelect, onOpenEditor, onCommitTask, onAddDependency, onDeleteTask },
+  { project, todayIso, selectedId, highlightIds, onSelect, onOpenEditor, onCommitTask, onAddDependency, onDeleteTask },
   ref,
 ) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -246,11 +247,12 @@ export const GanttChart = forwardRef<GanttChartHandle, GanttChartProps>(function
           const y = rowY.get(task.id);
           if (y === undefined) return null;
           const selected = task.id === selectedId;
+          const dimmed = highlightIds ? !highlightIds.has(task.id) : false;
           if (task.milestone) {
             const cx = xOf(dayNumber(task.start)) + pxPerDay / 2;
             const cy = y + GANTT_ROW_HEIGHT / 2;
             return (
-              <g key={task.id} tabIndex={0} role="button" aria-label={`里程碑 ${task.name}，${task.start}`} data-task-id={task.id} style={{ outline: "none" }} onKeyDown={(event) => handleKeyDown(event, task)} onDoubleClick={() => onOpenEditor(task.id)}>
+              <g key={task.id} tabIndex={0} role="button" aria-label={`里程碑 ${task.name}，${task.start}`} data-task-id={task.id} opacity={dimmed ? 0.25 : undefined} style={{ outline: "none" }} onKeyDown={(event) => handleKeyDown(event, task)} onDoubleClick={() => onOpenEditor(task.id)}>
                 <rect data-drag="move" data-task-id={task.id} x={cx - 9} y={cy - 9} width={18} height={18} rx={3} transform={`rotate(45 ${cx} ${cy})`} fill={GANTT_MILESTONE_COLOR.soft} stroke={selected ? GANTT_MILESTONE_COLOR.strong : INK} strokeWidth={selected ? 2.4 : 1.25} style={{ cursor: "grab" }} />
                 <circle data-drag="link" data-task-id={task.id} cx={cx + 15} cy={cy} r={5} fill={selected ? GANTT_MILESTONE_COLOR.strong : "transparent"} stroke={selected ? INK : "transparent"} style={{ cursor: "crosshair" }} />
                 <text x={cx + 24} y={cy + 4} fontSize={11} fontWeight={700} fill={INK} pointerEvents="none">{task.name}</text>
@@ -264,7 +266,7 @@ export const GanttChart = forwardRef<GanttChartHandle, GanttChartProps>(function
           const barHeight = GANTT_ROW_HEIGHT - 16;
           const labelInside = barWidth > task.name.length * 12 + 26;
           return (
-            <g key={task.id} tabIndex={0} role="button" aria-label={`任務 ${task.name}，${task.start} 起 ${task.durationDays} 天，進度 ${task.progress}%`} data-task-id={task.id} style={{ outline: "none" }} onKeyDown={(event) => handleKeyDown(event, task)} onDoubleClick={() => onOpenEditor(task.id)}>
+            <g key={task.id} tabIndex={0} role="button" aria-label={`任務 ${task.name}，${task.start} 起 ${task.durationDays} 天，進度 ${task.progress}%`} data-task-id={task.id} opacity={dimmed ? 0.25 : undefined} style={{ outline: "none" }} onKeyDown={(event) => handleKeyDown(event, task)} onDoubleClick={() => onOpenEditor(task.id)}>
               <clipPath id={`gantt-clip-${task.id}`}><rect x={x} y={barY} width={barWidth} height={barHeight} rx={7} /></clipPath>
               <rect data-drag="move" data-task-id={task.id} x={x} y={barY} width={barWidth} height={barHeight} rx={7} fill={colors.soft} stroke={selected ? colors.strong : INK} strokeWidth={selected ? 2.4 : 1.25} style={{ cursor: "grab" }} />
               {task.progress > 0 && (

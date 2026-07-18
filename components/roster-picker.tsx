@@ -26,7 +26,7 @@ export function RosterPicker({ currentText, onLoad }: RosterPickerProps) {
         setRosters(sanitizeRosters(JSON.parse(saved)));
       }
     } catch { localStorage.removeItem(ROSTERS_STORAGE_KEY); }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     setHydrated(true);
   }, []);
 
