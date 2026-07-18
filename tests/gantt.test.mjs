@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addDays, createSampleProject, diffDays, isValidIsoDate, isWeekend, dayNumber, normalizeProject, toCsv, toMermaid, weekdayOfDay, wouldCreateCycle } from "../lib/gantt.ts";
+import { addDays, collectDependents, createSampleProject, criticalPathIds, diffDays, isValidIsoDate, isWeekend, dayNumber, normalizeProject, toCsv, toMermaid, weekdayOfDay, wouldCreateCycle } from "../lib/gantt.ts";
 
 test("date math crosses months, years and leap days without timezone drift", () => {
   assert.equal(addDays("2026-07-31", 1), "2026-08-01");
@@ -109,4 +109,20 @@ test("sample project passes its own validation with no repairs", () => {
   assert.ok(normalized);
   assert.deepEqual(normalized.repairs, []);
   assert.deepEqual(normalized.project, project);
+});
+
+test("collectDependents finds transitive successors only", () => {
+  const project = createSampleProject("2026-07-16");
+  const dependents = collectDependents(project.tasks, "t-wireframe");
+  assert.ok(dependents.has("t-visual") && dependents.has("m-design") && dependents.has("t-pages") && dependents.has("m-launch"));
+  assert.ok(!dependents.has("t-research") && !dependents.has("t-ia") && !dependents.has("t-wireframe"));
+});
+
+test("criticalPathIds walks back from the latest finish", () => {
+  const project = createSampleProject("2026-07-16");
+  const path = criticalPathIds(project.tasks);
+  assert.ok(path.has("m-launch") && path.has("t-qa"));
+  assert.ok(path.has("t-research")); // 鏈條一路回到起點
+  assert.ok(!path.has("t-pages")); // 非決定完工日的支線（t-api 結束較晚，才是關鍵前置）
+  assert.equal(criticalPathIds([]).size, 0);
 });

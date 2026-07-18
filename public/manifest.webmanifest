@@ -1,0 +1,15 @@
+{
+  "name": "ToolVerse 網頁工具箱",
+  "short_name": "ToolVerse",
+  "description": "免登入的網頁工具箱：圖表、抽獎與分組、圖片與 PDF 處理、計時與文字工具。全部在裝置本機處理。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f1e8",
+  "theme_color": "#f5f1e8",
+  "lang": "zh-Hant",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

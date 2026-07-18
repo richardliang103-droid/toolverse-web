@@ -254,3 +254,38 @@ export function createSampleProject(today = todayIso()): GanttProject {
     ],
   };
 }
+
+/** 收集 id 的所有（直接與間接）後續任務。 */
+export function collectDependents(tasks: GanttTask[], id: string) {
+  const dependents = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const task of tasks) {
+      if (dependents.has(task.id)) continue;
+      if (task.dependsOn.some((dependencyId) => dependencyId === id || dependents.has(dependencyId))) {
+        dependents.add(task.id);
+        changed = true;
+      }
+    }
+  }
+  return dependents;
+}
+
+/**
+ * 關鍵路徑（簡化版）：從結束最晚的任務出發，往回沿「結束日最晚的前置任務」
+ * 走到沒有前置為止。手動排程下這條鏈就是決定專案完工日的那條線。
+ */
+export function criticalPathIds(tasks: GanttTask[]) {
+  if (tasks.length === 0) return new Set<string>();
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  let current = tasks.reduce((latest, task) => (taskEndDay(task) >= taskEndDay(latest) ? task : latest));
+  const path = new Set<string>([current.id]);
+  for (;;) {
+    const predecessors = current.dependsOn.map((id) => byId.get(id)).filter((task): task is GanttTask => Boolean(task) && !path.has(task!.id));
+    if (predecessors.length === 0) break;
+    current = predecessors.reduce((latest, task) => (taskEndDay(task) > taskEndDay(latest) ? task : latest));
+    path.add(current.id);
+  }
+  return path;
+}

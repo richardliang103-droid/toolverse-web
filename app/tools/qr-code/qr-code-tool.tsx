@@ -30,6 +30,52 @@ function downloadBlob(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function loadImage(source: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("logo 載入失敗"));
+    image.src = source;
+  });
+}
+
+/** 把 logo 疊在 QR 中央（含背景色墊片）；容錯 H 之下遮住中央 ~8% 面積仍可掃描。 */
+async function composeLogoPng(qrDataUrl: string, logoDataUrl: string, size: number, lightHex: string) {
+  const [qr, logo] = await Promise.all([loadImage(qrDataUrl), loadImage(logoDataUrl)]);
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) return qrDataUrl;
+  context.drawImage(qr, 0, 0, size, size);
+  const logoBox = Math.round(size * 0.2);
+  const pad = Math.round(logoBox * 0.16);
+  const box = logoBox + pad * 2;
+  const origin = Math.round((size - box) / 2);
+  context.fillStyle = lightHex;
+  context.beginPath();
+  context.roundRect(origin, origin, box, box, Math.round(box * 0.18));
+  context.fill();
+  const ratio = Math.min(logoBox / logo.naturalWidth, logoBox / logo.naturalHeight);
+  const drawW = logo.naturalWidth * ratio;
+  const drawH = logo.naturalHeight * ratio;
+  context.drawImage(logo, (size - drawW) / 2, (size - drawH) / 2, drawW, drawH);
+  return canvas.toDataURL("image/png");
+}
+
+/** SVG 版：以模組座標把墊片與 logo 注入 svg 字串。 */
+function composeLogoSvg(svgMarkup: string, logoDataUrl: string, lightHex: string) {
+  const viewBox = svgMarkup.match(/viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/);
+  if (!viewBox) return svgMarkup;
+  const units = Number(viewBox[1]);
+  const box = units * 0.26;
+  const origin = (units - box) / 2;
+  const logoBox = units * 0.2;
+  const logoOrigin = (units - logoBox) / 2;
+  const injection = `<rect x="${origin}" y="${origin}" width="${box}" height="${box}" rx="${box * 0.18}" fill="${lightHex}"/><image href="${logoDataUrl}" x="${logoOrigin}" y="${logoOrigin}" width="${logoBox}" height="${logoBox}" preserveAspectRatio="xMidYMid meet"/>`;
+  return svgMarkup.replace("</svg>", `${injection}</svg>`);
+}
+
 export function QrCodeTool() {
   const [text, setText] = useState("https://toolverse-web.vercel.app");
   const [dark, setDark] = useState("#101628");
@@ -40,6 +86,7 @@ export function QrCodeTool() {
   const [svgMarkup, setSvgMarkup] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [logo, setLogo] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const renderSeq = useRef(0);
 
@@ -73,11 +120,15 @@ export function QrCodeTool() {
       void (async () => {
         try {
           const QRCode = (await import("qrcode")).default;
-          const options = { errorCorrectionLevel: level, margin: 2, color: { dark, light } };
-          const [png, svg] = await Promise.all([
+          const options = { errorCorrectionLevel: logo ? ("H" as const) : level, margin: 2, color: { dark, light } };
+          let [png, svg] = await Promise.all([
             QRCode.toDataURL(trimmed, { ...options, width: size }),
             QRCode.toString(trimmed, { ...options, type: "svg" as const }),
           ]);
+          if (logo) {
+            png = await composeLogoPng(png, logo, size, light);
+            svg = composeLogoSvg(svg, logo, light);
+          }
           if (renderSeq.current !== sequence) return;
           setDataUrl(png); setSvgMarkup(svg); setError("");
         } catch {
@@ -87,7 +138,7 @@ export function QrCodeTool() {
       })();
     }, 200);
     return () => clearTimeout(timer);
-  }, [hydrated, text, dark, light, level, size]);
+  }, [hydrated, text, dark, light, level, size, logo]);
 
   const warning = contrastWarning(dark, light);
 
@@ -138,7 +189,23 @@ export function QrCodeTool() {
             {SIZES.map((option) => <option key={option} value={option}>{option} px</option>)}
           </select>
         </label>
+        <label className="field-label" htmlFor="qr-logo">中央 logo（選用）
+          <span className="qr-logo-row">
+            <input id="qr-logo" className="file-input" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (!file) return;
+              if (file.size > 2 * 1024 * 1024) { setError("logo 請小於 2 MB"); return; }
+              const reader = new FileReader();
+              reader.onload = () => setLogo(typeof reader.result === "string" ? reader.result : "");
+              reader.readAsDataURL(file);
+            }} />
+            <button className="button button-small button-secondary" type="button" onClick={() => document.getElementById("qr-logo")?.click()}>{logo ? "更換 logo" : "選擇圖片"}</button>
+            {logo && <button className="button button-small button-secondary" type="button" onClick={() => setLogo("")}>移除</button>}
+          </span>
+        </label>
       </div>
+      {logo && <p className="key-note">已加上 logo：容錯等級自動使用 H（30%）確保可掃描；列印前請實際掃一次。</p>}
       {warning && <p className="error-message" role="alert">{warning}</p>}
       {error && <p className="error-message" role="alert">{error}</p>}
       <p className="key-note">全部在瀏覽器本機產生，內容不會上傳；列印或深色背景建議容錯 M 以上。</p>

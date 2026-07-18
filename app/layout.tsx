@@ -1,6 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
+import { ServiceWorkerRegister } from "@/components/sw-register";
 import "./globals.css";
+
+export const viewport: Viewport = { themeColor: "#f5f1e8" };
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -13,6 +16,8 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: base,
     title: { default: "ToolVerse｜網頁工具", template: "%s｜ToolVerse" },
     description: "免登入的網頁工具箱：圖表、抽獎與分組、圖片與 PDF 處理、計時與文字工具。",
+    manifest: "/manifest.webmanifest",
+    appleWebApp: { capable: true, statusBarStyle: "default", title: "ToolVerse" },
     icons: {
       icon: "/favicon.png",
       shortcut: "/favicon.png",
@@ -24,5 +29,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-Hant"><body>{children}</body></html>;
+  return <html lang="zh-Hant"><body><ServiceWorkerRegister />{children}</body></html>;
 }
