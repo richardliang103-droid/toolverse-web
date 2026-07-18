@@ -12,7 +12,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: base,
     title: { default: "ToolVerse｜網頁工具", template: "%s｜ToolVerse" },
-    description: "流程圖、甘特圖、隨機抽名單與圖片去背。",
+    description: "流程圖、甘特圖、隨機抽名單、隨機分組與圖片去背。",
     icons: {
       icon: "/favicon.png",
       shortcut: "/favicon.png",
