@@ -4,13 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import gsap from "gsap";
 import { drawWinners, normalizeParticipants } from "@/lib/lottery";
-import { LotteryWheel, type LotteryWheelHandle } from "./lottery-wheel";
+import { LotteryWheel, type LotteryWheelHandle, type WheelTheme } from "./lottery-wheel";
 import { RosterPicker } from "@/components/roster-picker";
 import { StarBorder } from "@/components/star-border";
 
 const STORAGE_KEY = "toolverse:lottery:v1";
 const LEGACY_STORAGE_KEY = "hermes-tools:lottery:v1";
-type StoredState = { raw: string; count: number; dedupe: boolean; exclude: boolean; previousWinners: string[]; history: string[][] };
+type StoredState = { raw: string; count: number; dedupe: boolean; exclude: boolean; previousWinners: string[]; history: string[][]; theme: WheelTheme };
 
 function stringList(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
@@ -26,6 +26,7 @@ function sanitizeStoredState(value: unknown): StoredState {
     exclude: data.exclude !== false,
     previousWinners: stringList(data.previousWinners),
     history: Array.isArray(data.history) ? data.history.map(stringList).filter((round) => round.length > 0) : [],
+    theme: data.theme === "neon" ? "neon" : "wa",
   };
 }
 
@@ -58,6 +59,7 @@ export function LotteryTool() {
   const [drawing, setDrawing] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [theme, setTheme] = useState<WheelTheme>("wa");
 
   const wheelRef = useRef<LotteryWheelHandle>(null);
   const winnerListRef = useRef<HTMLDivElement>(null);
@@ -71,13 +73,13 @@ export function LotteryTool() {
       localStorage.removeItem(LEGACY_STORAGE_KEY);
       // Restoring device-local preferences requires a one-time client hydration.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setRaw(data.raw); setCount(data.count); setDedupe(data.dedupe); setExclude(data.exclude); setPreviousWinners(data.previousWinners); setHistory(data.history);
+      setRaw(data.raw); setCount(data.count); setDedupe(data.dedupe); setExclude(data.exclude); setPreviousWinners(data.previousWinners); setHistory(data.history); setTheme(data.theme);
     } catch { localStorage.removeItem(STORAGE_KEY); }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ raw, count, dedupe, exclude, previousWinners, history }));
-  }, [raw, count, dedupe, exclude, previousWinners, history]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ raw, count, dedupe, exclude, previousWinners, history, theme }));
+  }, [raw, count, dedupe, exclude, previousWinners, history, theme]);
 
   useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); }, []);
 
@@ -145,12 +147,12 @@ export function LotteryTool() {
 
   function resetWinners() { setPreviousWinners([]); setWinners([]); setRevealed([]); setHistory([]); setError(""); }
 
-  return <section className="workspace lottery-neon page-shell" aria-label="隨機抽名單工具">
+  return <section className={`workspace ${theme === "neon" ? "lottery-neon" : "lottery-wa"} page-shell`} aria-label="隨機抽名單工具">
     <div className="panel lottery-controls-panel"><div className="panel-header"><h2>參加名單</h2><span className="panel-meta">共 {participants.length} 人 · 可抽 {eligible.length} 人</span></div><p className="lottery-panel-note">每行一位，名單會留在你的裝置中。</p><label className="sr-only" htmlFor="participants">參加者名單，一行一位</label><textarea id="participants" className="participant-input participant-input-compact" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder={'輸入或貼上名單，每行一位\n例如：\n小明\n小美\nAlex'} /><RosterPicker currentText={raw} onLoad={setRaw} /><div className="form-controls"><label className="check-row"><input type="checkbox" checked={dedupe} onChange={(event) => setDedupe(event.target.checked)} />移除重複名字</label><label className="check-row"><input type="checkbox" checked={exclude} onChange={(event) => setExclude(event.target.checked)} />排除已抽出者</label><label className="number-field" htmlFor="winner-count">抽出人數<input id="winner-count" className="number-input" type="number" min="1" max={Math.max(1, eligible.length)} value={count} onChange={(event) => setCount(Math.max(1, Math.round(Number(event.target.value)) || 1))} /></label></div><StarBorder className="draw-button-frame"><button className="button button-blue draw-button" type="button" onClick={handleDraw} disabled={drawing}>{drawing ? "正在抽選…" : "開始抽選"}</button></StarBorder>{error && <p className="error-message" role="alert">{error}</p>}</div>
-    <div className="panel panel-tinted lottery-stage-panel"><div className="panel-header"><h2>抽選轉盤</h2><span className="lottery-fairness">公平隨機抽選</span></div>
+    <div className="panel panel-tinted lottery-stage-panel"><div className="panel-header"><h2>抽選轉盤</h2><span className="lottery-header-tools"><button className="lottery-theme-toggle" type="button" onClick={() => setTheme((current) => current === "wa" ? "neon" : "wa")} aria-label="切換介面主題">{theme === "wa" ? "🌙 霓虹深色" : "☀️ 淺色和風"}</button><span className="lottery-fairness">公平隨機抽選</span></span></div>
       <div className="lottery-wheel-area">
         {justRevealed && <div className="lottery-flash-winner">🎉 {justRevealed}</div>}
-        <LotteryWheel ref={wheelRef} segments={displaySegments} />
+        <LotteryWheel ref={wheelRef} segments={displaySegments} theme={theme} />
       </div>
       {drawing && <p className="lottery-spin-hint">正在從名單中隨機抽選…</p>}
       {revealed.length > 0
