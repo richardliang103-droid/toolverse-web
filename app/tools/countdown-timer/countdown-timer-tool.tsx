@@ -268,7 +268,11 @@ export function CountdownTimerTool() {
           <div className="timer-segment-indicator">{segments[segmentIndex].label || `第 ${segmentIndex + 1} 段`}（{segmentIndex + 1}/{segments.length}）</div>
         )}
         {mode === "clock" && clockNow.date && <div className="timer-segment-indicator">{clockNow.date}</div>}
-        <output className="timer-display" aria-live="polite">{mode === "stopwatch" ? formatStopwatch(stopwatchMs) : mode === "clock" ? (clockNow.time || "--:--:--") : phase === "finished" ? "時間到" : display}</output>
+        {(() => {
+          const stageText = mode === "stopwatch" ? formatStopwatch(stopwatchMs) : mode === "clock" ? (clockNow.time || "--:--:--") : phase === "finished" ? "時間到" : display;
+          // 時鐘／破小時的碼表是 7–8 字（HH:MM:SS），用較小的字級避免爆出舞台。
+          return <output className={`timer-display${stageText.length > 5 ? " timer-display-long" : ""}`} aria-live="polite">{stageText}</output>;
+        })()}
         <div className="timer-actions">
           {mode === "countdown" && (phase === "running"
             ? <button className="button button-coral" type="button" onClick={pause}>暫停</button>

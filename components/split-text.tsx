@@ -29,7 +29,9 @@ export function SplitText({ text, className }: { text: string; className?: strin
   }, [text]);
 
   return (
-    <span ref={rootRef} className={className} aria-label={text}>
+    <span ref={rootRef} className={className}>
+      {/* generic span 不允許 aria-label（aria-prohibited-attr），改用 sr-only 提供完整文字 */}
+      <span className="sr-only">{text}</span>
       {Array.from(text).map((char, index) => (
         <span key={`${index}-${char}`} className="split-text-char" aria-hidden="true">
           {char === " " ? " " : char}

@@ -375,14 +375,14 @@ export function GanttTool() {
       {project ? (
         <div className="gantt-body">
           <div className="gantt-table" role="grid" aria-label="任務列表">
-            <div className="gantt-table-head" role="row"><span>任務</span><span>開始</span><span>工期</span><span>進度</span></div>
+            <div className="gantt-table-head" role="row"><span role="columnheader">任務</span><span role="columnheader">開始</span><span role="columnheader">工期</span><span role="columnheader">進度</span></div>
             {rows.map((row) =>
               row.kind === "group" ? (
                 <div className="gantt-row gantt-row-group" role="row" key={row.id}>
-                  <input className="gantt-group-name" aria-label="群組名稱" value={row.name} maxLength={60} onChange={(event) => updateDirect((previous) => ({ ...previous, groups: previous.groups.map((group) => (group.id === row.id ? { ...group, name: event.target.value } : group)) }))} onFocus={() => project && pushSnapshot(project)} />
-                  <span className="gantt-cell-dim">{groupTaskCount.get(row.id) ?? 0} 項</span>
-                  <span />
-                  <button className="gantt-row-delete" type="button" aria-label={`刪除群組 ${row.name}`} title="刪除群組（任務會保留）" onClick={() => deleteGroup(row.id)}>✕</button>
+                  <input className="gantt-group-name" role="gridcell" aria-label="群組名稱" value={row.name} maxLength={60} onChange={(event) => updateDirect((previous) => ({ ...previous, groups: previous.groups.map((group) => (group.id === row.id ? { ...group, name: event.target.value } : group)) }))} onFocus={() => project && pushSnapshot(project)} />
+                  <span className="gantt-cell-dim" role="gridcell">{groupTaskCount.get(row.id) ?? 0} 項</span>
+                  <span role="gridcell" />
+                  <button className="gantt-row-delete" role="gridcell" type="button" aria-label={`刪除群組 ${row.name}`} title="刪除群組（任務會保留）" onClick={() => deleteGroup(row.id)}>✕</button>
                 </div>
               ) : (
                 <div
@@ -394,14 +394,14 @@ export function GanttTool() {
                   onDoubleClick={() => openEditor(row.task.id)}
                   onKeyDown={(event) => { if (event.key === "Enter") openEditor(row.task.id); }}
                 >
-                  <span className="gantt-cell-name">{row.task.milestone ? "◆ " : ""}{row.task.name}</span>
-                  <span className="gantt-cell-dim">{formatShortDate(row.task.start)}</span>
-                  <span className="gantt-cell-dim">{row.task.milestone ? "—" : `${row.task.durationDays}d`}</span>
-                  <span className="gantt-cell-dim">{row.task.milestone ? "—" : `${row.task.progress}%`}</span>
+                  <span className="gantt-cell-name" role="gridcell">{row.task.milestone ? "◆ " : ""}{row.task.name}</span>
+                  <span className="gantt-cell-dim" role="gridcell">{formatShortDate(row.task.start)}</span>
+                  <span className="gantt-cell-dim" role="gridcell">{row.task.milestone ? "—" : `${row.task.durationDays}d`}</span>
+                  <span className="gantt-cell-dim" role="gridcell">{row.task.milestone ? "—" : `${row.task.progress}%`}</span>
                 </div>
               ),
             )}
-            {project.tasks.length === 0 && <p className="gantt-empty">還沒有任務，按「＋ 新增任務」開始。</p>}
+            {project.tasks.length === 0 && <p className="gantt-empty" role="row"><span role="gridcell">還沒有任務，按「＋ 新增任務」開始。</span></p>}
           </div>
           <GanttChart
             ref={chartRef}

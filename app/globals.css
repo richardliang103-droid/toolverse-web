@@ -103,7 +103,8 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .participant-input:focus, .number-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
 .form-controls { display: flex; flex-wrap: wrap; gap: 16px 22px; align-items: center; padding-top: 18px; }
 .check-row { display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 14px; }
-.check-row input { width: 17px; height: 17px; accent-color: var(--blue); }
+/* 20px＋2px margin＝24px 有效點擊範圍，符合 WCAG target-size */
+.check-row input { width: 20px; height: 20px; margin: 2px; accent-color: var(--blue); }
 .number-field { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; font-size: 14px; }
 .number-input { width: 74px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: white; outline: none; }
 .draw-button { width: 100%; margin-top: 18px; }
@@ -780,3 +781,23 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 /* 內容輸出面刻意保持白色：條碼、favicon 預覽底、QR 預覽（背景色由使用者選） */
 [data-theme="dark"] .barcode-preview { background: white; }
 [data-theme="dark"] .barcode-preview-empty { background: transparent; }
+
+/* 時鐘與破小時碼表（HH:MM:SS）字數較多，縮小字級避免溢出 */
+.timer-display { max-width: 100%; }
+.timer-display-long { font-size: clamp(44px, 9.5vw, 120px); }
+.timer-stage:fullscreen .timer-display-long { font-size: clamp(80px, 17vw, 300px); }
+[data-theme="dark"] .timer-stage .button-secondary { border-color: #e9edf6; color: #e9edf6; }
+
+/* 分組結果卡片保留和色粉彩底，深色模式下文字固定深色才可讀 */
+[data-theme="dark"] .group-card { color: #2a3040; box-shadow: 3px 3px 0 rgba(0,0,0,.35); border-color: #3a4358; }
+[data-theme="dark"] .group-card h3 span { color: #5b6472; }
+[data-theme="dark"] .group-card ol li::marker { color: #5b6472; }
+
+/* 去背預覽的透明棋盤格是內容輸出面，維持白底；其上的空狀態文字固定深色 */
+[data-theme="dark"] .preview-canvas .result-empty { color: #565d6b; }
+[data-theme="dark"] .preview-canvas .result-empty strong { color: #23293a; }
+
+/* 深色網站下的抽獎兩主題：和風外框轉深色調（保留縹×鴇光暈），霓虹面板保留半透明 */
+[data-theme="dark"] .workspace.lottery-wa { background: radial-gradient(circle at 80% 6%, rgba(95,131,168,.16), transparent 32%), radial-gradient(circle at 12% 100%, rgba(207,127,141,.10), transparent 30%), linear-gradient(150deg, #161d2c 0%, #10151f 100%); }
+[data-theme="dark"] .lottery-neon .panel { background: rgba(12,20,34,.78); }
+[data-theme="dark"] .lottery-neon .panel-tinted { background: rgba(17,28,46,.76); }
