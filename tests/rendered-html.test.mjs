@@ -41,6 +41,11 @@ test("server-renders all tool routes", async () => {
     ["/tools/barcode", /條碼格式|內容與格式/],
     ["/tools/unit-converter", /選擇單位/],
     ["/tools/image-crop", /把圖片拖到這裡/],
+    ["/tools/text-compare", /兩段文字/],
+    ["/tools/markdown-editor", /即時渲染|預覽/],
+    ["/tools/csv-editor", /CSV／TSV 表格/],
+    ["/tools/image-converter", /輸出格式/],
+    ["/tools/audio-trimmer", /把音訊檔拖到這裡/],
   ];
   for (const [pathname, pattern] of routes) {
     const response = await render(pathname);

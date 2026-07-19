@@ -26,6 +26,11 @@ export const tools = [
   { slug: "barcode", name: "條碼產生器", description: "Code 128 與 EAN-13 條碼，自動計算檢查碼，下載 PNG、SVG，本機產生。", symbol: "▮", accent: "sumi", status: "READY", category: "utility" },
   { slug: "unit-converter", name: "單位換算", description: "長度、面積、重量、容量、溫度、速度即時換算，支援坪、甲、台斤等台制單位。", symbol: "⇄", accent: "matsuba", status: "READY", category: "utility" },
   { slug: "image-crop", name: "圖片裁切", description: "自由框選或固定比例裁切圖片，輸出 PNG、JPG，圖片不上傳。", symbol: "◫", accent: "toki", status: "READY", category: "image" },
+  { slug: "text-compare", name: "文字比較", description: "比較兩段文字差異：逐行、逐詞、逐字，標示新增刪除與修改，本機比較。", symbol: "≒", accent: "fuji", status: "READY", category: "text" },
+  { slug: "markdown-editor", name: "Markdown 編輯器", description: "即時預覽、支援 GFM 表格與程式碼，草稿自動儲存，可下載 .md 或複製 HTML。", symbol: "✎", accent: "sora", status: "READY", category: "text" },
+  { slug: "csv-editor", name: "CSV 編輯器", description: "貼上或開啟 CSV／TSV 直接編輯、排序、增刪欄列，匯出 CSV 或 JSON。", symbol: "☰", accent: "mint", status: "READY", category: "utility" },
+  { slug: "image-converter", name: "圖片格式轉換", description: "批次把 JPG、PNG、GIF、BMP、SVG 轉成 WebP、PNG、JPG，可調品質。", symbol: "⇋", accent: "coral", status: "READY", category: "image" },
+  { slug: "audio-trimmer", name: "音訊剪輯", description: "看著波形框出片段、先試聽再輸出無損 WAV，MP3、WAV 等格式不上傳。", symbol: "♪", accent: "matsuba", status: "READY", category: "utility" },
 ] as const;
 
 export type Tool = (typeof tools)[number];
