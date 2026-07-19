@@ -163,7 +163,7 @@ export function RandomGroupsTool() {
                   style={{ "--card-index": index } as React.CSSProperties}
                 >
                   <h3>第 {index + 1} 組<span>{group.length} 人</span></h3>
-                  <ol>{group.map((member) => <li key={member}>{member}</li>)}</ol>
+                  <ol>{group.map((member, memberIndex) => <li className="animated-list-item" style={{ animationDelay: `${index * 70 + 140 + memberIndex * 45}ms` }} key={member}>{member}</li>)}</ol>
                 </article>
               ))}
             </div>

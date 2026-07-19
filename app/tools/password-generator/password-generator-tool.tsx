@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CountUp } from "@/components/count-up";
 import { DEFAULT_PASSWORD_OPTIONS, PASSWORD_MAX, PASSWORD_MIN, characterClasses, generatePassword, passwordEntropyBits, passwordStrength } from "@/lib/password";
 import type { PasswordOptions } from "@/lib/password";
 
@@ -114,7 +115,7 @@ export function PasswordGeneratorTool() {
       <p className="key-note">全部在瀏覽器本機以 Web Crypto 產生，密碼不會上傳、也不會寫入任何儲存。輸入敏感帳號密碼請自行保管。</p>
     </div>
     <div className="panel panel-tinted password-result-panel">
-      <div className="panel-header"><h2>產生結果</h2><span className="panel-meta">約 {bits} bits 熵</span></div>
+      <div className="panel-header"><h2>產生結果</h2><span className="panel-meta">約 <CountUp value={bits} /> bits 熵</span></div>
       <output className="password-output" aria-live="polite">{password || "—"}</output>
       <div className={`password-strength password-strength-${strength.level}`}>
         <div className="password-strength-bar"><span style={{ width: `${strengthPercent}%` }} /></div>

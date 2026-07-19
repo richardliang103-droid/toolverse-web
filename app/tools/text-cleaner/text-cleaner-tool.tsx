@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CountUp } from "@/components/count-up";
 import { DEFAULT_CLEANER_OPTIONS, cleanText, textStats } from "@/lib/text-cleaner";
 import type { TextCleanerOptions } from "@/lib/text-cleaner";
 
@@ -80,7 +81,7 @@ export function TextCleanerTool() {
 
   return <section className="workspace text-cleaner-workspace page-shell" aria-label="文字清理工具">
     <div className="panel">
-      <div className="panel-header"><h2>原始文字</h2><span className="panel-meta">{inputStats.characters} 字 · {inputStats.lines} 行</span></div>
+      <div className="panel-header"><h2>原始文字</h2><span className="panel-meta"><CountUp value={inputStats.characters} /> 字 · <CountUp value={inputStats.lines} /> 行</span></div>
       <label className="sr-only" htmlFor="cleaner-input">要清理的文字</label>
       <textarea id="cleaner-input" className="participant-input cleaner-input" value={input} onChange={(event) => setInput(event.target.value)} placeholder={"貼上要整理的文字…\n\n常見用途：清理從 PDF 或網頁複製的內容、整理名單、去重複。"} />
       <div className="cleaner-toggles">
@@ -108,7 +109,7 @@ export function TextCleanerTool() {
       </div>
     </div>
     <div className="panel panel-tinted">
-      <div className="panel-header"><h2>清理結果</h2><span className="panel-meta">{outputStats.characters} 字 · {outputStats.lines} 行 · {outputStats.uniqueLines} 不重複</span></div>
+      <div className="panel-header"><h2>清理結果</h2><span className="panel-meta"><CountUp value={outputStats.characters} /> 字 · <CountUp value={outputStats.lines} /> 行 · <CountUp value={outputStats.uniqueLines} /> 不重複</span></div>
       <label className="sr-only" htmlFor="cleaner-output">清理後的文字</label>
       <textarea id="cleaner-output" className="participant-input cleaner-input" value={output} readOnly placeholder="結果會即時出現在這裡" />
       <div className="result-actions">

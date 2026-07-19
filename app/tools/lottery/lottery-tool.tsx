@@ -157,7 +157,7 @@ export function LotteryTool() {
         ? <div ref={winnerListRef} className="winner-list">{revealed.map((winner, index) => <div className="winner-item" key={`${winner}-${index}`}>{winner}</div>)}</div>
         : !drawing && <div className="result-empty"><strong>轉盤等待名單</strong>在左側輸入成員後，即可開始公平隨機抽選。</div>}
       {winners.length > 0 && !drawing && <div className="result-actions"><button className="button button-small button-secondary" type="button" onClick={copyResults}>{copied ? "已複製 ✓" : "複製結果"}</button><button className="button button-small button-secondary" type="button" onClick={handleDraw}>再次抽選</button></div>}
-      {(previousWinners.length > 0 || history.length > 0) && <div className="history"><div className="panel-header"><h3>抽出紀錄</h3><button className="button button-small button-secondary" type="button" onClick={resetWinners}>全部重設</button></div><ol>{history.map((item, index) => <li key={`${item.join("-")}-${index}`}>{item.join("、")}</li>)}</ol></div>}
+      {(previousWinners.length > 0 || history.length > 0) && <div className="history"><div className="panel-header"><h3>抽出紀錄</h3><button className="button button-small button-secondary" type="button" onClick={resetWinners}>全部重設</button></div><ol>{history.map((item, index) => <li className="animated-list-item" key={`${item.join("-")}-${index}`}>{item.join("、")}</li>)}</ol></div>}
     </div>
   </section>;
 }

@@ -599,3 +599,19 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
   .star-border-glow { animation: none; }
   .spotlight-card::after { transition: none; }
 }
+
+/* === React Bits 改寫特效第二批（GlareHover / Magnet / AnimatedList / CountUp） === */
+.spotlight-card::before { content: ""; position: absolute; top: -60%; left: -85%; width: 45%; height: 220%; pointer-events: none; transform: rotate(16deg); background: linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent); transition: transform .65s ease; }
+.spotlight-card:hover::before { transform: rotate(16deg) translateX(430%); }
+
+.magnet { display: inline-block; padding: 6px; margin: -6px; }
+.magnet-inner { display: inline-block; transition: transform .16s ease; will-change: transform; }
+
+.animated-list-item { animation: list-slide-in .32s ease backwards; }
+@keyframes list-slide-in { from { transform: translateX(-12px); } to { transform: translateX(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-card::before { transition: none; }
+  .magnet-inner { transition: none; transform: none !important; }
+  .animated-list-item { animation: none; }
+}
