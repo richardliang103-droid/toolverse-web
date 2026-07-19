@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
+import { ClickSpark } from "@/components/click-spark";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 import "./globals.css";
 
@@ -31,5 +32,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-Hant"><body><ServiceWorkerRegister />{children}</body></html>;
+  return <html lang="zh-Hant"><body><ServiceWorkerRegister /><ClickSpark />{children}</body></html>;
 }

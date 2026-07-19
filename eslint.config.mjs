@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // vinext/wrangler 的本機建置產物（CI 是乾淨 checkout 不會有，但本機 lint 會掃到）。
+    "dist/**",
+    ".wrangler/**",
+    ".vercel/**",
     // Vendored, minified PDF.js worker. It is served as a static asset rather
     // than maintained source code, so linting it produces false positives.
     "public/pdf.worker.min.mjs",
