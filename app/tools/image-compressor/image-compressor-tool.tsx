@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
+import { CountUp } from "@/components/count-up";
 import { QUALITY_FORMATS, fitDimensions, formatBytes, mimeForFormat, outputFilename, savingsPercent } from "@/lib/image-compress";
 import type { OutputFormat } from "@/lib/image-compress";
 
@@ -198,7 +199,7 @@ export function ImageCompressorTool() {
                     <strong>{item.file.name}</strong>
                     <span>
                       {formatBytes(item.file.size)}
-                      {item.status === "done" && item.outputSize !== undefined && <> → <b>{formatBytes(item.outputSize)}</b>（省 {savingsPercent(item.file.size, item.outputSize)}%{item.width ? ` · ${item.width}×${item.height}` : ""}）</>}
+                      {item.status === "done" && item.outputSize !== undefined && <> → <b>{formatBytes(item.outputSize)}</b>（省 <CountUp value={savingsPercent(item.file.size, item.outputSize)} startFrom={0} />%{item.width ? ` · ${item.width}×${item.height}` : ""}）</>}
                       {item.status === "working" && " → 壓縮中…"}
                       {item.status === "error" && ` → ${item.message}`}
                     </span>
