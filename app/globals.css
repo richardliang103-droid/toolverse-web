@@ -719,3 +719,64 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
   .unit-row { grid-template-columns: 1fr 1fr; }
   .unit-swap { grid-column: 1 / -1; justify-self: center; margin: 0; }
 }
+
+/* === 全站深色模式：<html data-theme="dark"> 時生效（layout inline script 在繪製前設定） === */
+.theme-toggle { display: inline-grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 999px; background: transparent; font-size: 16px; cursor: pointer; transition: border-color .16s ease; }
+.theme-toggle:hover { border-color: var(--ink); }
+.theme-toggle-to-light { display: none; }
+[data-theme="dark"] .theme-toggle-to-light { display: inline; }
+[data-theme="dark"] .theme-toggle-to-dark { display: none; }
+
+:root[data-theme="dark"] {
+  --paper: #10151f;
+  --white: #151c2a;
+  --ink: #e9edf6;
+  --line: #2b3446;
+  --muted: #9aa4ba;
+  --blue: #7d9bff;
+  --blue-soft: #263250;
+  --mint: #2c4a3a;
+  color-scheme: dark;
+}
+
+/* 面板與輸入 */
+[data-theme="dark"] .panel { background: #1a2231; }
+[data-theme="dark"] .panel-tinted { background: #1e2739; }
+[data-theme="dark"] .workspace, [data-theme="dark"] .flowchart-workspace, [data-theme="dark"] .gantt-workspace { border-color: #2b3446; box-shadow: 8px 8px 0 rgba(0,0,0,.35); }
+[data-theme="dark"] .participant-input, [data-theme="dark"] .flow-prompt, [data-theme="dark"] .key-input, [data-theme="dark"] .flow-options select, [data-theme="dark"] .number-input, [data-theme="dark"] .qr-color-row input[type="color"] { background: #0e1421; color: var(--ink); }
+[data-theme="dark"] .result-stage { background-color: #141b29; background-image: radial-gradient(#33405c 1px, transparent 1px); border-color: #45536f; }
+[data-theme="dark"] .drop-zone, [data-theme="dark"] .qr-template-fields, [data-theme="dark"] .flowchart-empty, [data-theme="dark"] .mermaid-code, [data-theme="dark"] .model-progress, [data-theme="dark"] .compressor-item, [data-theme="dark"] .pdf-merge-list li, [data-theme="dark"] .pdf-help code, [data-theme="dark"] .password-toggle code, [data-theme="dark"] .favicon-previews, [data-theme="dark"] .favicon-snippets details { background: #141b29; }
+[data-theme="dark"] .password-output, [data-theme="dark"] .password-strength-bar { background: #0e1421; }
+
+/* 首頁卡片與導覽 */
+[data-theme="dark"] .compact-tool { background: #1a2231; border-color: #2b3446; }
+[data-theme="dark"] .compact-tool:hover { border-color: var(--ink); }
+[data-theme="dark"] .spotlight-card::after { background: radial-gradient(230px circle at var(--spot-x, 50%) var(--spot-y, 50%), rgba(125,155,255,.13), transparent 65%); }
+[data-theme="dark"] .spotlight-card::before { background: linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent); }
+[data-theme="dark"] .button-primary { color: #10151f; }
+[data-theme="dark"] .button:hover { box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
+[data-theme="dark"] .button-coral { color: #1c130f; }
+
+/* 狀態訊息 */
+[data-theme="dark"] .service-notice { background: #322b18; border-color: #6b5c2f; color: #e8cf8d; }
+[data-theme="dark"] .service-notice-private, [data-theme="dark"] .validation-card, [data-theme="dark"] .gantt-notice-info, [data-theme="dark"] .compressor-item-done { background: #1d3a2c; border-color: #3c6b52; color: #9fd8b7; }
+[data-theme="dark"] .gantt-notice-error, [data-theme="dark"] .compressor-item-error { background: #43231f; border-color: #7c3f38; color: #ffb4a8; }
+[data-theme="dark"] .error-message { color: #ff9d94; }
+
+/* 甘特圖（SVG 畫布本身保持紙白，作為內容輸出面） */
+[data-theme="dark"] .gantt-body { border-color: #2b3446; }
+[data-theme="dark"] .gantt-row-selected { background: #2c3350; }
+[data-theme="dark"] .gantt-group-name:focus { background: #0e1421; }
+[data-theme="dark"] .gantt-editor { border-left-color: #2b3446; box-shadow: -8px 0 0 rgba(0,0,0,.4); }
+
+/* 計時器舞台維持深色，避免變數翻轉造成反白 */
+[data-theme="dark"] .timer-stage { background: #0b101b; }
+[data-theme="dark"] .timer-display, [data-theme="dark"] .timer-segment-indicator { color: #e9edf6; }
+[data-theme="dark"] .timer-warning { background: #7c1d12; }
+[data-theme="dark"] .timer-finished { background: var(--coral); }
+[data-theme="dark"] .timer-finished .timer-display { color: #1c130f; }
+[data-theme="dark"] .timer-finished .button-secondary { border-color: #1c130f; color: #1c130f; }
+
+/* 內容輸出面刻意保持白色：條碼、favicon 預覽底、QR 預覽（背景色由使用者選） */
+[data-theme="dark"] .barcode-preview { background: white; }
+[data-theme="dark"] .barcode-preview-empty { background: transparent; }

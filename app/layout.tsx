@@ -4,7 +4,15 @@ import { ClickSpark } from "@/components/click-spark";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 import "./globals.css";
 
-export const viewport: Viewport = { themeColor: "#f5f1e8" };
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f5f1e8" },
+    { media: "(prefers-color-scheme: dark)", color: "#10151f" },
+  ],
+};
+
+// 在任何內容繪製前套用主題（記住的選擇優先，否則跟隨系統），避免深色使用者看到白色閃爍。
+const THEME_INIT_SCRIPT = `(function(){try{var s=localStorage.getItem("toolverse:theme");var t=s==="dark"||s==="light"?s:(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme="light";}})();`;
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -32,5 +40,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-Hant"><body><ServiceWorkerRegister /><ClickSpark />{children}</body></html>;
+  return <html lang="zh-Hant" suppressHydrationWarning><body><script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} /><ServiceWorkerRegister /><ClickSpark />{children}</body></html>;
 }
