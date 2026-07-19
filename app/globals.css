@@ -644,3 +644,31 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 @media (max-width: 860px) {
   .workspace.lottery-wa { grid-template-columns: 1fr; }
 }
+
+/* === 首頁分類搜尋 === */
+.directory-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-bottom: 22px; }
+.directory-search { flex: 1 1 260px; max-width: 380px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 999px; background: var(--white); color: var(--ink); font-size: 14px; outline: none; }
+.directory-search:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+.directory-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.directory-chip { padding: 9px 15px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 700; cursor: pointer; transition: border-color .15s ease, color .15s ease, background .15s ease; }
+.directory-chip:hover { border-color: var(--ink); color: var(--ink); }
+.directory-chip-active { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.directory-empty { grid-column: 1 / -1; margin: 0; padding: 44px 20px; text-align: center; color: var(--muted); }
+.directory-clear { margin-left: 10px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--white); color: var(--ink); font-size: 13px; font-weight: 700; cursor: pointer; }
+.directory-clear:hover { border-color: var(--ink); }
+
+/* === 工具頁使用說明與 FAQ === */
+.tool-info { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin: 26px auto 90px; padding-top: 34px; border-top: 1px solid var(--line); }
+.tool-info h2 { margin: 0 0 16px; font-size: 20px; letter-spacing: -.03em; }
+.tool-info-steps { margin: 0; padding-left: 22px; display: grid; gap: 10px; color: var(--muted); font-size: 14.5px; line-height: 1.75; }
+.tool-info-steps li::marker { color: var(--blue); font-weight: 800; }
+.tool-info-faq { border-bottom: 1px solid var(--line); }
+.tool-info-faq summary { padding: 13px 0; font-size: 15px; font-weight: 700; cursor: pointer; list-style: none; position: relative; padding-right: 26px; }
+.tool-info-faq summary::-webkit-details-marker { display: none; }
+.tool-info-faq summary::after { content: "+"; position: absolute; right: 2px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 700; }
+.tool-info-faq[open] summary::after { content: "−"; }
+.tool-info-faq p { margin: 0 0 14px; color: var(--muted); font-size: 14px; line-height: 1.75; }
+
+@media (max-width: 860px) {
+  .tool-info { grid-template-columns: 1fr; gap: 28px; }
+}

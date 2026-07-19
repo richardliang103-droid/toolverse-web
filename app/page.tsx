@@ -1,6 +1,6 @@
 import { SiteHeader } from "@/components/site-header";
 import { SplitText } from "@/components/split-text";
-import { ToolCard } from "@/components/tool-card";
+import { ToolDirectory } from "@/components/tool-directory";
 import { tools } from "@/lib/tools";
 
 export default function Home() {
@@ -11,18 +11,7 @@ export default function Home() {
         <h1><SplitText text="所有工具" /></h1>
         <p>選一個，直接開始。</p>
       </section>
-      <section className="compact-tool-grid page-shell" id="tools" aria-label="工具列表">
-        {tools.map((tool) => (
-          <ToolCard className={`compact-tool compact-tool-${tool.accent}`} href={`/tools/${tool.slug}`} key={tool.slug}>
-            <span className="compact-tool-icon" aria-hidden="true">{tool.symbol}</span>
-            <span className="compact-tool-copy">
-              <strong>{tool.name}</strong>
-              <small>{tool.description}</small>
-            </span>
-            <span className="compact-tool-arrow" aria-hidden="true">→</span>
-          </ToolCard>
-        ))}
-      </section>
+      <ToolDirectory />
       <footer className="directory-footer page-shell"><span>ToolVerse</span><span>{tools.length} 個工具</span></footer>
     </main>
   );

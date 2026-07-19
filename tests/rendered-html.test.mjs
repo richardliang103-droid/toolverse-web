@@ -46,6 +46,23 @@ test("server-renders all tool routes", async () => {
   }
 });
 
+test("homepage renders search box and category chips", async () => {
+  const html = await (await render()).text();
+  assert.match(html, /搜尋工具/);
+  assert.match(html, /圖表/);
+  assert.match(html, /抽選分組/);
+});
+
+test("tool pages render usage guide, FAQ, and JSON-LD", async () => {
+  const html = await (await render("/tools/lottery")).text();
+  assert.match(html, /怎麼使用/);
+  assert.match(html, /常見問題/);
+  assert.match(html, /抽選結果公平嗎/);
+  assert.match(html, /application\/ld\+json/);
+  assert.match(html, /FAQPage/);
+  assert.match(html, /WebApplication/);
+});
+
 test("serves a sitemap covering every tool", async () => {
   const response = await render("/sitemap.xml");
   assert.equal(response.status, 200);
