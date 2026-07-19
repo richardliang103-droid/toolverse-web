@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { GANTT_COLORS, collectDependents, createSampleProject, criticalPathIds, addDays, diffDays, isValidIsoDate, newId, normalizeProject, toCsv, toMermaid, todayIso, wouldCreateCycle } from "@/lib/gantt";
+import { GANTT_COLORS, collectDependents, createSampleProject, criticalPathIds, addDays, diffDays, fromCsv, isValidIsoDate, newId, normalizeProject, toCsv, toMermaid, todayIso, wouldCreateCycle } from "@/lib/gantt";
 import type { GanttColor, GanttProject, GanttTask, GanttView } from "@/lib/gantt";
 import { GanttChart, buildRows } from "./gantt-chart";
 import type { GanttChartHandle } from "./gantt-chart";
@@ -287,16 +287,20 @@ export function GanttTool() {
     }
   }
 
-  async function importJson(file: File) {
+  async function importFile(file: File) {
     try {
-      const normalized = normalizeProject(JSON.parse(await file.text()));
-      if (!normalized) { showNotice("這個檔案不是有效的甘特圖 JSON", "error"); return; }
+      const text = await file.text();
+      const title = file.name.replace(/\.(json|csv)$/i, "").slice(0, 80) || "匯入的專案";
+      const normalized = /\.csv$/i.test(file.name)
+        ? fromCsv(text, title)
+        : normalizeProject(JSON.parse(text));
+      if (!normalized) { showNotice("無法解析這個檔案 — 請使用本工具匯出的 JSON 或 CSV", "error"); return; }
       commit(() => normalized.project);
       setSelectedId(null);
       setEditorId(null);
       showNotice(normalized.repairs.length > 0 ? `已匯入，並自動整理 ${normalized.repairs.length} 個問題` : "已匯入專案");
     } catch {
-      showNotice("讀取 JSON 失敗，請確認檔案內容", "error");
+      showNotice("讀取檔案失敗，請確認內容是本工具匯出的 JSON 或 CSV", "error");
     }
   }
 
@@ -423,10 +427,10 @@ export function GanttTool() {
         <button className="button button-small button-secondary" type="button" disabled={!project} onClick={downloadSvg}>下載 SVG</button>
         <button className="button button-small button-secondary" type="button" disabled={!project} onClick={downloadCsv}>下載 CSV</button>
         <button className="button button-small button-secondary" type="button" disabled={!project} onClick={downloadJson}>下載備份 JSON</button>
-        <button className="button button-small button-secondary" type="button" disabled={!project} onClick={() => fileInputRef.current?.click()}>匯入 JSON</button>
+        <button className="button button-small button-secondary" type="button" disabled={!project} onClick={() => fileInputRef.current?.click()}>匯入 JSON／CSV</button>
         <button className="button button-small button-secondary" type="button" disabled={!project} onClick={shareLink}>分享唯讀連結</button>
         <button className="button button-small button-coral" type="button" disabled={!project} onClick={copyMermaid}>{copied ? "已複製 ✓" : "複製 Mermaid"}</button>
-        <input ref={fileInputRef} className="file-input" type="file" accept="application/json,.json" aria-label="匯入 JSON 檔" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importJson(file); event.target.value = ""; }} />
+        <input ref={fileInputRef} className="file-input" type="file" accept="application/json,.json,text/csv,.csv" aria-label="匯入 JSON 或 CSV 檔" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFile(file); event.target.value = ""; }} />
       </div>
       {project && (
         <details className="mermaid-code"><summary>查看 Mermaid 原始碼</summary><pre>{toMermaid(project)}</pre></details>
