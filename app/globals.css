@@ -573,3 +573,29 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 @media (max-width: 560px) {
   .password-toggles { grid-template-columns: 1fr; }
 }
+
+/* === React Bits 改寫特效（ClickSpark / SplitText / SpotlightCard / StarBorder） === */
+.click-spark-layer { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 9999; }
+
+.split-text-char { display: inline-block; will-change: transform; }
+
+.spotlight-card { position: relative; overflow: hidden; }
+.spotlight-card::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .22s ease; background: radial-gradient(230px circle at var(--spot-x, 50%) var(--spot-y, 50%), rgba(53,87,255,.11), transparent 65%); }
+.spotlight-card:hover::after, .spotlight-card:focus-visible::after { opacity: 1; }
+
+.star-border { position: relative; display: block; overflow: hidden; padding: 2px; border-radius: 14px; }
+.star-border-glow { position: absolute; width: 220%; height: 46%; pointer-events: none; }
+.star-border-glow-top { top: -10px; left: -60%; background: radial-gradient(circle, rgba(240,207,131,.95) 0%, transparent 11%); animation: star-border-slide-forward 5.5s linear infinite alternate; }
+.star-border-glow-bottom { bottom: -10px; right: -60%; background: radial-gradient(circle, rgba(240,207,131,.95) 0%, transparent 11%); animation: star-border-slide-back 5.5s linear infinite alternate; }
+.star-border-content { position: relative; z-index: 1; }
+@keyframes star-border-slide-forward { from { transform: translateX(0); } to { transform: translateX(27%); } }
+@keyframes star-border-slide-back { from { transform: translateX(0); } to { transform: translateX(-27%); } }
+
+.draw-button-frame { width: 100%; margin-top: 18px; }
+.lottery-neon .draw-button-frame { background: rgba(240,207,131,.16); }
+.star-border .draw-button { margin-top: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .star-border-glow { animation: none; }
+  .spotlight-card::after { transition: none; }
+}
