@@ -686,3 +686,36 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .pdf-thumb-wrap img { transition: transform .18s ease; }
 .pdf-thumb-rotate { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; background: var(--white); color: var(--ink); font-size: 13px; cursor: pointer; }
 .pdf-thumb-rotate:hover { border-color: var(--ink); }
+
+/* === 生活組工具：單位換算、條碼、圖片裁切 === */
+.unit-category-row { flex-wrap: wrap; margin-bottom: 16px; }
+.unit-row { display: grid; grid-template-columns: 1fr 1.2fr auto 1.2fr; gap: 12px; align-items: end; }
+.unit-swap { margin-bottom: 2px; }
+.unit-result-main { margin: 4px 0 0; font-size: 30px; letter-spacing: -.02em; }
+.unit-result-main strong { font-size: 38px; }
+.unit-result-sub { margin: 2px 0 18px; color: var(--muted); font-size: 14px; }
+.unit-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.unit-table td { padding: 9px 4px; border-top: 1px solid var(--line); }
+.unit-table td:last-child { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.barcode-preview { display: grid; place-items: center; min-height: 200px; padding: 18px; border-radius: 14px; background: white; border: 1px solid var(--line); }
+.barcode-preview-empty { border-style: dashed; background: transparent; }
+.barcode-svg-host svg { max-width: 100%; height: auto; }
+
+.crop-dropzone { display: grid; gap: 8px; place-items: center; padding: 46px 20px; border: 1.5px dashed #9da6cc; border-radius: 14px; text-align: center; }
+.crop-dropzone p { margin: 0; }
+.crop-aspect-row { flex-wrap: wrap; margin-bottom: 14px; }
+.crop-frame-host { display: grid; place-items: center; }
+.crop-frame { position: relative; overflow: hidden; border-radius: 10px; touch-action: none; user-select: none; }
+.crop-frame img { display: block; pointer-events: none; }
+.crop-box { position: absolute; border: 2px solid #fffdf7; outline: 1px solid rgba(16,22,40,.7); box-shadow: 0 0 0 9999px rgba(16,22,40,.45); cursor: move; }
+.crop-handle { position: absolute; width: 16px; height: 16px; background: #fffdf7; border: 2px solid var(--ink); border-radius: 4px; }
+.crop-handle-nw { top: -9px; left: -9px; cursor: nwse-resize; }
+.crop-handle-ne { top: -9px; right: -9px; cursor: nesw-resize; }
+.crop-handle-sw { bottom: -9px; left: -9px; cursor: nesw-resize; }
+.crop-handle-se { bottom: -9px; right: -9px; cursor: nwse-resize; }
+
+@media (max-width: 720px) {
+  .unit-row { grid-template-columns: 1fr 1fr; }
+  .unit-swap { grid-column: 1 / -1; justify-self: center; margin: 0; }
+}

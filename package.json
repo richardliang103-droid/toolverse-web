@@ -10,8 +10,8 @@
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "build:vercel": "next build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build && node --test --experimental-strip-types tests/gantt.test.mjs tests/groups.test.mjs tests/utility-tools.test.mjs tests/exif-clean.test.mjs tests/generators.test.mjs tests/tool-content.test.mjs tests/qr-templates.test.mjs tests/rendered-html.test.mjs",
-    "test:unit": "node --test --experimental-strip-types tests/gantt.test.mjs tests/groups.test.mjs tests/utility-tools.test.mjs tests/exif-clean.test.mjs tests/generators.test.mjs tests/tool-content.test.mjs tests/qr-templates.test.mjs",
+    "test": "npm run build && node --test --experimental-strip-types tests/gantt.test.mjs tests/groups.test.mjs tests/utility-tools.test.mjs tests/exif-clean.test.mjs tests/generators.test.mjs tests/tool-content.test.mjs tests/qr-templates.test.mjs tests/life-tools.test.mjs tests/rendered-html.test.mjs",
+    "test:unit": "node --test --experimental-strip-types tests/gantt.test.mjs tests/groups.test.mjs tests/utility-tools.test.mjs tests/exif-clean.test.mjs tests/generators.test.mjs tests/tool-content.test.mjs tests/qr-templates.test.mjs tests/life-tools.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
@@ -20,6 +20,7 @@
     "canvas-confetti": "^1.9.4",
     "drizzle-orm": "0.45.2",
     "gsap": "^3.15.0",
+    "jsbarcode": "^3.12.3",
     "mermaid": "^11.16.0",
     "next": "16.2.6",
     "opencc-js": "^1.4.1",

@@ -38,6 +38,9 @@ test("server-renders all tool routes", async () => {
     ["/tools/chinese-converter", /轉換方向/],
     ["/tools/password-generator", /密碼設定/],
     ["/tools/favicon-generator", /預覽與下載/],
+    ["/tools/barcode", /條碼格式|內容與格式/],
+    ["/tools/unit-converter", /選擇單位/],
+    ["/tools/image-crop", /把圖片拖到這裡/],
   ];
   for (const [pathname, pattern] of routes) {
     const response = await render(pathname);
