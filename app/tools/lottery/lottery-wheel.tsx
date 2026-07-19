@@ -16,13 +16,44 @@ const VIEWBOX = 360;
 // there reads horizontally instead of sideways/vertical.
 const POINTER_ANGLE = 90;
 
-// Alternating midnight navy / champagne accents keep the wheel readable while
-// feeling like an event-selection tool instead of a prize wheel.
-const SLICE_TONES = [
-  { fill: "#101927", text: "#f7f3e9" },
-  { fill: "#1b2940", text: "#f7f3e9" },
-  { fill: "#b98a42", text: "#16100a" },
-];
+export type WheelTheme = "neon" | "wa";
+
+// 每個主題一組色盤：neon 是深夜藍＋香檳金；wa 是日系和色粉彩
+// （縹・鴇・松葉・藤）配深色文字，走淺色和紙路線。
+const THEME_STYLES: Record<WheelTheme, {
+  tones: Array<{ fill: string; text: string }>;
+  sliceStroke: string;
+  emptyFill: string;
+  emptyStroke: string;
+  hubStops: [string, string, string];
+  hubStroke: string;
+}> = {
+  neon: {
+    tones: [
+      { fill: "#101927", text: "#f7f3e9" },
+      { fill: "#1b2940", text: "#f7f3e9" },
+      { fill: "#b98a42", text: "#16100a" },
+    ],
+    sliceStroke: "#080d16",
+    emptyFill: "#101927",
+    emptyStroke: "#46536a",
+    hubStops: ["#fff8e6", "#f0c869", "#a5731f"],
+    hubStroke: "#fff8e6",
+  },
+  wa: {
+    tones: [
+      { fill: "#dce7f1", text: "#2c4a66" },
+      { fill: "#f7e3e8", text: "#8d4a58" },
+      { fill: "#e6eeda", text: "#4d6238" },
+      { fill: "#e8e1f3", text: "#584a7d" },
+    ],
+    sliceStroke: "#fffdf7",
+    emptyFill: "#eef2f6",
+    emptyStroke: "#c3cfdb",
+    hubStops: ["#ffffff", "#a8c4da", "#5F83A8"],
+    hubStroke: "#fffdf7",
+  },
+};
 
 function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
@@ -36,10 +67,11 @@ function describeSlice(cx: number, cy: number, r: number, startAngle: number, en
   return `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`;
 }
 
-export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[] }>(function LotteryWheel(
-  { segments },
+export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[]; theme?: WheelTheme }>(function LotteryWheel(
+  { segments, theme = "neon" },
   ref,
 ) {
+  const style = THEME_STYLES[theme];
   const rotorRef = useRef<SVGGElement>(null);
 
   useImperativeHandle(
@@ -88,7 +120,7 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[] 
         const startAngle = index * anglePer;
         const endAngle = startAngle + anglePer;
         const midAngle = startAngle + anglePer / 2;
-        const tone = SLICE_TONES[index % SLICE_TONES.length];
+        const tone = style.tones[index % style.tones.length];
         const label = name.length > 6 ? `${name.slice(0, 5)}…` : name;
         const flip = midAngle > 90 && midAngle < 270;
         const labelPos = polarToCartesian(cx, cy, r * 0.62, midAngle);
@@ -104,7 +136,7 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[] 
           flip,
         };
       }),
-    [segments, anglePer, cx, cy, r],
+    [segments, anglePer, cx, cy, r, style.tones],
   );
 
   return (
@@ -112,19 +144,19 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[] 
       <div className="lottery-wheel-pointer" aria-hidden="true" />
       <svg className="lottery-wheel-svg" viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} role="img" aria-label="抽選轉盤">
         <defs>
-          <radialGradient id="wheelHub" cx="50%" cy="50%" r="60%">
-            <stop offset="0%" stopColor="#fff8e6" />
-            <stop offset="55%" stopColor="#f0c869" />
-            <stop offset="100%" stopColor="#a5731f" />
+          <radialGradient id={`wheelHub-${theme}`} cx="50%" cy="50%" r="60%">
+            <stop offset="0%" stopColor={style.hubStops[0]} />
+            <stop offset="55%" stopColor={style.hubStops[1]} />
+            <stop offset="100%" stopColor={style.hubStops[2]} />
           </radialGradient>
         </defs>
         <g ref={rotorRef}>
           {segments.length === 0 ? (
-            <circle cx={cx} cy={cy} r={r} fill="#101927" stroke="#46536a" strokeWidth={2} />
+            <circle cx={cx} cy={cy} r={r} fill={style.emptyFill} stroke={style.emptyStroke} strokeWidth={2} />
           ) : (
             slices.map((slice) => (
               <g key={slice.key}>
-                <path d={slice.path} fill={slice.fill} stroke="#080d16" strokeWidth={1.5} />
+                <path d={slice.path} fill={slice.fill} stroke={style.sliceStroke} strokeWidth={1.5} />
                 {showLabels && (
                   <text
                     x={slice.labelPos.x}
@@ -141,7 +173,7 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[] 
               </g>
             ))
           )}
-          <circle cx={cx} cy={cy} r={r * 0.16} fill="url(#wheelHub)" stroke="#fff8e6" strokeWidth={2} />
+          <circle cx={cx} cy={cy} r={r * 0.16} fill={`url(#wheelHub-${theme})`} stroke={style.hubStroke} strokeWidth={2} />
         </g>
       </svg>
     </div>
