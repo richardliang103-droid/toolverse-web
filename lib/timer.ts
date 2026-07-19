@@ -8,6 +8,16 @@ export function formatClock(ms: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+/** 碼表顯示：未滿一小時 MM:SS，一小時以上 H:MM:SS（不設上限）。 */
+export function formatStopwatch(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 export function clampTimerMs(ms: number) {
   if (!Number.isFinite(ms)) return 0;
   return Math.max(0, Math.min(Math.round(ms), MAX_TIMER_MS));
