@@ -175,6 +175,100 @@ export function normalizeProject(raw: unknown): { project: GanttProject; repairs
   };
 }
 
+/** 解析 CSV 文字為列陣列；支援引號欄位、欄內逗號與換行、"" 跳脫與 BOM。 */
+export function parseCsvRows(text: string): string[][] {
+  const source = text.replace(/^\uFEFF/, "");
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    if (inQuotes) {
+      if (char === '"') {
+        if (source[i + 1] === '"') { field += '"'; i += 1; } else inQuotes = false;
+      } else field += char;
+      continue;
+    }
+    if (char === '"') { inQuotes = true; continue; }
+    if (char === ",") { row.push(field); field = ""; continue; }
+    if (char === "\n" || char === "\r") {
+      if (char === "\r" && source[i + 1] === "\n") i += 1;
+      row.push(field); field = "";
+      if (row.some((item) => item !== "")) rows.push(row);
+      row = [];
+      continue;
+    }
+    field += char;
+  }
+  row.push(field);
+  if (row.some((item) => item !== "")) rows.push(row);
+  return rows;
+}
+
+const CSV_HEADER = ["群組", "任務", "類型", "開始", "結束", "工期(天)", "進度(%)", "負責人", "前置任務"];
+
+/**
+ * 從本工具匯出的 CSV 還原專案（與 toCsv 雙向互通）。
+ * 前置任務以名稱比對（同名取第一個）；剩餘的驗證與修復交給 normalizeProject。
+ */
+export function fromCsv(text: string, title: string): { project: GanttProject; repairs: string[] } | null {
+  const rows = parseCsvRows(text);
+  if (rows.length < 2) return null;
+  const header = rows[0].map((cell) => cell.trim());
+  if (CSV_HEADER.some((expected, index) => header[index] !== expected)) return null;
+
+  const groups: GanttGroup[] = [];
+  const groupIdByName = new Map<string, string>();
+  const drafts: Array<Record<string, unknown> & { dependsOnNames: string[] }> = [];
+  const colorKeys = Object.keys(GANTT_COLORS) as GanttColor[];
+
+  for (const row of rows.slice(1)) {
+    const [groupName = "", name = "", kind = "", start = "", end = "", durationText = "", progressText = "", assignee = "", dependsText = ""] = row.map((cell) => cell.trim());
+    if (!name && !start) continue;
+    if (!isValidIsoDate(start)) continue;
+    let groupId: string | undefined;
+    if (groupName) {
+      groupId = groupIdByName.get(groupName);
+      if (!groupId) {
+        groupId = newId();
+        groupIdByName.set(groupName, groupId);
+        groups.push({ id: groupId, name: groupName });
+      }
+    }
+    const milestone = kind === "里程碑";
+    let durationDays = Number(durationText);
+    if (!Number.isFinite(durationDays) || durationDays < 1) {
+      durationDays = isValidIsoDate(end) ? diffDays(start, end) + 1 : 1;
+    }
+    drafts.push({
+      id: newId(),
+      name,
+      start,
+      durationDays: milestone ? 0 : durationDays,
+      progress: Number(progressText) || 0,
+      color: colorKeys[drafts.length % colorKeys.length],
+      assignee: assignee || undefined,
+      groupId,
+      milestone,
+      dependsOn: [],
+      dependsOnNames: dependsText ? dependsText.split(/[；;]/).map((part) => part.trim()).filter(Boolean) : [],
+    });
+  }
+  if (drafts.length === 0) return null;
+
+  const idByName = new Map<string, string>();
+  for (const draft of drafts) {
+    const name = draft.name as string;
+    if (!idByName.has(name)) idByName.set(name, draft.id as string);
+  }
+  for (const draft of drafts) {
+    draft.dependsOn = draft.dependsOnNames.map((name) => idByName.get(name)).filter((id): id is string => typeof id === "string");
+  }
+
+  return normalizeProject({ version: 1, title, view: "day", groups, tasks: drafts });
+}
+
 function csvField(value: string) {
   return /[",\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }

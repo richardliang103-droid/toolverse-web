@@ -23,6 +23,9 @@ export const tools = [
   { slug: "chinese-converter", name: "繁簡轉換", description: "OpenCC 繁簡互轉，支援台灣用詞（軟件→軟體），本機處理不上傳。", symbol: "繁", accent: "blue", status: "READY", category: "text" },
   { slug: "password-generator", name: "密碼產生器", description: "Web Crypto 安全隨機產生高強度密碼，可調長度與字元類別，不上傳不儲存。", symbol: "⁂", accent: "sumi", status: "READY", category: "utility" },
   { slug: "favicon-generator", name: "Favicon 產生器", description: "用文字、emoji 或圖片產生整套 favicon，附 HTML 與 manifest 片段。", symbol: "◆", accent: "sora", status: "READY", category: "image" },
+  { slug: "barcode", name: "條碼產生器", description: "Code 128 與 EAN-13 條碼，自動計算檢查碼，下載 PNG、SVG，本機產生。", symbol: "▮", accent: "sumi", status: "READY", category: "utility" },
+  { slug: "unit-converter", name: "單位換算", description: "長度、面積、重量、容量、溫度、速度即時換算，支援坪、甲、台斤等台制單位。", symbol: "⇄", accent: "matsuba", status: "READY", category: "utility" },
+  { slug: "image-crop", name: "圖片裁切", description: "自由框選或固定比例裁切圖片，輸出 PNG、JPG，圖片不上傳。", symbol: "◫", accent: "toki", status: "READY", category: "image" },
 ] as const;
 
 export type Tool = (typeof tools)[number];

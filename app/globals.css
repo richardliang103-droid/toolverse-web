@@ -103,7 +103,8 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .participant-input:focus, .number-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
 .form-controls { display: flex; flex-wrap: wrap; gap: 16px 22px; align-items: center; padding-top: 18px; }
 .check-row { display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 14px; }
-.check-row input { width: 17px; height: 17px; accent-color: var(--blue); }
+/* 20px＋2px margin＝24px 有效點擊範圍，符合 WCAG target-size */
+.check-row input { width: 20px; height: 20px; margin: 2px; accent-color: var(--blue); }
 .number-field { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; font-size: 14px; }
 .number-input { width: 74px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: white; outline: none; }
 .draw-button { width: 100%; margin-top: 18px; }
@@ -686,3 +687,117 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .pdf-thumb-wrap img { transition: transform .18s ease; }
 .pdf-thumb-rotate { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; background: var(--white); color: var(--ink); font-size: 13px; cursor: pointer; }
 .pdf-thumb-rotate:hover { border-color: var(--ink); }
+
+/* === 生活組工具：單位換算、條碼、圖片裁切 === */
+.unit-category-row { flex-wrap: wrap; margin-bottom: 16px; }
+.unit-row { display: grid; grid-template-columns: 1fr 1.2fr auto 1.2fr; gap: 12px; align-items: end; }
+.unit-swap { margin-bottom: 2px; }
+.unit-result-main { margin: 4px 0 0; font-size: 30px; letter-spacing: -.02em; }
+.unit-result-main strong { font-size: 38px; }
+.unit-result-sub { margin: 2px 0 18px; color: var(--muted); font-size: 14px; }
+.unit-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.unit-table td { padding: 9px 4px; border-top: 1px solid var(--line); }
+.unit-table td:last-child { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.barcode-preview { display: grid; place-items: center; min-height: 200px; padding: 18px; border-radius: 14px; background: white; border: 1px solid var(--line); }
+.barcode-preview-empty { border-style: dashed; background: transparent; }
+.barcode-svg-host svg { max-width: 100%; height: auto; }
+
+.crop-dropzone { display: grid; gap: 8px; place-items: center; padding: 46px 20px; border: 1.5px dashed #9da6cc; border-radius: 14px; text-align: center; }
+.crop-dropzone p { margin: 0; }
+.crop-aspect-row { flex-wrap: wrap; margin-bottom: 14px; }
+.crop-frame-host { display: grid; place-items: center; }
+.crop-frame { position: relative; overflow: hidden; border-radius: 10px; touch-action: none; user-select: none; }
+.crop-frame img { display: block; pointer-events: none; }
+.crop-box { position: absolute; border: 2px solid #fffdf7; outline: 1px solid rgba(16,22,40,.7); box-shadow: 0 0 0 9999px rgba(16,22,40,.45); cursor: move; }
+.crop-handle { position: absolute; width: 16px; height: 16px; background: #fffdf7; border: 2px solid var(--ink); border-radius: 4px; }
+.crop-handle-nw { top: -9px; left: -9px; cursor: nwse-resize; }
+.crop-handle-ne { top: -9px; right: -9px; cursor: nesw-resize; }
+.crop-handle-sw { bottom: -9px; left: -9px; cursor: nesw-resize; }
+.crop-handle-se { bottom: -9px; right: -9px; cursor: nwse-resize; }
+
+@media (max-width: 720px) {
+  .unit-row { grid-template-columns: 1fr 1fr; }
+  .unit-swap { grid-column: 1 / -1; justify-self: center; margin: 0; }
+}
+
+/* === 全站深色模式：<html data-theme="dark"> 時生效（layout inline script 在繪製前設定） === */
+.theme-toggle { display: inline-grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 999px; background: transparent; font-size: 16px; cursor: pointer; transition: border-color .16s ease; }
+.theme-toggle:hover { border-color: var(--ink); }
+.theme-toggle-to-light { display: none; }
+[data-theme="dark"] .theme-toggle-to-light { display: inline; }
+[data-theme="dark"] .theme-toggle-to-dark { display: none; }
+
+:root[data-theme="dark"] {
+  --paper: #10151f;
+  --white: #151c2a;
+  --ink: #e9edf6;
+  --line: #2b3446;
+  --muted: #9aa4ba;
+  --blue: #7d9bff;
+  --blue-soft: #263250;
+  --mint: #2c4a3a;
+  color-scheme: dark;
+}
+
+/* 面板與輸入 */
+[data-theme="dark"] .panel { background: #1a2231; }
+[data-theme="dark"] .panel-tinted { background: #1e2739; }
+[data-theme="dark"] .workspace, [data-theme="dark"] .flowchart-workspace, [data-theme="dark"] .gantt-workspace { border-color: #2b3446; box-shadow: 8px 8px 0 rgba(0,0,0,.35); }
+[data-theme="dark"] .participant-input, [data-theme="dark"] .flow-prompt, [data-theme="dark"] .key-input, [data-theme="dark"] .flow-options select, [data-theme="dark"] .number-input, [data-theme="dark"] .qr-color-row input[type="color"] { background: #0e1421; color: var(--ink); }
+[data-theme="dark"] .result-stage { background-color: #141b29; background-image: radial-gradient(#33405c 1px, transparent 1px); border-color: #45536f; }
+[data-theme="dark"] .drop-zone, [data-theme="dark"] .qr-template-fields, [data-theme="dark"] .flowchart-empty, [data-theme="dark"] .mermaid-code, [data-theme="dark"] .model-progress, [data-theme="dark"] .compressor-item, [data-theme="dark"] .pdf-merge-list li, [data-theme="dark"] .pdf-help code, [data-theme="dark"] .password-toggle code, [data-theme="dark"] .favicon-previews, [data-theme="dark"] .favicon-snippets details { background: #141b29; }
+[data-theme="dark"] .password-output, [data-theme="dark"] .password-strength-bar { background: #0e1421; }
+
+/* 首頁卡片與導覽 */
+[data-theme="dark"] .compact-tool { background: #1a2231; border-color: #2b3446; }
+[data-theme="dark"] .compact-tool:hover { border-color: var(--ink); }
+[data-theme="dark"] .spotlight-card::after { background: radial-gradient(230px circle at var(--spot-x, 50%) var(--spot-y, 50%), rgba(125,155,255,.13), transparent 65%); }
+[data-theme="dark"] .spotlight-card::before { background: linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent); }
+[data-theme="dark"] .button-primary { color: #10151f; }
+[data-theme="dark"] .button:hover { box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
+[data-theme="dark"] .button-coral { color: #1c130f; }
+
+/* 狀態訊息 */
+[data-theme="dark"] .service-notice { background: #322b18; border-color: #6b5c2f; color: #e8cf8d; }
+[data-theme="dark"] .service-notice-private, [data-theme="dark"] .validation-card, [data-theme="dark"] .gantt-notice-info, [data-theme="dark"] .compressor-item-done { background: #1d3a2c; border-color: #3c6b52; color: #9fd8b7; }
+[data-theme="dark"] .gantt-notice-error, [data-theme="dark"] .compressor-item-error { background: #43231f; border-color: #7c3f38; color: #ffb4a8; }
+[data-theme="dark"] .error-message { color: #ff9d94; }
+
+/* 甘特圖（SVG 畫布本身保持紙白，作為內容輸出面） */
+[data-theme="dark"] .gantt-body { border-color: #2b3446; }
+[data-theme="dark"] .gantt-row-selected { background: #2c3350; }
+[data-theme="dark"] .gantt-group-name:focus { background: #0e1421; }
+[data-theme="dark"] .gantt-editor { border-left-color: #2b3446; box-shadow: -8px 0 0 rgba(0,0,0,.4); }
+
+/* 計時器舞台維持深色，避免變數翻轉造成反白 */
+[data-theme="dark"] .timer-stage { background: #0b101b; }
+[data-theme="dark"] .timer-display, [data-theme="dark"] .timer-segment-indicator { color: #e9edf6; }
+[data-theme="dark"] .timer-warning { background: #7c1d12; }
+[data-theme="dark"] .timer-finished { background: var(--coral); }
+[data-theme="dark"] .timer-finished .timer-display { color: #1c130f; }
+[data-theme="dark"] .timer-finished .button-secondary { border-color: #1c130f; color: #1c130f; }
+
+/* 內容輸出面刻意保持白色：條碼、favicon 預覽底、QR 預覽（背景色由使用者選） */
+[data-theme="dark"] .barcode-preview { background: white; }
+[data-theme="dark"] .barcode-preview-empty { background: transparent; }
+
+/* 時鐘與破小時碼表（HH:MM:SS）字數較多，縮小字級避免溢出 */
+.timer-display { max-width: 100%; }
+.timer-display-long { font-size: clamp(44px, 9.5vw, 120px); }
+.timer-stage:fullscreen .timer-display-long { font-size: clamp(80px, 17vw, 300px); }
+[data-theme="dark"] .timer-stage .button-secondary { border-color: #e9edf6; color: #e9edf6; }
+
+/* 分組結果卡片保留和色粉彩底，深色模式下文字固定深色才可讀 */
+[data-theme="dark"] .group-card { color: #2a3040; box-shadow: 3px 3px 0 rgba(0,0,0,.35); border-color: #3a4358; }
+[data-theme="dark"] .group-card h3 span { color: #5b6472; }
+[data-theme="dark"] .group-card ol li::marker { color: #5b6472; }
+
+/* 去背預覽的透明棋盤格是內容輸出面，維持白底；其上的空狀態文字固定深色 */
+[data-theme="dark"] .preview-canvas .result-empty { color: #565d6b; }
+[data-theme="dark"] .preview-canvas .result-empty strong { color: #23293a; }
+
+/* 深色網站下的抽獎兩主題：和風外框轉深色調（保留縹×鴇光暈），霓虹面板保留半透明 */
+[data-theme="dark"] .workspace.lottery-wa { background: radial-gradient(circle at 80% 6%, rgba(95,131,168,.16), transparent 32%), radial-gradient(circle at 12% 100%, rgba(207,127,141,.10), transparent 30%), linear-gradient(150deg, #161d2c 0%, #10151f 100%); }
+[data-theme="dark"] .lottery-neon .panel { background: rgba(12,20,34,.78); }
+[data-theme="dark"] .lottery-neon .panel-tinted { background: rgba(17,28,46,.76); }

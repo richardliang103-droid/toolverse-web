@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addDays, collectDependents, createSampleProject, criticalPathIds, diffDays, isValidIsoDate, isWeekend, dayNumber, normalizeProject, toCsv, toMermaid, weekdayOfDay, wouldCreateCycle } from "../lib/gantt.ts";
+import { addDays, collectDependents, createSampleProject, criticalPathIds, diffDays, fromCsv, isValidIsoDate, isWeekend, dayNumber, normalizeProject, toCsv, toMermaid, weekdayOfDay, wouldCreateCycle } from "../lib/gantt.ts";
 
 test("date math crosses months, years and leap days without timezone drift", () => {
   assert.equal(addDays("2026-07-31", 1), "2026-08-01");
@@ -125,4 +125,30 @@ test("criticalPathIds walks back from the latest finish", () => {
   assert.ok(path.has("t-research")); // 鏈條一路回到起點
   assert.ok(!path.has("t-pages")); // 非決定完工日的支線（t-api 結束較晚，才是關鍵前置）
   assert.equal(criticalPathIds([]).size, 0);
+});
+
+test("CSV 匯出後可用 fromCsv 還原（雙向互通）", () => {
+  const { project } = normalizeProject(createSampleProject());
+  const restored = fromCsv(toCsv(project), "還原測試");
+  assert.ok(restored, "fromCsv 應能解析自家匯出的 CSV");
+  assert.equal(restored.project.tasks.length, project.tasks.length);
+  assert.equal(restored.project.groups.length, project.groups.length);
+  const byName = new Map(restored.project.tasks.map((task) => [task.name, task]));
+  for (const original of project.tasks) {
+    const match = byName.get(original.name);
+    assert.ok(match, `缺少任務 ${original.name}`);
+    assert.equal(match.start, original.start);
+    assert.equal(match.durationDays, original.durationDays);
+    assert.equal(Boolean(match.milestone), Boolean(original.milestone));
+    assert.equal(match.dependsOn.length, original.dependsOn.length, `${original.name} 依賴數不符`);
+  }
+});
+
+test("fromCsv：欄內逗號與引號、無效輸入", () => {
+  const { project } = normalizeProject(createSampleProject());
+  const renamed = { ...project, tasks: project.tasks.map((task, index) => (index === 0 ? { ...task, name: '設計, "初稿"' } : task)) };
+  const restored = fromCsv(toCsv(renamed), "quoted");
+  assert.ok(restored.project.tasks.some((task) => task.name === '設計, "初稿"'));
+  assert.equal(fromCsv("亂七八糟", "x"), null);
+  assert.equal(fromCsv("a,b,c\n1,2,3", "x"), null);
 });
