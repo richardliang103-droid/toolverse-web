@@ -672,3 +672,17 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 @media (max-width: 860px) {
   .tool-info { grid-template-columns: 1fr; gap: 28px; }
 }
+
+/* === 工具強化包：QR 模板、PDF 拖曳與旋轉 === */
+.qr-template-row { margin-bottom: 14px; flex-wrap: wrap; }
+.qr-template-fields { display: grid; gap: 12px; margin-bottom: 16px; padding: 16px; border: 1px dashed var(--line); border-radius: 12px; background: #faf9f6; }
+.qr-template-fields .key-note { margin: 0; }
+
+.pdf-merge-handle { color: #b8b3a8; cursor: grab; font-size: 15px; }
+.pdf-merge-list li { cursor: grab; }
+.pdf-merge-list li:active { cursor: grabbing; }
+.pdf-merge-dragover { outline: 2px dashed var(--blue); outline-offset: 2px; }
+.pdf-thumb-wrap { position: relative; display: inline-block; }
+.pdf-thumb-wrap img { transition: transform .18s ease; }
+.pdf-thumb-rotate { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; background: var(--white); color: var(--ink); font-size: 13px; cursor: pointer; }
+.pdf-thumb-rotate:hover { border-color: var(--ink); }

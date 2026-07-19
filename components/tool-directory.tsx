@@ -1,25 +1,50 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ToolCard } from "@/components/tool-card";
 import { CATEGORIES, filterTools, type CategoryId } from "@/lib/tools";
 
+function isTypingTarget(element: EventTarget | null) {
+  if (!(element instanceof HTMLElement)) return false;
+  return element.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName);
+}
+
 // 首頁工具目錄：分類 chips ＋ 即時搜尋。
 // 初始狀態（全部、無關鍵字）在 SSR 就渲染完整清單，搜尋引擎看得到所有工具。
+// 快速鍵：/ 聚焦搜尋框，Esc 清除條件並離開搜尋框。
 export function ToolDirectory() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CategoryId | "all">("all");
+  const searchRef = useRef<HTMLInputElement | null>(null);
   const visible = useMemo(() => filterTools(query, category), [query, category]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "/" && !isTypingTarget(event.target)) {
+        event.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+      if (event.key === "Escape") {
+        setQuery("");
+        setCategory("all");
+        searchRef.current?.blur();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   return (
     <>
       <div className="directory-filters page-shell">
         <label className="sr-only" htmlFor="tool-search">搜尋工具</label>
         <input
+          ref={searchRef}
           id="tool-search"
           className="directory-search"
           type="search"
-          placeholder="搜尋工具，例如：抽獎、PDF、密碼…"
+          placeholder="搜尋工具（按 / 快速聚焦），例如：抽獎、PDF…"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />

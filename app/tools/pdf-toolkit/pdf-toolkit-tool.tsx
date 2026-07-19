@@ -33,6 +33,10 @@ export function PdfToolkitTool() {
   const [splitPages, setSplitPages] = useState<number | null>(null);
   const [thumbnails, setThumbnails] = useState<string[]>([]);
   const [range, setRange] = useState("");
+  const [rotations, setRotations] = useState<Record<number, number>>({});
+  const [globalRotate, setGlobalRotate] = useState(0);
+  const dragIdRef = useRef<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -61,6 +65,8 @@ export function PdfToolkitTool() {
     setSplitFile(file);
     setSplitPages(null);
     setThumbnails([]);
+    setRotations({});
+    setGlobalRotate(0);
     try {
       const buffer = await file.arrayBuffer();
       const { PDFDocument } = await import("pdf-lib");
@@ -115,6 +121,31 @@ export function PdfToolkitTool() {
     });
   }
 
+  function rotatePage(pageNumber: number) {
+    setRotations((previous) => {
+      const next = ((previous[pageNumber] ?? 0) + 90) % 360;
+      const copy = { ...previous };
+      if (next === 0) delete copy[pageNumber];
+      else copy[pageNumber] = next;
+      return copy;
+    });
+  }
+
+  /** HTML5 拖曳排序；↑↓ 按鈕保留給鍵盤與觸控使用者。 */
+  function handleDragOverItem(id: string) {
+    const draggingId = dragIdRef.current;
+    if (!draggingId || draggingId === id) return;
+    setMergeItems((previous) => {
+      const fromIndex = previous.findIndex((item) => item.id === draggingId);
+      const toIndex = previous.findIndex((item) => item.id === id);
+      if (fromIndex < 0 || toIndex < 0) return previous;
+      const next = [...previous];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  }
+
   function moveItem(id: string, direction: -1 | 1) {
     setMergeItems((previous) => {
       const index = previous.findIndex((item) => item.id === id);
@@ -152,11 +183,15 @@ export function PdfToolkitTool() {
     setBusy(true); resetMessages();
     try {
       const indexes = parsePageRanges(range, splitPages);
-      const { PDFDocument } = await import("pdf-lib");
+      const { PDFDocument, degrees } = await import("pdf-lib");
       const source = await PDFDocument.load(await splitFile.arrayBuffer());
       const output = await PDFDocument.create();
       const pages = await output.copyPages(source, indexes);
-      for (const page of pages) output.addPage(page);
+      pages.forEach((page, at) => {
+        const extra = rotations[indexes[at] + 1] ?? globalRotate;
+        if (extra !== 0) page.setRotation(degrees(((page.getRotation().angle + extra) % 360 + 360) % 360));
+        output.addPage(page);
+      });
       const bytes = await output.save();
       downloadBlob(new Blob([bytes as BlobPart], { type: "application/pdf" }), extractedFilename(splitFile.name));
       setNotice(`已取出 ${indexes.length} 頁`);
@@ -181,7 +216,16 @@ export function PdfToolkitTool() {
             {mergeItems.length > 0 && (
               <ul className="pdf-merge-list">
                 {mergeItems.map((item, index) => (
-                  <li key={item.id}>
+                  <li
+                    key={item.id}
+                    className={dragOverId === item.id ? "pdf-merge-dragover" : undefined}
+                    draggable
+                    onDragStart={() => { dragIdRef.current = item.id; }}
+                    onDragOver={(event) => { event.preventDefault(); setDragOverId(item.id); handleDragOverItem(item.id); }}
+                    onDragEnd={() => { dragIdRef.current = null; setDragOverId(null); }}
+                    onDrop={(event) => { event.preventDefault(); dragIdRef.current = null; setDragOverId(null); }}
+                  >
+                    <span className="pdf-merge-handle" aria-hidden="true">⠿</span>
                     <span className="pdf-merge-order">{index + 1}</span>
                     <span className="pdf-merge-name">{item.file.name}<small>{formatBytes(item.file.size)}</small></span>
                     <span className="pdf-merge-actions">
@@ -202,17 +246,29 @@ export function PdfToolkitTool() {
             {thumbnails.length > 0 && (
               <div className="pdf-thumb-grid">
                 {thumbnails.map((thumbnail, index) => (
-                  <button type="button" className="pdf-thumb" key={index} onClick={() => toggleThumbnailPage(index + 1)} title={`第 ${index + 1} 頁`}>
-                    {/* eslint-disable-next-line @next/next/no-img-element -- 本機 data URL 縮圖 */}
-                    <img src={thumbnail} alt={`第 ${index + 1} 頁縮圖`} />
-                    <span>{index + 1}</span>
-                  </button>
+                  <span className="pdf-thumb-wrap" key={index}>
+                    <button type="button" className="pdf-thumb" onClick={() => toggleThumbnailPage(index + 1)} title={`第 ${index + 1} 頁`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- 本機 data URL 縮圖 */}
+                      <img src={thumbnail} alt={`第 ${index + 1} 頁縮圖`} style={rotations[index + 1] ? { transform: `rotate(${rotations[index + 1]}deg)` } : undefined} />
+                      <span>{index + 1}{rotations[index + 1] ? ` ↻${rotations[index + 1]}°` : ""}</span>
+                    </button>
+                    <button type="button" className="pdf-thumb-rotate" aria-label={`旋轉第 ${index + 1} 頁`} title="旋轉 90°" onClick={() => rotatePage(index + 1)}>↻</button>
+                  </span>
                 ))}
               </div>
             )}
             <label className="field-label" htmlFor="pdf-range">要取出的頁碼
               <input id="pdf-range" className="key-input" value={range} onChange={(event) => setRange(event.target.value)} placeholder="例如 1-3,5" spellCheck={false} />
             </label>
+            <label className="field-label" htmlFor="pdf-rotate">旋轉取出的頁面
+              <select id="pdf-rotate" className="key-input" value={globalRotate} onChange={(event) => setGlobalRotate(Number(event.target.value))}>
+                <option value={0}>不旋轉</option>
+                <option value={90}>順時針 90°</option>
+                <option value={180}>180°</option>
+                <option value={270}>逆時針 90°</option>
+              </select>
+            </label>
+            {Object.keys(rotations).length > 0 && <p className="key-note">已個別旋轉 {Object.keys(rotations).length} 頁（縮圖上的 ↻）；個別設定優先於整批旋轉。</p>}
             <button className="button button-blue draw-button" type="button" onClick={extractPages} disabled={busy || !splitFile}>{busy ? "處理中…" : "取出並下載"}</button>
           </>}
       {error && <p className="error-message" role="alert">{error}</p>}
@@ -221,8 +277,8 @@ export function PdfToolkitTool() {
     <div className="panel panel-tinted">
       <div className="panel-header"><h2>使用說明</h2><span className="panel-meta">100% 本機處理</span></div>
       <ul className="pdf-help">
-        <li><strong>合併</strong>：加入多份 PDF、用 ↑↓ 調整順序，合併後直接下載，原始檔不會離開你的裝置。</li>
-        <li><strong>取頁</strong>：頁碼支援單頁與範圍，例如 <code>1-3,5</code>；<code>8-6</code> 會照 8、7、6 的順序輸出，可用來倒轉頁序。</li>
+        <li><strong>合併</strong>：加入多份 PDF，直接拖曳（或用 ↑↓）調整順序，合併後直接下載，原始檔不會離開你的裝置。</li>
+        <li><strong>取頁</strong>：頁碼支援單頁與範圍，例如 <code>1-3,5</code>；<code>8-6</code> 會照 8、7、6 的順序輸出，可用來倒轉頁序。點縮圖右上角的 ↻ 可個別旋轉頁面，或用「旋轉取出的頁面」整批旋轉。</li>
         <li>加密的 PDF 需要先解除密碼才能處理；每份檔案上限 50 MB。</li>
       </ul>
     </div>

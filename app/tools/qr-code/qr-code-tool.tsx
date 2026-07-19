@@ -2,12 +2,22 @@
 
 import { useEffect, useRef, useState } from "react";
 import { QR_MAX_LENGTH, contrastWarning, qrFilename } from "@/lib/qr";
+import { smsPayload, vcardPayload, wifiPayload, type WifiAuth } from "@/lib/qr-templates";
 import type { QrErrorLevel } from "@/lib/qr";
 
 const STORAGE_KEY = "toolverse:qr-code:v1";
 const SIZES = [256, 512, 1024] as const;
 
 type StoredState = { text: string; dark: string; light: string; level: QrErrorLevel; size: number };
+
+type QrTemplate = "free" | "wifi" | "vcard" | "sms";
+
+const TEMPLATES: Array<{ id: QrTemplate; label: string }> = [
+  { id: "free", label: "自由輸入" },
+  { id: "wifi", label: "Wi-Fi 分享" },
+  { id: "vcard", label: "名片 vCard" },
+  { id: "sms", label: "簡訊" },
+];
 
 function sanitizeStoredState(value: unknown): StoredState {
   const data = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
@@ -88,6 +98,10 @@ export function QrCodeTool() {
   const [copied, setCopied] = useState(false);
   const [logo, setLogo] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  const [template, setTemplate] = useState<QrTemplate>("free");
+  const [wifi, setWifi] = useState({ ssid: "", password: "", auth: "WPA" as WifiAuth });
+  const [vcard, setVcard] = useState({ name: "", phone: "", email: "", org: "", url: "" });
+  const [sms, setSms] = useState({ phone: "", message: "" });
   const renderSeq = useRef(0);
 
   useEffect(() => {
@@ -142,6 +156,11 @@ export function QrCodeTool() {
 
   const warning = contrastWarning(dark, light);
 
+  // 模板欄位一變就把組好的 payload 填進內容框；使用者仍可切回自由輸入手動微調。
+  function applyWifi(next: typeof wifi) { setWifi(next); if (next.ssid.trim()) setText(wifiPayload(next.ssid, next.password, next.auth)); }
+  function applyVcard(next: typeof vcard) { setVcard(next); if (next.name.trim()) setText(vcardPayload(next)); }
+  function applySms(next: typeof sms) { setSms(next); if (next.phone.trim()) setText(smsPayload(next.phone, next.message)); }
+
   function downloadPng() {
     if (!dataUrl) return;
     fetch(dataUrl).then((response) => response.blob()).then((blob) => downloadBlob(blob, `${qrFilename(text)}.png`)).catch(() => setError("下載失敗，請重試"));
@@ -166,8 +185,44 @@ export function QrCodeTool() {
   return <section className="workspace qr-workspace page-shell" aria-label="QR Code 產生器">
     <div className="panel">
       <div className="panel-header"><h2>內容與樣式</h2><span className="panel-meta">{text.trim().length}/{QR_MAX_LENGTH}</span></div>
-      <label className="field-label" htmlFor="qr-text">網址或文字
-        <textarea id="qr-text" className="participant-input qr-input" maxLength={QR_MAX_LENGTH} value={text} onChange={(event) => setText(event.target.value)} placeholder="https://example.com 或任何文字" />
+      <div className="flow-mode-toggle qr-template-row" role="radiogroup" aria-label="內容模板">
+        {TEMPLATES.map((item) => (
+          <button key={item.id} type="button" className={`button button-small ${template === item.id ? "button-blue" : "button-secondary"}`} aria-pressed={template === item.id} onClick={() => setTemplate(item.id)}>{item.label}</button>
+        ))}
+      </div>
+      {template === "wifi" && (
+        <div className="qr-template-fields">
+          <label className="field-label" htmlFor="qr-wifi-ssid">Wi-Fi 名稱（SSID）<input id="qr-wifi-ssid" className="key-input" value={wifi.ssid} onChange={(event) => applyWifi({ ...wifi, ssid: event.target.value })} placeholder="例如 Home-WiFi" /></label>
+          <label className="field-label" htmlFor="qr-wifi-auth">加密方式
+            <select id="qr-wifi-auth" className="key-input" value={wifi.auth} onChange={(event) => applyWifi({ ...wifi, auth: event.target.value as WifiAuth })}>
+              <option value="WPA">WPA／WPA2（最常見）</option>
+              <option value="WEP">WEP（舊式）</option>
+              <option value="nopass">開放網路（無密碼）</option>
+            </select>
+          </label>
+          {wifi.auth !== "nopass" && <label className="field-label" htmlFor="qr-wifi-pass">密碼<input id="qr-wifi-pass" className="key-input" value={wifi.password} onChange={(event) => applyWifi({ ...wifi, password: event.target.value })} placeholder="Wi-Fi 密碼" /></label>}
+          <p className="key-note">手機掃描即可直接加入這個 Wi-Fi，適合店面或民宿張貼。密碼只用來產生圖片，不會上傳。</p>
+        </div>
+      )}
+      {template === "vcard" && (
+        <div className="qr-template-fields">
+          <label className="field-label" htmlFor="qr-vc-name">姓名（必填）<input id="qr-vc-name" className="key-input" value={vcard.name} onChange={(event) => applyVcard({ ...vcard, name: event.target.value })} placeholder="王小明" /></label>
+          <label className="field-label" htmlFor="qr-vc-phone">電話<input id="qr-vc-phone" className="key-input" value={vcard.phone} onChange={(event) => applyVcard({ ...vcard, phone: event.target.value })} placeholder="0912-345-678" /></label>
+          <label className="field-label" htmlFor="qr-vc-email">Email<input id="qr-vc-email" className="key-input" value={vcard.email} onChange={(event) => applyVcard({ ...vcard, email: event.target.value })} placeholder="name@example.com" /></label>
+          <label className="field-label" htmlFor="qr-vc-org">公司／單位<input id="qr-vc-org" className="key-input" value={vcard.org} onChange={(event) => applyVcard({ ...vcard, org: event.target.value })} placeholder="選填" /></label>
+          <label className="field-label" htmlFor="qr-vc-url">網站<input id="qr-vc-url" className="key-input" value={vcard.url} onChange={(event) => applyVcard({ ...vcard, url: event.target.value })} placeholder="選填" /></label>
+          <p className="key-note">掃描後可直接存入通訊錄（vCard 3.0 格式）。</p>
+        </div>
+      )}
+      {template === "sms" && (
+        <div className="qr-template-fields">
+          <label className="field-label" htmlFor="qr-sms-phone">收件號碼<input id="qr-sms-phone" className="key-input" value={sms.phone} onChange={(event) => applySms({ ...sms, phone: event.target.value })} placeholder="0912345678" /></label>
+          <label className="field-label" htmlFor="qr-sms-message">簡訊內容<input id="qr-sms-message" className="key-input" value={sms.message} onChange={(event) => applySms({ ...sms, message: event.target.value })} placeholder="您好，我想詢問…" /></label>
+          <p className="key-note">掃描後開啟簡訊 App 並帶入號碼與內容，適合活動報名或客服。</p>
+        </div>
+      )}
+      <label className="field-label" htmlFor="qr-text">{template === "free" ? "網址或文字" : "產生的內容（可切回自由輸入手動修改）"}
+        <textarea id="qr-text" className="participant-input qr-input" maxLength={QR_MAX_LENGTH} value={text} readOnly={template !== "free"} onChange={(event) => { setTemplate("free"); setText(event.target.value); }} placeholder="https://example.com 或任何文字" />
       </label>
       <div className="qr-option-grid">
         <label className="field-label" htmlFor="qr-dark">前景色

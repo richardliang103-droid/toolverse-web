@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MAX_TIMER_MS, clampTimerMs, formatClock, isWarningZone } from "@/lib/timer";
+import { MAX_TIMER_MS, clampTimerMs, formatClock, formatStopwatch, isWarningZone } from "@/lib/timer";
 
 const STORAGE_KEY = "toolverse:countdown-timer:v1";
 const PRESETS = [
@@ -12,6 +12,14 @@ const PRESETS = [
 ] as const;
 
 type Phase = "idle" | "running" | "paused" | "finished";
+
+type TimerMode = "countdown" | "stopwatch" | "clock";
+
+const MODES: Array<{ id: TimerMode; label: string }> = [
+  { id: "countdown", label: "倒數" },
+  { id: "stopwatch", label: "碼表" },
+  { id: "clock", label: "時鐘" },
+];
 
 type Segment = { label: string; minutes: number };
 
@@ -63,8 +71,14 @@ export function CountdownTimerTool() {
   const [segments, setSegments] = useState<Segment[]>([]);
   const [segmentIndex, setSegmentIndex] = useState(0);
   const [hydrated, setHydrated] = useState(false);
+  const [mode, setMode] = useState<TimerMode>("countdown");
+  const [stopwatchMs, setStopwatchMs] = useState(0);
+  const [stopwatchRunning, setStopwatchRunning] = useState(false);
+  const [clockNow, setClockNow] = useState({ time: "", date: "" });
   const stageRef = useRef<HTMLDivElement>(null);
   const endAtRef = useRef(0);
+  const stopwatchBaseRef = useRef(0);
+  const stopwatchStartedRef = useRef(0);
 
   useEffect(() => {
     try {
@@ -73,7 +87,7 @@ export function CountdownTimerTool() {
         const data = JSON.parse(saved) as Record<string, unknown>;
         // 還原上次使用的時長需要一次性的 client hydration。
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setTotalMs(sanitizeDuration(data.totalMs)); setRemainingMs(sanitizeDuration(data.totalMs)); setSoundOn(data.soundOn !== false); setSegments(sanitizeSegments(data.segments));
+        setTotalMs(sanitizeDuration(data.totalMs)); setRemainingMs(sanitizeDuration(data.totalMs)); setSoundOn(data.soundOn !== false); setSegments(sanitizeSegments(data.segments)); setMode(data.mode === "stopwatch" || data.mode === "clock" ? data.mode : "countdown");
       }
     } catch { localStorage.removeItem(STORAGE_KEY); }
      
@@ -81,8 +95,8 @@ export function CountdownTimerTool() {
   }, []);
 
   useEffect(() => {
-    if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify({ totalMs, soundOn, segments }));
-  }, [hydrated, totalMs, soundOn, segments]);
+    if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify({ totalMs, soundOn, segments, mode }));
+  }, [hydrated, totalMs, soundOn, segments, mode]);
 
   // 以結束時間戳計算剩餘，interval 只負責重繪 — 背景分頁或節流也不會不準。
   useEffect(() => {
@@ -111,12 +125,38 @@ export function CountdownTimerTool() {
     return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
   }, [phase, soundOn, segments, segmentIndex]);
 
+  // 碼表同樣以絕對時間戳累計，interval 只負責重繪，分頁節流不影響準確度。
+  useEffect(() => {
+    if (mode !== "stopwatch" || !stopwatchRunning) return;
+    const tick = () => setStopwatchMs(stopwatchBaseRef.current + Date.now() - stopwatchStartedRef.current);
+    tick();
+    const interval = window.setInterval(tick, 200);
+    const onVisible = () => tick();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
+  }, [mode, stopwatchRunning]);
+
+  useEffect(() => {
+    if (mode !== "clock") return;
+    const tick = () => {
+      const now = new Date();
+      setClockNow({
+        time: now.toLocaleTimeString("zh-TW", { hour12: false }),
+        date: now.toLocaleDateString("zh-TW", { month: "long", day: "numeric", weekday: "long" }),
+      });
+    };
+    tick();
+    const interval = window.setInterval(tick, 250);
+    return () => window.clearInterval(interval);
+  }, [mode]);
+
   useEffect(() => {
     const original = document.title;
+    if (mode !== "countdown") { document.title = original; return () => { document.title = original; }; }
     if (phase === "running" || phase === "paused") document.title = `${formatClock(remainingMs)}｜倒數計時`;
     else if (phase === "finished") document.title = "時間到！｜倒數計時";
     return () => { document.title = original; };
-  }, [phase, remainingMs]);
+  }, [mode, phase, remainingMs]);
 
   function applyDuration(ms: number) {
     const clamped = sanitizeDuration(ms);
@@ -156,6 +196,22 @@ export function CountdownTimerTool() {
     applyDuration(clampTimerMs(totalMs + delta * 60_000));
   }
 
+  function stopwatchStart() {
+    stopwatchStartedRef.current = Date.now();
+    setStopwatchRunning(true);
+  }
+
+  function stopwatchPause() {
+    stopwatchBaseRef.current = stopwatchBaseRef.current + Date.now() - stopwatchStartedRef.current;
+    setStopwatchRunning(false);
+  }
+
+  function stopwatchReset() {
+    stopwatchBaseRef.current = 0;
+    setStopwatchRunning(false);
+    setStopwatchMs(0);
+  }
+
   async function toggleFullscreen() {
     const stage = stageRef.current;
     if (!stage) return;
@@ -172,8 +228,15 @@ export function CountdownTimerTool() {
 
   return <section className="workspace timer-workspace page-shell" aria-label="倒數計時器">
     <div className="panel timer-controls">
-      <div className="panel-header"><h2>設定時間</h2><span className="panel-meta">最長 99:59</span></div>
-      <div className="timer-presets">
+      <div className="panel-header"><h2>設定時間</h2><span className="panel-meta">{mode === "countdown" ? "最長 99:59" : mode === "stopwatch" ? "正計時" : "現在時刻"}</span></div>
+      <div className="flow-mode-toggle" role="radiogroup" aria-label="計時模式">
+        {MODES.map((item) => (
+          <button key={item.id} type="button" className={`button button-small ${mode === item.id ? "button-blue" : "button-secondary"}`} aria-pressed={mode === item.id} onClick={() => setMode(item.id)} disabled={phase === "running" || stopwatchRunning}>{item.label}</button>
+        ))}
+      </div>
+      {mode === "stopwatch" && <p className="key-note">碼表從 00:00 開始正計時，適合演講、比賽或紀錄工作時間；超過一小時自動顯示小時位。切分頁或螢幕休眠都不影響準確度。</p>}
+      {mode === "clock" && <p className="key-note">全螢幕大字時鐘，適合活動現場或講台上看時間；跟隨你裝置的系統時間。</p>}
+      {mode === "countdown" && <><div className="timer-presets">
         {PRESETS.map((preset) => (
           <button key={preset.ms} type="button" className={`button button-small ${totalMs === preset.ms ? "button-blue" : "button-secondary"}`} onClick={() => applyDuration(preset.ms)} disabled={phase === "running"}>{preset.label}</button>
         ))}
@@ -197,21 +260,24 @@ export function CountdownTimerTool() {
         {segments.length > 0 && <p className="key-note">每段結束會響提示音並自動接續下一段；單段的快速預設此時不生效。</p>}
       </details>
       <label className="check-row timer-sound"><input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} />結束時播放提示音</label>
-      <p className="key-note">計時以系統時間為準，切到其他分頁或螢幕休眠也不會漏秒；分頁標題會同步顯示剩餘時間。</p>
+      <p className="key-note">計時以系統時間為準，切到其他分頁或螢幕休眠也不會漏秒；分頁標題會同步顯示剩餘時間。</p></>}
     </div>
     <div className="panel panel-tinted timer-stage-panel">
-      <div ref={stageRef} className={`timer-stage${warning ? " timer-warning" : ""}${phase === "finished" ? " timer-finished" : ""}`}>
-        {segments.length > 0 && phase !== "idle" && phase !== "finished" && (
+      <div ref={stageRef} className={`timer-stage${mode === "countdown" && warning ? " timer-warning" : ""}${mode === "countdown" && phase === "finished" ? " timer-finished" : ""}`}>
+        {mode === "countdown" && segments.length > 0 && phase !== "idle" && phase !== "finished" && (
           <div className="timer-segment-indicator">{segments[segmentIndex].label || `第 ${segmentIndex + 1} 段`}（{segmentIndex + 1}/{segments.length}）</div>
         )}
-        <output className="timer-display" aria-live="polite">{phase === "finished" ? "時間到" : display}</output>
+        {mode === "clock" && clockNow.date && <div className="timer-segment-indicator">{clockNow.date}</div>}
+        <output className="timer-display" aria-live="polite">{mode === "stopwatch" ? formatStopwatch(stopwatchMs) : mode === "clock" ? (clockNow.time || "--:--:--") : phase === "finished" ? "時間到" : display}</output>
         <div className="timer-actions">
-          {phase === "running"
+          {mode === "countdown" && (phase === "running"
             ? <button className="button button-coral" type="button" onClick={pause}>暫停</button>
-            : <button className="button button-blue" type="button" onClick={start} disabled={phase === "finished" && totalMs <= 0}>{phase === "paused" ? "繼續" : phase === "finished" ? "再來一次" : "開始"}</button>}
-          {phase === "finished"
-            ? <button className="button button-secondary" type="button" onClick={reset}>重設</button>
-            : (phase !== "idle" && <button className="button button-secondary" type="button" onClick={reset}>重設</button>)}
+            : <button className="button button-blue" type="button" onClick={start} disabled={phase === "finished" && totalMs <= 0}>{phase === "paused" ? "繼續" : phase === "finished" ? "再來一次" : "開始"}</button>)}
+          {mode === "countdown" && phase !== "idle" && <button className="button button-secondary" type="button" onClick={reset}>重設</button>}
+          {mode === "stopwatch" && (stopwatchRunning
+            ? <button className="button button-coral" type="button" onClick={stopwatchPause}>暫停</button>
+            : <button className="button button-blue" type="button" onClick={stopwatchStart}>{stopwatchMs > 0 ? "繼續" : "開始"}</button>)}
+          {mode === "stopwatch" && stopwatchMs > 0 && !stopwatchRunning && <button className="button button-secondary" type="button" onClick={stopwatchReset}>歸零</button>}
           <button className="button button-secondary" type="button" onClick={toggleFullscreen}>全螢幕</button>
         </div>
       </div>
