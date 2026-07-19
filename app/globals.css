@@ -534,3 +534,42 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .pdf-thumb:hover { border-color: var(--blue); }
 .pdf-thumb img { display: block; width: 100%; height: auto; }
 .pdf-thumb span { position: absolute; right: 4px; bottom: 4px; padding: 1px 7px; border-radius: 999px; background: var(--ink); color: var(--paper); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 10px; }
+
+/* Password generator */
+.password-length-row { display: grid; gap: 8px; }
+.password-length-row .gantt-range { width: 100%; }
+.password-toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-top: 18px; }
+.password-toggle code { padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; background: white; font-size: 11.5px; color: var(--muted); }
+.password-workspace .key-note { margin-top: 16px; }
+.password-result-panel { display: flex; flex-direction: column; }
+.password-output { display: block; padding: 20px 18px; border: 1px solid var(--ink); border-radius: 12px; background: white; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: clamp(18px, 3.4vw, 26px); font-weight: 700; word-break: break-all; line-height: 1.4; letter-spacing: .02em; }
+.password-strength { margin-top: 16px; }
+.password-strength-bar { height: 9px; overflow: hidden; border: 1px solid var(--ink); border-radius: 999px; background: white; }
+.password-strength-bar span { display: block; height: 100%; border-radius: inherit; transition: width .2s ease, background .2s ease; }
+.password-strength-label { display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 700; }
+.password-strength-weak .password-strength-bar span { background: #d64545; }
+.password-strength-fair .password-strength-bar span { background: #e0922f; }
+.password-strength-strong .password-strength-bar span { background: #2aa96b; }
+.password-strength-excellent .password-strength-bar span { background: var(--blue); }
+.password-strength-weak .password-strength-label { color: #b72a22; }
+.password-strength-fair .password-strength-label { color: #97600f; }
+.password-strength-strong .password-strength-label { color: #23734a; }
+.password-strength-excellent .password-strength-label { color: var(--blue); }
+.password-result-panel .result-actions { margin-top: auto; padding-top: 18px; }
+
+/* Favicon generator */
+.favicon-field { margin-top: 4px; }
+.favicon-shapes { margin-top: 16px; }
+.favicon-previews { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; margin-bottom: 18px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: white; }
+.favicon-preview-item { display: grid; justify-items: center; gap: 6px; }
+.favicon-preview-item img { border: 1px solid var(--line); border-radius: 6px; image-rendering: auto; }
+.favicon-preview-item span { color: var(--muted); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 10.5px; }
+.favicon-snippets { display: grid; gap: 10px; margin-top: 16px; }
+.favicon-snippets details { padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px; background: white; }
+.favicon-snippets summary { cursor: pointer; font-size: 13px; font-weight: 700; }
+.favicon-snippets pre { max-height: 200px; overflow: auto; margin: 12px 0; padding: 12px; border-radius: 8px; background: #101628; color: #f5f1e8; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; line-height: 1.6; white-space: pre; }
+.favicon-hidden-canvas { display: none; }
+
+@media (max-width: 560px) {
+  .password-toggles { grid-template-columns: 1fr; }
+}
