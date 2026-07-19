@@ -11,4 +11,6 @@ export const tools = [
   { slug: "text-cleaner", name: "文字清理", description: "去空白、去重複行、排序與全形轉半形，即時統計字數，內容不上傳。", symbol: "¶", accent: "mint", status: "READY" },
   { slug: "exif-cleaner", name: "照片隱私清除", description: "無損移除 EXIF、GPS 位置與拍攝資訊，畫質不變，照片不上傳。", symbol: "◉", accent: "coral", status: "READY" },
   { slug: "chinese-converter", name: "繁簡轉換", description: "OpenCC 繁簡互轉，支援台灣用詞（軟件→軟體），本機處理不上傳。", symbol: "繁", accent: "blue", status: "READY" },
+  { slug: "password-generator", name: "密碼產生器", description: "Web Crypto 安全隨機產生高強度密碼，可調長度與字元類別，不上傳不儲存。", symbol: "⁂", accent: "sumi", status: "READY" },
+  { slug: "favicon-generator", name: "Favicon 產生器", description: "用文字、emoji 或圖片產生整套 favicon，附 HTML 與 manifest 片段。", symbol: "◆", accent: "sora", status: "READY" },
 ] as const;
