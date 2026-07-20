@@ -169,12 +169,12 @@ export function ImageCompressorTool() {
   return <section className="workspace upload-workspace page-shell" aria-label="圖片壓縮工具">
     <div className="panel">
       <span className="privacy-badge background-remover-badge">◱ 圖片不上傳</span>
-      <div className={`drop-zone compressor-drop ${dragging ? "dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} onClick={() => inputRef.current?.click()} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") inputRef.current?.click(); }}>
-        <div><div className="drop-icon" aria-hidden="true">◱</div><h2>{items.length > 0 ? `已加入 ${items.length} 張圖片` : "把圖片拖到這裡"}</h2><p>可一次選多張，全部在本機處理</p><span className="button button-secondary">{items.length > 0 ? "繼續加入" : "選擇圖片"}</span><input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={onFileChange} aria-label="選擇要壓縮的圖片" /><small className="file-note">JPG、PNG、WebP · 每張最大 25 MB · 最多 {MAX_FILES} 張</small></div>
+      <div className={`drop-zone compressor-drop ${dragging ? "dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); if (!busy) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { if (busy) { event.preventDefault(); setDragging(false); return; } onDrop(event); }} onClick={() => { if (!busy) inputRef.current?.click(); }} role="button" tabIndex={busy ? -1 : 0} aria-disabled={busy} onKeyDown={(event) => { if (!busy && (event.key === "Enter" || event.key === " ")) inputRef.current?.click(); }}>
+        <div><div className="drop-icon" aria-hidden="true">◱</div><h2>{items.length > 0 ? `已加入 ${items.length} 張圖片` : "把圖片拖到這裡"}</h2><p>{busy ? "處理中，完成後可再加入圖片" : "可一次選多張，全部在本機處理"}</p><span className="button button-secondary">{busy ? "處理中…" : items.length > 0 ? "繼續加入" : "選擇圖片"}</span><input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={onFileChange} disabled={busy} aria-label="選擇要壓縮的圖片" /><small className="file-note">JPG、PNG、WebP · 每張最大 25 MB · 最多 {MAX_FILES} 張</small></div>
       </div>
       <div className="flow-options compressor-options">
         <label className="field-label" htmlFor="compress-format">輸出格式
-          <select id="compress-format" value={format} onChange={(event) => { setFormat(event.target.value as OutputFormat); requeueFinished(); }}>
+          <select id="compress-format" value={format} disabled={busy} onChange={(event) => { setFormat(event.target.value as OutputFormat); requeueFinished(); }}>
             <option value="original">保持原格式</option>
             <option value="jpeg">JPG（相容性高）</option>
             <option value="webp">WebP（通常較小）</option>
@@ -182,7 +182,7 @@ export function ImageCompressorTool() {
           </select>
         </label>
         <label className="field-label" htmlFor="compress-max">尺寸上限（長邊）
-          <select id="compress-max" value={maxEdge} onChange={(event) => { setMaxEdge(Number(event.target.value)); requeueFinished(); }}>
+          <select id="compress-max" value={maxEdge} disabled={busy} onChange={(event) => { setMaxEdge(Number(event.target.value)); requeueFinished(); }}>
             <option value={0}>不縮放</option>
             <option value={4000}>4000 px</option>
             <option value={2000}>2000 px</option>
@@ -191,7 +191,7 @@ export function ImageCompressorTool() {
         </label>
         {(format === "jpeg" || format === "webp" || format === "original") && (
           <label className="field-label" htmlFor="compress-quality">壓縮品質：{quality}%
-            <input id="compress-quality" className="gantt-range" type="range" min={30} max={100} step={5} value={quality} onChange={(event) => { setQuality(Number(event.target.value)); requeueFinished(); }} />
+            <input id="compress-quality" className="gantt-range" type="range" min={30} max={100} step={5} value={quality} disabled={busy} onChange={(event) => { setQuality(Number(event.target.value)); requeueFinished(); }} />
           </label>
         )}
       </div>
