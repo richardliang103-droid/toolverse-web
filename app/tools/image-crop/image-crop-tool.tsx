@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { CROP_MIN_SIZE, applyAspect, clampCropRect, toNaturalRect, type CropRect } from "@/lib/crop";
+import { exceedsImagePixelLimit, imagePixelLimitMessage } from "@/lib/image-limits";
 
 const ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SIZE = 25 * 1024 * 1024;
@@ -21,6 +22,7 @@ export function ImageCropTool() {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragMode | null>(null);
+  const loadOperationRef = useRef(0);
   const [source, setSource] = useState("");
   const [fileName, setFileName] = useState("");
   const [natural, setNatural] = useState({ w: 0, h: 0 });
@@ -31,15 +33,19 @@ export function ImageCropTool() {
   const [error, setError] = useState("");
 
   const loadFile = useCallback((file: File | undefined) => {
+    const operationId = ++loadOperationRef.current;
     setError("");
     if (!file) return;
-    if (!ACCEPTED.has(file.type)) { setError("支援 JPG、PNG、WebP 圖片"); return; }
+    if (!ACCEPTED.has(file.type) && !(file.type === "" && /\.(jpe?g|png|webp)$/i.test(file.name))) { setError("支援 JPG、PNG、WebP 圖片"); return; }
     if (file.size > MAX_SIZE) { setError("圖片超過 25 MB 上限"); return; }
     const reader = new FileReader();
     reader.onload = () => {
+      if (loadOperationRef.current !== operationId) return;
       if (typeof reader.result !== "string") return;
       const image = new Image();
       image.onload = () => {
+        if (loadOperationRef.current !== operationId) return;
+        if (exceedsImagePixelLimit(image.naturalWidth, image.naturalHeight)) { setError(imagePixelLimitMessage()); return; }
         setSource(reader.result as string);
         setFileName(file.name);
         setNatural({ w: image.naturalWidth, h: image.naturalHeight });
@@ -51,7 +57,7 @@ export function ImageCropTool() {
         setRect({ x: Math.round(w * 0.1), y: Math.round(h * 0.1), w: Math.round(w * 0.8), h: Math.round(h * 0.8) });
         setAspectId("free");
       };
-      image.onerror = () => setError("無法讀取這張圖片");
+      image.onerror = () => { if (loadOperationRef.current === operationId) setError("無法讀取這張圖片"); };
       image.src = reader.result as string;
     };
     reader.readAsDataURL(file);
@@ -71,6 +77,10 @@ export function ImageCropTool() {
     setAspectId(id);
     const ratio = ASPECTS.find((item) => item.id === id)?.ratio;
     if (ratio) setRect((previous) => applyAspect(previous, ratio, display.w, display.h));
+  }
+
+  function updateRect(patch: Partial<CropRect>) {
+    setRect((previous) => clampCropRect({ ...previous, ...patch }, display.w, display.h));
   }
 
   function startDrag(event: React.PointerEvent, kind: DragMode["kind"]) {
@@ -153,7 +163,7 @@ export function ImageCropTool() {
       <input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={onPick} aria-label="選擇要裁切的圖片" />
       {source && (
         <>
-          <div className="flow-mode-toggle crop-aspect-row" role="radiogroup" aria-label="裁切比例">
+          <div className="flow-mode-toggle crop-aspect-row" role="group" aria-label="裁切比例">
             {ASPECTS.map((item) => (
               <button key={item.id} type="button" className={`button button-small ${aspectId === item.id ? "button-blue" : "button-secondary"}`} aria-pressed={aspectId === item.id} onClick={() => pickAspect(item.id)}>{item.label}</button>
             ))}
@@ -164,6 +174,20 @@ export function ImageCropTool() {
               <option value="jpeg">JPG（較小）</option>
             </select>
           </label>
+          <div className="crop-number-grid" aria-label="裁切區域數值設定">
+            <label className="field-label" htmlFor="crop-x">X
+              <input id="crop-x" className="number-input" type="number" min={0} max={display.w} value={Math.round(rect.x)} onChange={(event) => updateRect({ x: Number(event.target.value) || 0 })} />
+            </label>
+            <label className="field-label" htmlFor="crop-y">Y
+              <input id="crop-y" className="number-input" type="number" min={0} max={display.h} value={Math.round(rect.y)} onChange={(event) => updateRect({ y: Number(event.target.value) || 0 })} />
+            </label>
+            <label className="field-label" htmlFor="crop-width">寬
+              <input id="crop-width" className="number-input" type="number" min={CROP_MIN_SIZE} max={display.w} value={Math.round(rect.w)} onChange={(event) => updateRect({ w: Number(event.target.value) || CROP_MIN_SIZE })} />
+            </label>
+            <label className="field-label" htmlFor="crop-height">高
+              <input id="crop-height" className="number-input" type="number" min={CROP_MIN_SIZE} max={display.h} value={Math.round(rect.h)} onChange={(event) => updateRect({ h: Number(event.target.value) || CROP_MIN_SIZE })} />
+            </label>
+          </div>
           <div className="result-actions">
             <button className="button button-small button-blue" type="button" onClick={download}>下載裁切結果</button>
             <button className="button button-small button-secondary" type="button" onClick={() => inputRef.current?.click()}>換一張圖</button>

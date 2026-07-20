@@ -198,7 +198,7 @@ export function BackgroundRemover() {
       <div className={`drop-zone ${dragging ? "dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); if (!processing) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} onClick={() => { if (!processing) inputRef.current?.click(); }} role="button" tabIndex={processing ? -1 : 0} aria-disabled={processing} onKeyDown={(event) => { if (!processing && (event.key === "Enter" || event.key === " ")) inputRef.current?.click(); }}>
         <div><div className="drop-icon" aria-hidden="true">↥</div><h2>{file ? file.name : "把圖片拖到這裡"}</h2><p>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB · 已準備好` : "或從裝置選擇一張圖片"}</p><span className="button button-secondary">{processing ? "處理中…" : file ? "更換圖片" : "選擇圖片"}</span><input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={onFileChange} aria-label="選擇要去背的圖片" disabled={processing} /><small className="file-note">JPG、PNG、WebP · 最大 10 MB</small></div>
       </div>
-      <div className="flow-mode-toggle" role="radiogroup" aria-label="去背方式">
+      <div className="flow-mode-toggle" role="group" aria-label="去背方式">
         <button type="button" className={`button button-small ${mode === "local" ? "button-coral" : "button-secondary"}`} aria-pressed={mode === "local"} onClick={() => setMode("local")} disabled={processing}>本機 AI（免費、圖片不上傳）</button>
         <button type="button" className={`button button-small ${mode === "removebg" ? "button-coral" : "button-secondary"}`} aria-pressed={mode === "removebg"} onClick={() => setMode("removebg")} disabled={processing}>remove.bg API</button>
       </div>

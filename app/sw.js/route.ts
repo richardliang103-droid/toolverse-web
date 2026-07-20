@@ -1,7 +1,11 @@
-/* ToolVerse service worker：保守策略 —
-   靜態資產 cache-first（檔名帶 hash，不會過期錯亂）、
-   頁面 network-first（斷線時回快取），絕不攔截非 GET 與跨網域請求。 */
-const CACHE = "toolverse-20260720-v2";
+export const dynamic = "force-dynamic";
+
+const commit = process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? "local";
+const cacheName = `toolverse-${commit.slice(0, 12)}`;
+
+export function GET() {
+  const script = `/* Generated for ${cacheName}: do not cache this response. */
+const CACHE = ${JSON.stringify(cacheName)};
 const OFFLINE_PAGE = "/offline";
 
 self.addEventListener("install", (event) => {
@@ -19,7 +23,7 @@ self.addEventListener("activate", (event) => {
 
 function isStaticAsset(url) {
   return url.pathname.startsWith("/_next/static/")
-    || /\.(png|svg|ico|webmanifest|woff2?)$/.test(url.pathname);
+    || /\\.(png|svg|ico|webmanifest|woff2?)$/.test(url.pathname);
 }
 
 self.addEventListener("fetch", (event) => {
@@ -51,4 +55,13 @@ self.addEventListener("fetch", (event) => {
       }
     })());
   }
-});
+});`;
+
+  return new Response(script, {
+    headers: {
+      "Content-Type": "application/javascript; charset=utf-8",
+      "Cache-Control": "no-store, max-age=0",
+      "Service-Worker-Allowed": "/",
+    },
+  });
+}

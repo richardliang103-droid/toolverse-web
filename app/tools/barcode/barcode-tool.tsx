@@ -118,7 +118,7 @@ export function BarcodeTool() {
   return <section className="workspace barcode-workspace page-shell" aria-label="條碼產生器">
     <div className="panel">
       <div className="panel-header"><h2>內容與格式</h2><span className="panel-meta">{text.trim().length}/80</span></div>
-      <div className="flow-mode-toggle" role="radiogroup" aria-label="條碼格式">
+      <div className="flow-mode-toggle" role="group" aria-label="條碼格式">
         <button type="button" className={`button button-small ${format === "CODE128" ? "button-blue" : "button-secondary"}`} aria-pressed={format === "CODE128"} onClick={() => setFormat("CODE128")}>Code 128（通用）</button>
         <button type="button" className={`button button-small ${format === "EAN13" ? "button-blue" : "button-secondary"}`} aria-pressed={format === "EAN13"} onClick={() => { setFormat("EAN13"); if (!/^\d+$/.test(text.trim())) setText("471234567890"); }}>EAN-13（商品）</button>
       </div>

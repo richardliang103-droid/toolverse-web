@@ -8,7 +8,7 @@ import type { QrErrorLevel } from "@/lib/qr";
 const STORAGE_KEY = "toolverse:qr-code:v1";
 const SIZES = [256, 512, 1024] as const;
 
-type StoredState = { text: string; dark: string; light: string; level: QrErrorLevel; size: number };
+type StoredState = { dark: string; light: string; level: QrErrorLevel; size: number };
 
 type QrTemplate = "free" | "wifi" | "vcard" | "sms";
 
@@ -23,7 +23,6 @@ function sanitizeStoredState(value: unknown): StoredState {
   const data = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
   const hex = (input: unknown, fallback: string) => (typeof input === "string" && /^#[0-9a-f]{6}$/i.test(input) ? input : fallback);
   return {
-    text: typeof data.text === "string" ? data.text.slice(0, QR_MAX_LENGTH) : "",
     dark: hex(data.dark, "#101628"),
     light: hex(data.light, "#ffffff"),
     level: data.level === "L" || data.level === "Q" || data.level === "H" ? data.level : "M",
@@ -109,11 +108,9 @@ export function QrCodeTool() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const data = sanitizeStoredState(JSON.parse(saved));
-        if (data.text) {
-          // 還原此裝置的設定需要一次性的 client hydration。
-          // eslint-disable-next-line react-hooks/set-state-in-effect
-          setText(data.text); setDark(data.dark); setLight(data.light); setLevel(data.level); setSize(data.size);
-        }
+        // 不保存 QR 內容：Wi-Fi 密碼、名片與簡訊都可能是敏感資料。
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setDark(data.dark); setLight(data.light); setLevel(data.level); setSize(data.size);
       }
     } catch { localStorage.removeItem(STORAGE_KEY); }
      
@@ -122,8 +119,8 @@ export function QrCodeTool() {
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ text, dark, light, level, size }));
-  }, [hydrated, text, dark, light, level, size]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ dark, light, level, size }));
+  }, [hydrated, dark, light, level, size]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -185,7 +182,7 @@ export function QrCodeTool() {
   return <section className="workspace qr-workspace page-shell" aria-label="QR Code 產生器">
     <div className="panel">
       <div className="panel-header"><h2>內容與樣式</h2><span className="panel-meta">{text.trim().length}/{QR_MAX_LENGTH}</span></div>
-      <div className="flow-mode-toggle qr-template-row" role="radiogroup" aria-label="內容模板">
+      <div className="flow-mode-toggle qr-template-row" role="group" aria-label="內容模板">
         {TEMPLATES.map((item) => (
           <button key={item.id} type="button" className={`button button-small ${template === item.id ? "button-blue" : "button-secondary"}`} aria-pressed={template === item.id} onClick={() => setTemplate(item.id)}>{item.label}</button>
         ))}

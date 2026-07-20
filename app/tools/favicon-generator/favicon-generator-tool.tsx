@@ -1,7 +1,9 @@
 "use client";
 
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
+import { createZip, downloadBlob } from "@/lib/download-zip";
 import { FAVICON_SIZES, faviconHtmlSnippet, faviconInitials, faviconManifestSnippet } from "@/lib/favicon";
+import { exceedsImagePixelLimit, imagePixelLimitMessage } from "@/lib/image-limits";
 
 const STORAGE_KEY = "toolverse:favicon-generator:v1";
 const RENDER = 512; // 主畫布邊長，其餘尺寸由它縮出
@@ -38,15 +40,6 @@ function drawBackground(context: CanvasRenderingContext2D, size: number, bg: str
     context.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
     context.fill();
   }
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function FaviconGeneratorTool() {
@@ -125,19 +118,26 @@ export function FaviconGeneratorTool() {
     if (file.size > 5 * 1024 * 1024) { setError("圖片請小於 5 MB"); return; }
     const url = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = () => { setImage(img); setMode("image"); URL.revokeObjectURL(url); };
+    img.onload = () => {
+      if (exceedsImagePixelLimit(img.naturalWidth, img.naturalHeight)) setError(imagePixelLimitMessage());
+      else { setImage(img); setMode("image"); }
+      URL.revokeObjectURL(url);
+    };
     img.onerror = () => { setError("無法讀取這張圖片"); URL.revokeObjectURL(url); };
     img.src = url;
   }
 
-  function downloadSize(size: number, filename: string) {
+  function renderBlob(size: number): Promise<Blob | null> {
     const canvas = paint(size);
-    if (!canvas) { setError("產生失敗，請重試"); return; }
-    canvas.toBlob((blob) => { if (blob) downloadBlob(blob, filename); }, "image/png");
+    if (!canvas) return Promise.resolve(null);
+    return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
   }
 
-  function downloadAll() {
-    for (const item of FAVICON_SIZES) downloadSize(item.size, item.filename);
+  async function downloadAll() {
+    const rendered = await Promise.all(FAVICON_SIZES.map(async (item) => ({ name: item.filename, blob: await renderBlob(item.size) })));
+    const entries = rendered.filter((item): item is { name: string; blob: Blob } => item.blob !== null);
+    if (entries.length !== FAVICON_SIZES.length) { setError("部分尺寸產生失敗，請重試"); return; }
+    downloadBlob(await createZip(entries), "toolverse-favicon.zip");
   }
 
   async function copySnippet(kind: "html" | "manifest") {
@@ -152,20 +152,20 @@ export function FaviconGeneratorTool() {
 
   return <section className="workspace favicon-workspace page-shell" aria-label="Favicon 產生器">
     <div className="panel">
-      <div className="flow-mode-toggle" role="radiogroup" aria-label="來源">
+      <div className="flow-mode-toggle" role="group" aria-label="來源">
         <button type="button" className={`button button-small ${mode === "text" ? "button-blue" : "button-secondary"}`} aria-pressed={mode === "text"} onClick={() => setMode("text")}>文字／emoji</button>
         <button type="button" className={`button button-small ${mode === "image" ? "button-blue" : "button-secondary"}`} aria-pressed={mode === "image"} onClick={() => setMode("image")}>上傳圖片</button>
       </div>
       {mode === "text" ? (
         <>
-          <label className="field-label favicon-field" htmlFor="fav-text">文字或 emoji（最多兩字）
+          <label className="field-label favicon-field" htmlFor="fav-text">文字或 emoji（會自動取前兩個字）
             <input id="fav-text" className="key-input" value={text} maxLength={8} onChange={(event) => setText(event.target.value)} placeholder="T、日、🚀" />
           </label>
           <div className="qr-option-grid">
             <label className="field-label" htmlFor="fav-bg">背景色<span className="qr-color-row"><input id="fav-bg" type="color" value={bg} onChange={(event) => setBg(event.target.value)} /><code>{bg}</code></span></label>
             <label className="field-label" htmlFor="fav-fg">文字色<span className="qr-color-row"><input id="fav-fg" type="color" value={fg} onChange={(event) => setFg(event.target.value)} /><code>{fg}</code></span></label>
           </div>
-          <div className="flow-mode-toggle favicon-shapes" role="radiogroup" aria-label="形狀">
+          <div className="flow-mode-toggle favicon-shapes" role="group" aria-label="形狀">
             {(["circle", "rounded", "square"] as Shape[]).map((option) => (
               <button key={option} type="button" className={`button button-small ${shape === option ? "button-blue" : "button-secondary"}`} aria-pressed={shape === option} onClick={() => setShape(option)}>{option === "circle" ? "圓形" : option === "rounded" ? "圓角" : "方形"}</button>
             ))}
@@ -193,7 +193,7 @@ export function FaviconGeneratorTool() {
         ))}
       </div>
       <div className="result-actions">
-        <button className="button button-small button-blue" type="button" onClick={downloadAll} disabled={!preview}>下載全套 PNG</button>
+        <button className="button button-small button-blue" type="button" onClick={() => { void downloadAll(); }} disabled={!preview}>下載全套 ZIP</button>
       </div>
       <div className="favicon-snippets">
         <details><summary>HTML &lt;head&gt; 片段</summary><pre>{faviconHtmlSnippet()}</pre><button className="button button-small button-secondary" type="button" onClick={() => copySnippet("html")}>{copied === "html" ? "已複製 ✓" : "複製 HTML"}</button></details>

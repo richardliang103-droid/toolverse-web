@@ -112,7 +112,7 @@ export function ChineseConverterTool() {
       <div className="panel-header"><h2>{direction === "s2t" ? "簡體輸入" : "繁體輸入"}</h2><span className="panel-meta">{inputCount} 字</span></div>
       <label className="sr-only" htmlFor="cc-input">要轉換的文字</label>
       <textarea id="cc-input" className="participant-input cleaner-input" value={input} onChange={(event) => setInput(event.target.value)} placeholder={direction === "s2t" ? "贴上简体中文，会即时转成繁体…" : "貼上繁體中文，會即時轉成簡體…"} />
-      <div className="flow-mode-toggle" role="radiogroup" aria-label="轉換方向">
+      <div className="flow-mode-toggle" role="group" aria-label="轉換方向">
         <button type="button" className={`button button-small ${direction === "s2t" ? "button-blue" : "button-secondary"}`} aria-pressed={direction === "s2t"} onClick={() => setDirection("s2t")}>簡 → 繁</button>
         <button type="button" className={`button button-small ${direction === "t2s" ? "button-blue" : "button-secondary"}`} aria-pressed={direction === "t2s"} onClick={() => setDirection("t2s")}>繁 → 簡</button>
         <button type="button" className="button button-small button-secondary" onClick={swap} title="交換方向並帶入結果">⇄ 交換</button>

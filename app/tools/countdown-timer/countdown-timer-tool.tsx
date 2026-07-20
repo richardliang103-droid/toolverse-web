@@ -225,38 +225,39 @@ export function CountdownTimerTool() {
   const warning = phase === "running" && isWarningZone(remainingMs, segmentTotalMs);
   const display = formatClock(phase === "idle" ? (segments.length > 0 ? segments[0].minutes * 60_000 : totalMs) : remainingMs);
   const minutesTotal = Math.round(totalMs / 60_000);
+  const countdownActive = phase === "running" || phase === "paused";
 
   return <section className="workspace timer-workspace page-shell" aria-label="倒數計時器">
     <div className="panel timer-controls">
       <div className="panel-header"><h2>設定時間</h2><span className="panel-meta">{mode === "countdown" ? "最長 99:59" : mode === "stopwatch" ? "正計時" : "現在時刻"}</span></div>
-      <div className="flow-mode-toggle" role="radiogroup" aria-label="計時模式">
+      <div className="flow-mode-toggle" role="group" aria-label="計時模式">
         {MODES.map((item) => (
-          <button key={item.id} type="button" className={`button button-small ${mode === item.id ? "button-blue" : "button-secondary"}`} aria-pressed={mode === item.id} onClick={() => setMode(item.id)} disabled={phase === "running" || stopwatchRunning}>{item.label}</button>
+          <button key={item.id} type="button" className={`button button-small ${mode === item.id ? "button-blue" : "button-secondary"}`} aria-pressed={mode === item.id} onClick={() => setMode(item.id)} disabled={countdownActive || stopwatchRunning}>{item.label}</button>
         ))}
       </div>
       {mode === "stopwatch" && <p className="key-note">碼表從 00:00 開始正計時，適合演講、比賽或紀錄工作時間；超過一小時自動顯示小時位。切分頁或螢幕休眠都不影響準確度。</p>}
       {mode === "clock" && <p className="key-note">全螢幕大字時鐘，適合活動現場或講台上看時間；跟隨你裝置的系統時間。</p>}
       {mode === "countdown" && <><div className="timer-presets">
         {PRESETS.map((preset) => (
-          <button key={preset.ms} type="button" className={`button button-small ${totalMs === preset.ms ? "button-blue" : "button-secondary"}`} onClick={() => applyDuration(preset.ms)} disabled={phase === "running"}>{preset.label}</button>
+          <button key={preset.ms} type="button" className={`button button-small ${totalMs === preset.ms ? "button-blue" : "button-secondary"}`} onClick={() => applyDuration(preset.ms)} disabled={countdownActive}>{preset.label}</button>
         ))}
       </div>
       <div className="timer-custom">
-        <button className="button button-small button-secondary" type="button" onClick={() => adjustMinutes(-1)} disabled={phase === "running" || totalMs <= 60_000} aria-label="減少一分鐘">−1 分</button>
+        <button className="button button-small button-secondary" type="button" onClick={() => adjustMinutes(-1)} disabled={countdownActive || totalMs <= 60_000} aria-label="減少一分鐘">−1 分</button>
         <span className="timer-custom-value">{minutesTotal} 分鐘</span>
-        <button className="button button-small button-secondary" type="button" onClick={() => adjustMinutes(1)} disabled={phase === "running" || totalMs >= MAX_TIMER_MS - 59_000} aria-label="增加一分鐘">＋1 分</button>
+        <button className="button button-small button-secondary" type="button" onClick={() => adjustMinutes(1)} disabled={countdownActive || totalMs >= MAX_TIMER_MS - 59_000} aria-label="增加一分鐘">＋1 分</button>
       </div>
       <details className="timer-segments" open={segments.length > 0}>
         <summary>多段模式{segments.length > 0 ? `（${segments.length} 段）` : "（選用）"}</summary>
         {segments.map((segment, index) => (
           <div className="timer-segment-row" key={index}>
-            <input className="key-input" aria-label={`第 ${index + 1} 段名稱`} placeholder={`第 ${index + 1} 段`} maxLength={20} value={segment.label} disabled={phase === "running"} onChange={(event) => setSegments((previous) => previous.map((item, at) => (at === index ? { ...item, label: event.target.value } : item)))} />
-            <input className="number-input" aria-label={`第 ${index + 1} 段分鐘數`} type="number" min={1} max={99} value={segment.minutes} disabled={phase === "running"} onChange={(event) => setSegments((previous) => previous.map((item, at) => (at === index ? { ...item, minutes: Math.min(Math.max(Math.round(Number(event.target.value)) || 1, 1), 99) } : item)))} />
+            <input className="key-input" aria-label={`第 ${index + 1} 段名稱`} placeholder={`第 ${index + 1} 段`} maxLength={20} value={segment.label} disabled={countdownActive} onChange={(event) => setSegments((previous) => previous.map((item, at) => (at === index ? { ...item, label: event.target.value } : item)))} />
+            <input className="number-input" aria-label={`第 ${index + 1} 段分鐘數`} type="number" min={1} max={99} value={segment.minutes} disabled={countdownActive} onChange={(event) => setSegments((previous) => previous.map((item, at) => (at === index ? { ...item, minutes: Math.min(Math.max(Math.round(Number(event.target.value)) || 1, 1), 99) } : item)))} />
             <span className="timer-segment-unit">分</span>
-            <button className="gantt-row-delete" type="button" aria-label={`刪除第 ${index + 1} 段`} disabled={phase === "running"} onClick={() => setSegments((previous) => previous.filter((_, at) => at !== index))}>✕</button>
+            <button className="gantt-row-delete" type="button" aria-label={`刪除第 ${index + 1} 段`} disabled={countdownActive} onClick={() => setSegments((previous) => previous.filter((_, at) => at !== index))}>✕</button>
           </div>
         ))}
-        <button className="button button-small button-secondary" type="button" disabled={phase === "running" || segments.length >= 8} onClick={() => setSegments((previous) => [...previous, { label: "", minutes: 3 }])}>＋ 加一段</button>
+        <button className="button button-small button-secondary" type="button" disabled={countdownActive || segments.length >= 8} onClick={() => setSegments((previous) => [...previous, { label: "", minutes: 3 }])}>＋ 加一段</button>
         {segments.length > 0 && <p className="key-note">每段結束會響提示音並自動接續下一段；單段的快速預設此時不生效。</p>}
       </details>
       <label className="check-row timer-sound"><input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} />結束時播放提示音</label>

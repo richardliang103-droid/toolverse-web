@@ -878,6 +878,7 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .audio-number { width: 96px; }
 .audio-selection-length { color: var(--muted); font-size: 13px; padding-bottom: 10px; }
 .audio-waveform { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 12px; }
+.crop-number-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
 .audio-merge-list { display: grid; gap: 8px; margin: 14px 0; padding: 0; list-style: none; }
 .audio-merge-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; background: white; }
 .audio-merge-name { min-width: 0; flex: 1; display: grid; overflow: hidden; font-size: 14px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
@@ -888,6 +889,7 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
   .compare-inputs { grid-template-columns: 1fr; }
   .markdown-workspace { grid-template-columns: 1fr; }
   .converter-options { grid-template-columns: 1fr; }
+  .crop-number-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* === 設計感升級：紙紋、印章 eyebrow、卡片編號、頁尾、微互動 === */

@@ -245,7 +245,7 @@ export function AiFlowchartTool() {
       <div className="flow-options">
         <label className="field-label" htmlFor="flow-direction">排列方向<select id="flow-direction" value={direction} onChange={(event) => changeDirection(event.target.value as "TD" | "LR")}><option value="TD">由上到下</option><option value="LR">由左到右</option></select></label>
       </div>
-      <div className="flow-mode-toggle" role="radiogroup" aria-label="AI 來源">
+      <div className="flow-mode-toggle" role="group" aria-label="AI 來源">
         <button type="button" className={`button button-small ${mode === "gemini" ? "button-blue" : "button-secondary"}`} aria-pressed={mode === "gemini"} onClick={() => setMode("gemini")} disabled={loading}>Gemini（免費額度）</button>
         <button type="button" className={`button button-small ${mode === "openai" ? "button-blue" : "button-secondary"}`} aria-pressed={mode === "openai"} onClick={() => setMode("openai")} disabled={loading}>OpenAI</button>
       </div>

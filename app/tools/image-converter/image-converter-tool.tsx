@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { createZip, downloadBlob } from "@/lib/download-zip";
 import { formatBytes } from "@/lib/image-compress";
+import { exceedsImagePixelLimit, imagePixelLimitMessage } from "@/lib/image-limits";
 
 const MAX_FILES = 20;
 const MAX_SIZE = 25 * 1024 * 1024;
@@ -15,6 +17,8 @@ type Item = {
   status: "pending" | "done" | "error";
   outputUrl?: string;
   outputSize?: number;
+  outputBlob?: Blob;
+  outputFormat?: TargetFormat;
   width?: number;
   height?: number;
 };
@@ -27,6 +31,8 @@ function outputName(name: string, format: TargetFormat) {
 
 export function ImageConverterTool() {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const operationRef = useRef(0);
+  const itemsRef = useRef<Item[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [format, setFormat] = useState<TargetFormat>("webp");
   const [quality, setQuality] = useState(90);
@@ -34,6 +40,7 @@ export function ImageConverterTool() {
   const [error, setError] = useState("");
 
   function addFiles(list: FileList | null) {
+    if (busy || !list) return;
     setError("");
     const incoming: Item[] = [];
     for (const file of Array.from(list ?? [])) {
@@ -41,22 +48,27 @@ export function ImageConverterTool() {
       if (file.size > MAX_SIZE) { setError(`「${file.name}」超過 25 MB 上限`); continue; }
       incoming.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, file, status: "pending" });
     }
-    setItems((previous) => [...previous, ...incoming].slice(0, MAX_FILES));
+    const remaining = MAX_FILES - items.length;
+    const accepted = incoming.slice(0, Math.max(0, remaining));
+    if (accepted.length < incoming.length) setError(`已加入前 ${accepted.length} 張，最多 ${MAX_FILES} 張。`);
+    setItems((previous) => [...previous, ...accepted]);
   }
 
   function loadImage(file: File) {
     return new Promise<HTMLImageElement>((resolve, reject) => {
       const url = URL.createObjectURL(file);
       const image = new Image();
-      image.onload = () => resolve(image);
+      image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
       image.onerror = () => { URL.revokeObjectURL(url); reject(new Error("decode failed")); };
       image.src = url;
     });
   }
 
   async function convertAll() {
+    const operationId = ++operationRef.current;
     setBusy(true);
     setError("");
+    const options = { format, quality };
     for (const item of items) {
       if (item.status === "done") continue;
       try {
@@ -64,33 +76,43 @@ export function ImageConverterTool() {
         // SVG 沒有固有像素時以 1024px 寬點陣化
         const width = image.naturalWidth || 1024;
         const height = image.naturalHeight || Math.round(1024 * ((image.height || 1) / (image.width || 1)));
+        if (exceedsImagePixelLimit(width, height)) throw new Error("pixel limit");
         const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
         const context = canvas.getContext("2d");
         if (!context) throw new Error("no canvas");
-        if (format === "jpeg") { context.fillStyle = "#ffffff"; context.fillRect(0, 0, width, height); }
+        if (options.format === "jpeg") { context.fillStyle = "#ffffff"; context.fillRect(0, 0, width, height); }
         context.drawImage(image, 0, 0, width, height);
-        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, `image/${format}`, format === "png" ? undefined : quality / 100));
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, `image/${options.format}`, options.format === "png" ? undefined : options.quality / 100));
         if (!blob) throw new Error("encode failed");
         const outputUrl = URL.createObjectURL(blob);
-        setItems((previous) => previous.map((entry) => (entry.id === item.id ? { ...entry, status: "done", outputUrl, outputSize: blob.size, width, height } : entry)));
-      } catch {
-        setItems((previous) => previous.map((entry) => (entry.id === item.id ? { ...entry, status: "error" } : entry)));
+        if (operationRef.current !== operationId) { URL.revokeObjectURL(outputUrl); return; }
+        setItems((previous) => previous.map((entry) => (entry.id === item.id ? { ...entry, status: "done", outputUrl, outputBlob: blob, outputFormat: options.format, outputSize: blob.size, width, height } : entry)));
+      } catch (caught) {
+        if (operationRef.current !== operationId) return;
+        const message = caught instanceof Error && caught.message === "pixel limit" ? imagePixelLimitMessage() : "轉換失敗";
+        setItems((previous) => previous.map((entry) => (entry.id === item.id ? { ...entry, status: "error", outputSize: undefined } : entry)));
+        setError(message);
       }
     }
-    setBusy(false);
+    if (operationRef.current === operationId) setBusy(false);
   }
 
-  function downloadAll() {
-    for (const item of items) {
-      if (item.status !== "done" || !item.outputUrl) continue;
-      const anchor = document.createElement("a");
-      anchor.href = item.outputUrl;
-      anchor.download = outputName(item.file.name, format);
-      anchor.click();
-    }
+  function requeueForOptions() {
+    operationRef.current += 1;
+    setItems((previous) => previous.map((item) => {
+      if (item.outputUrl) URL.revokeObjectURL(item.outputUrl);
+      return { id: item.id, file: item.file, status: "pending" as const };
+    }));
   }
+
+  useEffect(() => { itemsRef.current = items; }, [items]);
+
+  useEffect(() => () => {
+    operationRef.current += 1;
+    for (const item of itemsRef.current) if (item.outputUrl) URL.revokeObjectURL(item.outputUrl);
+  }, []);
 
   const doneCount = items.filter((item) => item.status === "done").length;
 
@@ -100,25 +122,25 @@ export function ImageConverterTool() {
       <div
         className="crop-dropzone converter-dropzone"
         onDragOver={(event: DragEvent) => event.preventDefault()}
-        onDrop={(event: DragEvent<HTMLDivElement>) => { event.preventDefault(); addFiles(event.dataTransfer.files); }}
+        onDrop={(event: DragEvent<HTMLDivElement>) => { event.preventDefault(); if (!busy) addFiles(event.dataTransfer.files); }}
       >
         <p><strong>把圖片拖到這裡</strong></p>
         <p className="key-note">或</p>
         <button className="button button-small button-blue" type="button" onClick={() => inputRef.current?.click()} disabled={busy || items.length >= MAX_FILES}>選擇圖片（{items.length}/{MAX_FILES}）</button>
         <p className="key-note">輸入：JPG、PNG、WebP、GIF、BMP、SVG · 每張上限 25 MB</p>
       </div>
-      <input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/svg+xml" multiple onChange={(event: ChangeEvent<HTMLInputElement>) => { addFiles(event.target.files); event.target.value = ""; }} aria-label="選擇要轉換的圖片" />
+      <input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/svg+xml" multiple disabled={busy} onChange={(event: ChangeEvent<HTMLInputElement>) => { addFiles(event.target.files); event.target.value = ""; }} aria-label="選擇要轉換的圖片" />
       <div className="converter-options">
         <label className="field-label" htmlFor="converter-format">輸出格式
-          <select id="converter-format" className="key-input" value={format} onChange={(event) => { setFormat(event.target.value as TargetFormat); setItems((previous) => previous.map((item) => ({ ...item, status: "pending", outputUrl: undefined, outputSize: undefined }))); }}>
-            <option value="webp">WebP（最小）</option>
+          <select id="converter-format" className="key-input" value={format} disabled={busy} onChange={(event) => { setFormat(event.target.value as TargetFormat); requeueForOptions(); }}>
+            <option value="webp">WebP（通常較小）</option>
             <option value="png">PNG（無損、透明）</option>
             <option value="jpeg">JPG（相容性最好）</option>
           </select>
         </label>
         {format !== "png" && (
           <label className="field-label" htmlFor="converter-quality">品質：{quality}%
-            <input id="converter-quality" type="range" min={40} max={100} step={5} value={quality} onChange={(event) => setQuality(Number(event.target.value))} />
+            <input id="converter-quality" type="range" min={40} max={100} step={5} value={quality} disabled={busy} onChange={(event) => { setQuality(Number(event.target.value)); requeueForOptions(); }} />
           </label>
         )}
       </div>
@@ -136,13 +158,13 @@ export function ImageConverterTool() {
                 <li className={`compressor-item${item.status === "done" ? " compressor-item-done" : item.status === "error" ? " compressor-item-error" : ""}`} key={item.id}>
                   <span className="pdf-merge-name">{item.file.name}<small>{formatBytes(item.file.size)}{item.status === "done" && item.outputSize !== undefined && <> → <b>{formatBytes(item.outputSize)}</b>{item.width ? ` · ${item.width}×${item.height}` : ""}</>}{item.status === "error" && " · 轉換失敗"}</small></span>
                   <span className="pdf-merge-actions">
-                    {item.status === "done" && item.outputUrl && <a className="button button-small button-secondary" href={item.outputUrl} download={outputName(item.file.name, format)}>下載</a>}
-                    <button className="gantt-row-delete" type="button" aria-label={`移除 ${item.file.name}`} onClick={() => setItems((previous) => previous.filter((entry) => entry.id !== item.id))}>✕</button>
+                    {item.status === "done" && item.outputUrl && <a className="button button-small button-secondary" href={item.outputUrl} download={outputName(item.file.name, item.outputFormat ?? format)}>下載</a>}
+                    <button className="gantt-row-delete" type="button" aria-label={`移除 ${item.file.name}`} disabled={busy} onClick={() => setItems((previous) => { const target = previous.find((entry) => entry.id === item.id); if (target?.outputUrl) URL.revokeObjectURL(target.outputUrl); return previous.filter((entry) => entry.id !== item.id); })}>✕</button>
                   </span>
                 </li>
               ))}
             </ul>
-            {doneCount > 1 && <div className="result-actions"><button className="button button-small button-blue" type="button" onClick={downloadAll}>全部下載（{doneCount} 張）</button></div>}
+            {doneCount > 1 && <div className="result-actions"><button className="button button-small button-blue" type="button" onClick={() => { void (async () => { const ready = items.filter((item) => item.status === "done" && item.outputBlob).map((item) => ({ name: outputName(item.file.name, item.outputFormat ?? format), blob: item.outputBlob! })); downloadBlob(await createZip(ready), "toolverse-images.zip"); })(); }}>下載 ZIP（{doneCount} 張）</button></div>}
           </>}
     </div>
   </section>;
