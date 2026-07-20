@@ -10,7 +10,7 @@ export default function Home() {
       <SiteHeader />
       <Entrance>
         <section className="directory-heading page-shell">
-          <p className="directory-eyebrow" data-rise><span className="eyebrow-seal" aria-hidden="true">道</span>TOOLVERSE — 免登入・資料留在你手上</p>
+          <p className="directory-eyebrow" data-rise>TOOLVERSE — 免登入・資料留在你手上</p>
           <h1><SplitText text="所有工具" /></h1>
           <p data-rise>選一個，直接開始。</p>
         </section>

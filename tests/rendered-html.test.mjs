@@ -54,7 +54,7 @@ test("server-renders all tool routes", async () => {
     ["/tools/markdown-editor", /即時渲染|預覽/],
     ["/tools/csv-editor", /CSV／TSV 表格/],
     ["/tools/image-converter", /輸出格式/],
-    ["/tools/audio-trimmer", /把音訊檔拖到這裡/],
+    ["/tools/audio-trimmer", /把音訊檔拖到這裡|合併音檔/],
   ];
   for (const [pathname, pattern] of routes) {
     const response = await render(pathname);
