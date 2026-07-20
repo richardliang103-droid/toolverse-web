@@ -1,0 +1,27 @@
+name: Production Health Check
+
+on:
+  schedule:
+    # 每天台北時間早上 9 點（UTC+8 → 01:00 UTC）
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe key routes
+        run: |
+          BASE="https://toolverse-web.vercel.app"
+          FAILED=0
+          for path in / /tools/lottery /tools/gantt /tools/pdf-toolkit /tools/text-compare /sitemap.xml /robots.txt /manifest.webmanifest; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$BASE$path")
+            echo "$path -> $code"
+            if [ "$code" != "200" ]; then FAILED=1; fi
+          done
+          # 首頁必須包含工具內容（防止 200 但渲染空白的情況）
+          if ! curl -s --max-time 20 "$BASE/" | grep -q "所有工具"; then
+            echo "homepage content check failed"
+            FAILED=1
+          fi
+          exit $FAILED
