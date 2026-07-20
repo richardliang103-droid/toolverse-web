@@ -1,6 +1,15 @@
-export function normalizeParticipants(rawText: string, removeDuplicates = true) {
-  const participants = rawText.split(/\r?\n/).map((name) => name.trim()).filter(Boolean);
-  return removeDuplicates ? [...new Set(participants)] : participants;
+export type Participant = { id: string; label: string };
+
+/** 每一行都是一張獨立的籤；id 不能以顯示名稱取代，否則同名者會互相影響。 */
+export function normalizeParticipants(rawText: string, removeDuplicates = true): Participant[] {
+  const lines = rawText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+  const labels = removeDuplicates ? lines.filter((label, index) => lines.indexOf(label) === index) : lines;
+  const occurrences = new Map<string, number>();
+  return labels.map((label) => {
+    const occurrence = occurrences.get(label) ?? 0;
+    occurrences.set(label, occurrence + 1);
+    return { id: `${label}\u0000${occurrence}`, label };
+  });
 }
 
 function cryptoRandomIndex(maxExclusive: number) {
@@ -11,7 +20,7 @@ function cryptoRandomIndex(maxExclusive: number) {
   return values[0] % maxExclusive;
 }
 
-export function drawWinners(participants: string[], count: number) {
+export function drawWinners<T>(participants: T[], count: number): T[] {
   if (!Number.isInteger(count) || count < 1) throw new Error("抽出人數至少要有 1 位");
   if (count > participants.length) throw new Error("抽出人數不能超過可抽選人數");
   const pool = [...participants];

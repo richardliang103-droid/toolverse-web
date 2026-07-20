@@ -22,6 +22,7 @@ type CompressItem = {
   width?: number;
   height?: number;
   message?: string;
+  keptOriginal?: boolean;
 };
 
 type StoredOptions = { format: OutputFormat; quality: number; maxEdge: number };
@@ -116,8 +117,11 @@ export function ImageCompressorTool() {
       setItems((previous) => previous.map((entry) => (entry.id === item.id ? { ...entry, status: "working" } : entry)));
       try {
         const result = await compressFile(item.file, options);
+        const keptOriginal = options.format === "original" && options.maxEdge === 0 && result.blob.size >= item.file.size;
+        const outputBlob = keptOriginal ? item.file : result.blob;
+        const outputName = keptOriginal ? item.file.name : result.name;
         setItems((previous) => previous.map((entry) => (entry.id === item.id
-          ? { ...entry, status: "done", outputBlob: result.blob, outputName: result.name, outputSize: result.blob.size, width: result.width, height: result.height }
+          ? { ...entry, status: "done", outputBlob, outputName, outputSize: outputBlob.size, width: result.width, height: result.height, keptOriginal }
           : entry)));
       } catch (caught) {
         const message = caught instanceof Error && /decoded|InvalidState/i.test(`${caught.name} ${caught.message}`)
@@ -165,8 +169,8 @@ export function ImageCompressorTool() {
         <label className="field-label" htmlFor="compress-format">輸出格式
           <select id="compress-format" value={format} onChange={(event) => setFormat(event.target.value as OutputFormat)}>
             <option value="original">保持原格式</option>
-            <option value="jpeg">JPG（檔案最小）</option>
-            <option value="webp">WebP（品質與大小平衡）</option>
+            <option value="jpeg">JPG（相容性高）</option>
+            <option value="webp">WebP（通常較小）</option>
             <option value="png">PNG（無損、保留透明）</option>
           </select>
         </label>
@@ -199,7 +203,7 @@ export function ImageCompressorTool() {
                     <strong>{item.file.name}</strong>
                     <span>
                       {formatBytes(item.file.size)}
-                      {item.status === "done" && item.outputSize !== undefined && <> → <b>{formatBytes(item.outputSize)}</b>（省 <CountUp value={savingsPercent(item.file.size, item.outputSize)} startFrom={0} />%{item.width ? ` · ${item.width}×${item.height}` : ""}）</>}
+                      {item.status === "done" && item.outputSize !== undefined && <>{item.keptOriginal ? <>（原檔已經更小，因此保留原始檔案）</> : <> → <b>{formatBytes(item.outputSize)}</b>（省 <CountUp value={savingsPercent(item.file.size, item.outputSize)} startFrom={0} />%{item.width ? ` · ${item.width}×${item.height}` : ""}）</>}</>}
                       {item.status === "working" && " → 壓縮中…"}
                       {item.status === "error" && ` → ${item.message}`}
                     </span>

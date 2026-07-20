@@ -1,7 +1,7 @@
 {
   "name": "ToolVerse 網頁工具箱",
   "short_name": "ToolVerse",
-  "description": "免登入的網頁工具箱：圖表、抽獎與分組、圖片與 PDF 處理、計時與文字工具。全部在裝置本機處理。",
+  "description": "免登入的網頁工具箱：多數工具在裝置本機處理；需連線的 AI 與外部服務會明確標示。",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f5f1e8",

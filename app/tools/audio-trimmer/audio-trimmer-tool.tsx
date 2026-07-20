@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "r
 import { clampTrimRange, encodeWavPcm16, formatSeconds } from "@/lib/wav";
 
 const MAX_SIZE = 30 * 1024 * 1024;
+const MAX_PCM_BYTES = 250 * 1024 * 1024;
 const ACCEPTED = /audio\/(mpeg|mp3|wav|x-wav|mp4|m4a|aac|ogg|webm)|^$/;
 
 export function AudioTrimmerTool() {
@@ -80,6 +81,11 @@ export function AudioTrimmerTool() {
       const context = new AudioContext();
       const buffer = await context.decodeAudioData(arrayBuffer);
       void context.close();
+      const pcmBytes = buffer.duration * buffer.sampleRate * buffer.numberOfChannels * 4;
+      if (pcmBytes > MAX_PCM_BYTES) {
+        setError(`這段音訊解碼後約需 ${(pcmBytes / 1024 / 1024).toFixed(0)} MB 記憶體，超過 ${MAX_PCM_BYTES / 1024 / 1024} MB 安全上限。請先剪短或使用較小的檔案。`);
+        return;
+      }
       bufferRef.current = buffer;
       setFileName(file.name);
       setDuration(buffer.duration);
@@ -171,7 +177,7 @@ export function AudioTrimmerTool() {
             <button className="button button-small button-blue" type="button" onClick={exportWav}>下載 WAV</button>
             <button className="button button-small button-secondary" type="button" onClick={() => { stopPreview(); bufferRef.current = null; setDuration(0); setFileName(""); }}>換一個檔案</button>
           </div>
-          <p className="key-note">輸出為無損 WAV（不重新壓縮）；需要 MP3 可再用其他工具轉檔。解碼與剪輯全程在瀏覽器本機完成。</p>
+          <p className="key-note">輸出為 PCM WAV，不進行第二次有損壓縮；MP3、AAC 等來源本身仍可能是有損格式。需要 MP3 可再用其他工具轉檔。解碼與剪輯全程在瀏覽器本機完成。</p>
         </>
       )}
       {error && <p className="error-message" role="alert">{error}</p>}

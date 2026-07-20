@@ -89,6 +89,16 @@ export function ChineseConverterTool() {
     }
   }
 
+  function downloadOutput() {
+    const blob = new Blob([output], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "繁簡轉換結果.txt";
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   function swap() {
     setDirection((previous) => (previous === "s2t" ? "t2s" : "s2t"));
     if (output) { setInput(output); setOutput(input); }
@@ -116,6 +126,7 @@ export function ChineseConverterTool() {
       <textarea id="cc-output" className="participant-input cleaner-input" value={output} readOnly placeholder="結果會即時出現在這裡" />
       <div className="result-actions">
         <button className="button button-small button-blue" type="button" onClick={copyOutput} disabled={output === ""}>{copied ? "已複製 ✓" : "複製結果"}</button>
+        <button className="button button-small button-secondary" type="button" onClick={downloadOutput} disabled={output === ""}>下載 .txt</button>
         <button className="button button-small button-secondary" type="button" onClick={() => { setInput(""); setOutput(""); setError(""); }} disabled={input === ""}>清空</button>
       </div>
       {error && <p className="error-message" role="alert">{error}</p>}

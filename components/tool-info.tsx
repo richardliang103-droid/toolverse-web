@@ -1,3 +1,4 @@
+import { Reveal } from "@/components/reveal";
 import { toolContent } from "@/lib/tool-content";
 import { SITE_URL } from "@/lib/site";
 import { tools } from "@/lib/tools";
@@ -32,14 +33,15 @@ export function ToolInfo({ slug }: { slug: string }) {
   };
 
   return (
+    <Reveal>
     <section className="tool-info page-shell" aria-label="使用說明與常見問題">
-      <div className="tool-info-column">
+      <div className="tool-info-column" data-rise>
         <h2>怎麼使用</h2>
         <ol className="tool-info-steps">
           {content.steps.map((step) => <li key={step}>{step}</li>)}
         </ol>
       </div>
-      <div className="tool-info-column">
+      <div className="tool-info-column" data-rise>
         <h2>常見問題</h2>
         {content.faq.map((item) => (
           <details className="tool-info-faq" key={item.q}>
@@ -51,5 +53,6 @@ export function ToolInfo({ slug }: { slug: string }) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(appLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }} />
     </section>
+    </Reveal>
   );
 }

@@ -34,6 +34,7 @@ export function ExifCleanerTool() {
   const [items, setItems] = useState<CleanItem[]>([]);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   async function processFile(file: File): Promise<CleanItem> {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -56,7 +57,7 @@ export function ExifCleanerTool() {
 
   async function addFiles(list: FileList | null) {
     if (!list) return;
-    setError("");
+    setError(""); setNotice("");
     const accepted: File[] = [];
     for (const file of Array.from(list)) {
       const looksRight = ["image/jpeg", "image/png"].includes(file.type) || (file.type === "" && /\.(jpe?g|png)$/i.test(file.name));
@@ -64,8 +65,20 @@ export function ExifCleanerTool() {
       if (file.size > MAX_SIZE) { setError(`「${file.name}」超過 50 MB 上限`); continue; }
       accepted.push(file);
     }
-    const processed = await Promise.all(accepted.map(processFile));
-    setItems((previous) => [...previous, ...processed].slice(0, MAX_FILES));
+    const remaining = Math.max(0, MAX_FILES - items.length);
+    const filesToProcess = accepted.slice(0, remaining);
+    const skipped = accepted.length - filesToProcess.length;
+    if (skipped > 0) setNotice(`已加入前 ${filesToProcess.length} 張，其餘 ${skipped} 張未處理。`);
+    const processed: CleanItem[] = new Array(filesToProcess.length);
+    let nextIndex = 0;
+    await Promise.all(Array.from({ length: Math.min(3, filesToProcess.length) }, async () => {
+      while (nextIndex < filesToProcess.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        processed[index] = await processFile(filesToProcess[index]);
+      }
+    }));
+    setItems((previous) => [...previous, ...processed]);
   }
 
   function onDrop(event: DragEvent<HTMLDivElement>) {
@@ -91,6 +104,7 @@ export function ExifCleanerTool() {
         <div><div className="drop-icon" aria-hidden="true">◉</div><h2>{items.length > 0 ? `已處理 ${items.length} 張照片` : "把照片拖到這裡"}</h2><p>放進來就會自動移除 metadata</p><span className="button button-secondary">{items.length > 0 ? "繼續加入" : "選擇照片"}</span><input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png" multiple onChange={onFileChange} aria-label="選擇要清除隱私資訊的照片" /><small className="file-note">JPG、PNG · 每張最大 50 MB · 最多 {MAX_FILES} 張</small></div>
       </div>
       {error && <p className="error-message" role="alert">{error}</p>}
+      {notice && <p className="gantt-notice gantt-notice-info" role="status">{notice}</p>}
       <div className="service-notice service-notice-private"><strong>無損處理，畫質不變</strong><span>只移除 EXIF（GPS 位置、拍攝時間、相機資訊）、IPTC、XMP 與註解等 metadata 區段，不重新壓縮影像；色彩描述檔（ICC）會保留，顏色不會跑掉。</span></div>
     </div>
     <div className="panel panel-tinted">
