@@ -1,27 +1,48 @@
 name: Production Health Check
 
 on:
+  push:
+    branches: [main]
   schedule:
-    # 每天台北時間早上 9 點（UTC+8 → 01:00 UTC）
-    - cron: "0 1 * * *"
+    # 每天台北時間早上 9:07（UTC+8 → 01:07 UTC），避開整點排程尖峰。
+    - cron: "7 1 * * *"
   workflow_dispatch:
 
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe key routes
+      - name: Wait for the matching production release
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
         run: |
           BASE="https://toolverse-web.vercel.app"
-          FAILED=0
-          for path in / /tools/lottery /tools/gantt /tools/pdf-toolkit /tools/text-compare /sitemap.xml /robots.txt /manifest.webmanifest; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$BASE$path")
-            echo "$path -> $code"
-            if [ "$code" != "200" ]; then FAILED=1; fi
+          for attempt in {1..24}; do
+            deployed_commit=$(curl -fsS --retry 3 --retry-all-errors --max-time 20 "$BASE/api/version" | jq -r '.commit // "unknown"' || true)
+            echo "production commit: $deployed_commit (expecting $EXPECTED_COMMIT)"
+            if [ "$deployed_commit" = "$EXPECTED_COMMIT" ]; then exit 0; fi
+            sleep 10
           done
-          # 首頁必須包含工具內容（防止 200 但渲染空白的情況）
-          if ! curl -s --max-time 20 "$BASE/" | grep -q "所有工具"; then
-            echo "homepage content check failed"
-            FAILED=1
-          fi
-          exit $FAILED
+          echo "Production did not reach the commit that triggered this workflow."
+          exit 1
+
+      - name: Probe sitemap routes and release markers
+        run: |
+          set -euo pipefail
+          BASE="https://toolverse-web.vercel.app"
+          sitemap=$(curl -fsS --retry 3 --retry-all-errors --max-time 20 "$BASE/sitemap.xml")
+          while IFS= read -r url; do
+            http_code=$(curl -sS --retry 3 --retry-all-errors -o /dev/null -w "%{http_code}" --max-time 20 "$url")
+            echo "$url -> $http_code"
+            [ "$http_code" = "200" ] || exit 1
+          done < <(printf '%s' "$sitemap" | sed -n 's#.*<loc>\(https://toolverse-web.vercel.app[^<]*\)</loc>.*#\1#p')
+
+          check_marker() {
+            path="$1"; marker="$2"
+            curl -fsS --retry 3 --retry-all-errors --max-time 20 "$BASE$path" | grep -Fq "$marker"
+          }
+          check_marker "/" "TOOLVERSE — 免登入・資料留在你手上"
+          check_marker "/tools/image-compressor" "JPG（相容性高）"
+          check_marker "/tools/pdf-toolkit" "每份 PDF 上限 50 MB"
+          check_marker "/tools/exif-cleaner" "metadata 區段類型與大小"
+          check_marker "/tools/audio-trimmer" "PCM WAV"

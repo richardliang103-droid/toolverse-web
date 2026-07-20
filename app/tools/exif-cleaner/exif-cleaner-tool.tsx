@@ -107,12 +107,13 @@ export function ExifCleanerTool() {
   }
 
   const doneCount = items.filter((item) => item.status === "done").length;
+  const busy = processingCount > 0;
 
   return <section className="workspace upload-workspace page-shell" aria-label="照片隱私清除工具">
     <div className="panel">
       <span className="privacy-badge background-remover-badge">◉ 照片不上傳</span>
-      <div className={`drop-zone compressor-drop ${dragging ? "dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} onClick={() => inputRef.current?.click()} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") inputRef.current?.click(); }}>
-        <div><div className="drop-icon" aria-hidden="true">◉</div><h2>{processingCount > 0 ? `處理中（${processingCount} 張）…` : items.length > 0 ? `已處理 ${items.length} 張照片` : "把照片拖到這裡"}</h2><p>放進來就會自動移除 metadata</p><span className="button button-secondary">{items.length > 0 ? "繼續加入" : "選擇照片"}</span><input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png" multiple onChange={onFileChange} disabled={processingCount > 0} aria-label="選擇要清除隱私資訊的照片" /><small className="file-note">JPG、PNG · 每張最大 50 MB · 最多 {MAX_FILES} 張</small></div>
+      <div className={`drop-zone compressor-drop ${dragging ? "dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); if (!busy) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { if (busy) { event.preventDefault(); setDragging(false); return; } onDrop(event); }} onClick={() => { if (!busy) inputRef.current?.click(); }} role="button" tabIndex={busy ? -1 : 0} aria-disabled={busy} onKeyDown={(event) => { if (!busy && (event.key === "Enter" || event.key === " ")) inputRef.current?.click(); }}>
+        <div><div className="drop-icon" aria-hidden="true">◉</div><h2>{busy ? `處理中（${processingCount} 張）…` : items.length > 0 ? `已處理 ${items.length} 張照片` : "把照片拖到這裡"}</h2><p>{busy ? "處理完成後可再加入照片" : "放進來就會自動移除 metadata"}</p><span className="button button-secondary">{busy ? "處理中…" : items.length > 0 ? "繼續加入" : "選擇照片"}</span><input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png" multiple onChange={onFileChange} disabled={busy} aria-label="選擇要清除隱私資訊的照片" /><small className="file-note">JPG、PNG · 每張最大 50 MB · 最多 {MAX_FILES} 張</small></div>
       </div>
       {error && <p className="error-message" role="alert">{error}</p>}
       {notice && <p className="gantt-notice gantt-notice-info" role="status">{notice}</p>}
@@ -140,7 +141,7 @@ export function ExifCleanerTool() {
             </ul>
             <div className="result-actions">
               {doneCount > 1 && <button className="button button-small button-blue" type="button" onClick={downloadAll}>全部下載（{doneCount} 張）</button>}
-              <button className="button button-small button-secondary" type="button" onClick={() => { setItems([]); setError(""); }}>清空</button>
+              <button className="button button-small button-secondary" type="button" onClick={() => { setItems([]); setError(""); setNotice(""); }} disabled={busy}>清空</button>
             </div>
           </>}
     </div>

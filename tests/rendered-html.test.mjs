@@ -22,6 +22,15 @@ test("server-renders the ToolVerse homepage", async () => {
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/i);
 });
 
+test("serves a deployment version endpoint for production verification", async () => {
+  const response = await render("/api/version");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /application\/json/);
+  const body = await response.json();
+  assert.equal(typeof body.commit, "string");
+  assert.equal(typeof body.deploymentId, "string");
+});
+
 test("server-renders all tool routes", async () => {
   const routes = [
     ["/tools/lottery", /開始抽選/],
