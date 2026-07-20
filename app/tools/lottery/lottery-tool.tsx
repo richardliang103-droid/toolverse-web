@@ -3,14 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import gsap from "gsap";
-import { drawWinners, normalizeParticipants } from "@/lib/lottery";
+import { drawWinners, normalizeParticipants, type Participant } from "@/lib/lottery";
 import { LotteryWheel, type LotteryWheelHandle, type WheelTheme } from "./lottery-wheel";
 import { RosterPicker } from "@/components/roster-picker";
 import { StarBorder } from "@/components/star-border";
 
 const STORAGE_KEY = "toolverse:lottery:v1";
 const LEGACY_STORAGE_KEY = "hermes-tools:lottery:v1";
-type StoredState = { raw: string; count: number; dedupe: boolean; exclude: boolean; previousWinners: string[]; history: string[][]; theme: WheelTheme };
+type StoredState = { raw: string; count: number; dedupe: boolean; exclude: boolean; previousWinnerIds: string[]; history: string[][]; theme: WheelTheme };
 
 function stringList(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
@@ -24,13 +24,14 @@ function sanitizeStoredState(value: unknown): StoredState {
     count: Number.isFinite(Number(data.count)) ? Math.max(1, Math.round(Number(data.count))) : 1,
     dedupe: data.dedupe !== false,
     exclude: data.exclude !== false,
-    previousWinners: stringList(data.previousWinners),
+    previousWinnerIds: stringList(data.previousWinnerIds),
     history: Array.isArray(data.history) ? data.history.map(stringList).filter((round) => round.length > 0) : [],
     theme: data.theme === "neon" ? "neon" : "wa",
   };
 }
 
 function fireConfetti(finale: boolean) {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const shared = { spread: 68, ticks: 130, startVelocity: 34, scalar: finale ? 0.95 : 0.75 };
   if (!finale) {
     confetti({ ...shared, particleCount: 46, angle: 90, origin: { x: 0.5, y: 0.4 }, spread: 95 });
@@ -50,11 +51,11 @@ export function LotteryTool() {
   const [count, setCount] = useState(1);
   const [dedupe, setDedupe] = useState(true);
   const [exclude, setExclude] = useState(true);
-  const [previousWinners, setPreviousWinners] = useState<string[]>([]);
+  const [previousWinnerIds, setPreviousWinnerIds] = useState<string[]>([]);
   const [history, setHistory] = useState<string[][]>([]);
   const [winners, setWinners] = useState<string[]>([]);
   const [revealed, setRevealed] = useState<string[]>([]);
-  const [wheelSegments, setWheelSegments] = useState<string[]>([]);
+  const [wheelSegments, setWheelSegments] = useState<Participant[]>([]);
   const [justRevealed, setJustRevealed] = useState("");
   const [drawing, setDrawing] = useState(false);
   const [error, setError] = useState("");
@@ -73,18 +74,18 @@ export function LotteryTool() {
       localStorage.removeItem(LEGACY_STORAGE_KEY);
       // Restoring device-local preferences requires a one-time client hydration.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setRaw(data.raw); setCount(data.count); setDedupe(data.dedupe); setExclude(data.exclude); setPreviousWinners(data.previousWinners); setHistory(data.history); setTheme(data.theme);
+      setRaw(data.raw); setCount(data.count); setDedupe(data.dedupe); setExclude(data.exclude); setPreviousWinnerIds(data.previousWinnerIds); setHistory(data.history); setTheme(data.theme);
     } catch { localStorage.removeItem(STORAGE_KEY); }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ raw, count, dedupe, exclude, previousWinners, history, theme }));
-  }, [raw, count, dedupe, exclude, previousWinners, history, theme]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ raw, count, dedupe, exclude, previousWinnerIds, history, theme }));
+  }, [raw, count, dedupe, exclude, previousWinnerIds, history, theme]);
 
   useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); }, []);
 
   const participants = useMemo(() => normalizeParticipants(raw, dedupe), [raw, dedupe]);
-  const eligible = useMemo(() => exclude ? participants.filter((name) => !previousWinners.includes(name)) : participants, [participants, exclude, previousWinners]);
+  const eligible = useMemo(() => exclude ? participants.filter((participant) => !previousWinnerIds.includes(participant.id)) : participants, [participants, exclude, previousWinnerIds]);
 
   // While idle, the wheel just mirrors the current eligible pool (updates live
   // as the list is edited). Mid-spin, `wheelSegments` takes over — it's what
@@ -110,25 +111,26 @@ export function LotteryTool() {
       await wait(80); // let the wheel render this round's segments before the first spin starts
 
       for (let index = 0; index < result.length; index += 1) {
-        const winnerName = result[index];
-        const targetIndex = Math.max(0, pool.indexOf(winnerName));
+        const winner = result[index];
+        const targetIndex = pool.findIndex((participant) => participant.id === winner.id);
         const duration = Math.max(1.3, 3.3 - index * 0.3);
         await wheelRef.current?.spinTo(targetIndex, duration);
 
-        setRevealed((value) => [...value, winnerName]);
-        setJustRevealed(winnerName);
+        setRevealed((value) => [...value, winner.label]);
+        setJustRevealed(winner.label);
         fireConfetti(index === result.length - 1);
         if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
         flashTimerRef.current = setTimeout(() => setJustRevealed(""), 1800);
 
-        pool = pool.filter((name) => name !== winnerName);
+        pool = pool.filter((participant) => participant.id !== winner.id);
         setWheelSegments(pool);
         if (index < result.length - 1) await wait(500);
       }
 
-      setWinners(result);
-      setHistory((value) => [result, ...value].slice(0, 5));
-      if (exclude) setPreviousWinners((value) => [...new Set([...value, ...result])]);
+      const winnerLabels = result.map((winner) => winner.label);
+      setWinners(winnerLabels);
+      setHistory((value) => [winnerLabels, ...value].slice(0, 5));
+      if (exclude) setPreviousWinnerIds((value) => [...new Set([...value, ...result.map((winner) => winner.id)])]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "抽選時發生錯誤");
     } finally {
@@ -145,10 +147,10 @@ export function LotteryTool() {
     }
   }
 
-  function resetWinners() { setPreviousWinners([]); setWinners([]); setRevealed([]); setHistory([]); setError(""); }
+  function resetWinners() { setPreviousWinnerIds([]); setWinners([]); setRevealed([]); setHistory([]); setError(""); }
 
   return <section className={`workspace ${theme === "neon" ? "lottery-neon" : "lottery-wa"} page-shell`} aria-label="隨機抽名單工具">
-    <div className="panel lottery-controls-panel"><div className="panel-header"><h2>參加名單</h2><span className="panel-meta">共 {participants.length} 人 · 可抽 {eligible.length} 人</span></div><p className="lottery-panel-note">每行一位，名單會留在你的裝置中。</p><label className="sr-only" htmlFor="participants">參加者名單，一行一位</label><textarea id="participants" className="participant-input participant-input-compact" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder={'輸入或貼上名單，每行一位\n例如：\n小明\n小美\nAlex'} /><RosterPicker currentText={raw} onLoad={setRaw} /><div className="form-controls"><label className="check-row"><input type="checkbox" checked={dedupe} onChange={(event) => setDedupe(event.target.checked)} />移除重複名字</label><label className="check-row"><input type="checkbox" checked={exclude} onChange={(event) => setExclude(event.target.checked)} />排除已抽出者</label><label className="number-field" htmlFor="winner-count">抽出人數<input id="winner-count" className="number-input" type="number" min="1" max={Math.max(1, eligible.length)} value={count} onChange={(event) => setCount(Math.max(1, Math.round(Number(event.target.value)) || 1))} /></label></div><StarBorder className="draw-button-frame"><button className="button button-blue draw-button" type="button" onClick={handleDraw} disabled={drawing}>{drawing ? "正在抽選…" : "開始抽選"}</button></StarBorder>{error && <p className="error-message" role="alert">{error}</p>}</div>
+    <div className="panel lottery-controls-panel"><div className="panel-header"><h2>參加名單</h2><span className="panel-meta">共 {participants.length} 人 · 可抽 {eligible.length} 人</span></div><p className="lottery-panel-note">每行一位，名單會留在你的裝置中。關閉「移除重複名字」時，每一列都會視為獨立抽選項目。</p><label className="sr-only" htmlFor="participants">參加者名單，一行一位</label><textarea id="participants" className="participant-input participant-input-compact" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder={'輸入或貼上名單，每行一位\n例如：\n小明\n小美\nAlex'} /><RosterPicker currentText={raw} onLoad={setRaw} /><div className="form-controls"><label className="check-row"><input type="checkbox" checked={dedupe} onChange={(event) => setDedupe(event.target.checked)} />移除重複名字</label><label className="check-row"><input type="checkbox" checked={exclude} onChange={(event) => setExclude(event.target.checked)} />排除已抽出者</label><label className="number-field" htmlFor="winner-count">抽出人數<input id="winner-count" className="number-input" type="number" min="1" max={Math.max(1, eligible.length)} value={count} onChange={(event) => setCount(Math.max(1, Math.round(Number(event.target.value)) || 1))} /></label></div><StarBorder className="draw-button-frame"><button className="button button-blue draw-button" type="button" onClick={handleDraw} disabled={drawing}>{drawing ? "正在抽選…" : "開始抽選"}</button></StarBorder>{error && <p className="error-message" role="alert">{error}</p>}</div>
     <div className="panel panel-tinted lottery-stage-panel"><div className="panel-header"><h2>抽選轉盤</h2><span className="lottery-header-tools"><button className="lottery-theme-toggle" type="button" onClick={() => setTheme((current) => current === "wa" ? "neon" : "wa")} aria-label="切換介面主題">{theme === "wa" ? "🌙 霓虹深色" : "☀️ 淺色和風"}</button><span className="lottery-fairness">公平隨機抽選</span></span></div>
       <div className="lottery-wheel-area">
         {justRevealed && <div className="lottery-flash-winner">🎉 {justRevealed}</div>}
@@ -159,7 +161,7 @@ export function LotteryTool() {
         ? <div ref={winnerListRef} className="winner-list">{revealed.map((winner, index) => <div className="winner-item" key={`${winner}-${index}`}>{winner}</div>)}</div>
         : !drawing && <div className="result-empty"><strong>轉盤等待名單</strong>在左側輸入成員後，即可開始公平隨機抽選。</div>}
       {winners.length > 0 && !drawing && <div className="result-actions"><button className="button button-small button-secondary" type="button" onClick={copyResults}>{copied ? "已複製 ✓" : "複製結果"}</button><button className="button button-small button-secondary" type="button" onClick={handleDraw}>再次抽選</button></div>}
-      {(previousWinners.length > 0 || history.length > 0) && <div className="history"><div className="panel-header"><h3>抽出紀錄</h3><button className="button button-small button-secondary" type="button" onClick={resetWinners}>全部重設</button></div><ol>{history.map((item, index) => <li className="animated-list-item" key={`${item.join("-")}-${index}`}>{item.join("、")}</li>)}</ol></div>}
+      {(previousWinnerIds.length > 0 || history.length > 0) && <div className="history"><div className="panel-header"><h3>抽出紀錄</h3><button className="button button-small button-secondary" type="button" onClick={resetWinners}>全部重設</button></div><ol>{history.map((item, index) => <li className="animated-list-item" key={`${item.join("-")}-${index}`}>{item.join("、")}</li>)}</ol></div>}
     </div>
   </section>;
 }

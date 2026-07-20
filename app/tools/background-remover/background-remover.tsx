@@ -20,6 +20,7 @@ export function BackgroundRemover() {
   const workerRef = useRef<Worker | null>(null);
   const originalUrlRef = useRef("");
   const resultUrlRef = useRef("");
+  const operationRef = useRef(0);
   const [file, setFile] = useState<File | null>(null);
   const [originalUrl, setOriginalUrl] = useState("");
   const [resultUrl, setResultUrl] = useState("");
@@ -50,6 +51,8 @@ export function BackgroundRemover() {
 
   function selectFile(candidate?: File) {
     if (!candidate) return;
+    if (processing) { setError("圖片處理中，請等待完成後再更換圖片"); return; }
+    operationRef.current += 1;
     setError("");
     // 部分來源（網路磁碟、某些軟體）拖出的檔案 MIME type 是空字串，改看副檔名。
     const acceptable = ALLOWED_TYPES.has(candidate.type) || (candidate.type === "" && /\.(jpe?g|png|webp)$/i.test(candidate.name));
@@ -66,7 +69,7 @@ export function BackgroundRemover() {
   }
 
   function onFileChange(event: ChangeEvent<HTMLInputElement>) { selectFile(event.target.files?.[0]); }
-  function onDrop(event: DragEvent<HTMLDivElement>) { event.preventDefault(); setDragging(false); selectFile(event.dataTransfer.files?.[0]); }
+  function onDrop(event: DragEvent<HTMLDivElement>) { event.preventDefault(); setDragging(false); if (!processing) selectFile(event.dataTransfer.files?.[0]); }
 
   function runLocally(image: File) {
     const worker = getWorker();
@@ -159,24 +162,28 @@ export function BackgroundRemover() {
 
   async function removeBackground() {
     if (!file) return;
+    const operationId = ++operationRef.current;
     setProcessing(true); setError(""); setErrorDetail("");
     if (mode === "local") { setProgress(modelReady ? 100 : 0); setStage(modelReady ? "正在辨識主體與背景" : "正在下載本機模型"); }
     else { setStage("正在呼叫 remove.bg…"); }
     try {
       const blob = mode === "local" ? await runLocallyWithDecodeFallback(file) : await runWithRemoveBg(file);
+      if (operationRef.current !== operationId) return;
       if (mode === "removebg") setBackend("");
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
       resultUrlRef.current = URL.createObjectURL(blob);
       setResultUrl(resultUrlRef.current);
     } catch (caught) {
+      if (operationRef.current !== operationId) return;
       setError(caught instanceof Error ? caught.message : "圖片去背失敗");
       setErrorDetail(caught instanceof Error ? (caught as Error & { detail?: string }).detail ?? "" : "");
     } finally {
-      setProcessing(false);
+      if (operationRef.current === operationId) setProcessing(false);
     }
   }
 
   function clear() {
+    operationRef.current += 1;
     if (originalUrlRef.current) URL.revokeObjectURL(originalUrlRef.current);
     if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
     originalUrlRef.current = "";
@@ -188,8 +195,8 @@ export function BackgroundRemover() {
   return <section className="workspace upload-workspace page-shell" aria-label="圖片去背工具">
     <div className="panel">
       <span className={`privacy-badge background-remover-badge ${mode === "removebg" ? "uploads" : ""}`}>{mode === "local" ? "◐ 圖片不上傳" : "● 圖片會上傳至 remove.bg"}</span>
-      <div className={`drop-zone ${dragging ? "dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} onClick={() => inputRef.current?.click()} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") inputRef.current?.click(); }}>
-        <div><div className="drop-icon" aria-hidden="true">↥</div><h2>{file ? file.name : "把圖片拖到這裡"}</h2><p>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB · 已準備好` : "或從裝置選擇一張圖片"}</p><span className="button button-secondary">{file ? "更換圖片" : "選擇圖片"}</span><input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={onFileChange} aria-label="選擇要去背的圖片" /><small className="file-note">JPG、PNG、WebP · 最大 10 MB</small></div>
+      <div className={`drop-zone ${dragging ? "dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); if (!processing) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} onClick={() => { if (!processing) inputRef.current?.click(); }} role="button" tabIndex={processing ? -1 : 0} aria-disabled={processing} onKeyDown={(event) => { if (!processing && (event.key === "Enter" || event.key === " ")) inputRef.current?.click(); }}>
+        <div><div className="drop-icon" aria-hidden="true">↥</div><h2>{file ? file.name : "把圖片拖到這裡"}</h2><p>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB · 已準備好` : "或從裝置選擇一張圖片"}</p><span className="button button-secondary">{processing ? "處理中…" : file ? "更換圖片" : "選擇圖片"}</span><input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={onFileChange} aria-label="選擇要去背的圖片" disabled={processing} /><small className="file-note">JPG、PNG、WebP · 最大 10 MB</small></div>
       </div>
       <div className="flow-mode-toggle" role="radiogroup" aria-label="去背方式">
         <button type="button" className={`button button-small ${mode === "local" ? "button-coral" : "button-secondary"}`} aria-pressed={mode === "local"} onClick={() => setMode("local")} disabled={processing}>本機 AI（免費、圖片不上傳）</button>

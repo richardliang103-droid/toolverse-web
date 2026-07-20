@@ -17,7 +17,7 @@ export default function Home() {
         <ToolDirectory />
         <footer className="directory-footer page-shell" data-rise>
           <div className="footer-brand"><span className="brand-mark" aria-hidden="true">T</span><strong>TOOLVERSE</strong><span className="footer-kana">実用の道具箱</span></div>
-          <p className="footer-line">全 {tools.length} 項工具・全部在你的瀏覽器本機完成・不用帳號、不追蹤</p>
+          <p className="footer-line">全 {tools.length} 項工具・多數在你的瀏覽器本機完成・需連線功能會明確標示</p>
         </footer>
       </Entrance>
     </main>

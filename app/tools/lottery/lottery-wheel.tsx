@@ -2,6 +2,7 @@
 
 import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
 import gsap from "gsap";
+import type { Participant } from "@/lib/lottery";
 
 export type LotteryWheelHandle = { spinTo: (targetIndex: number, duration: number) => Promise<void> };
 
@@ -67,7 +68,7 @@ function describeSlice(cx: number, cy: number, r: number, startAngle: number, en
   return `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`;
 }
 
-export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[]; theme?: WheelTheme }>(function LotteryWheel(
+export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: Participant[]; theme?: WheelTheme }>(function LotteryWheel(
   { segments, theme = "neon" },
   ref,
 ) {
@@ -93,10 +94,11 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[];
           const currentRotation = (gsap.getProperty(node, "rotation") as number) || 0;
           const currentMod = ((currentRotation % 360) + 360) % 360;
           const forwardDelta = ((desiredMod - currentMod) % 360 + 360) % 360;
-          const extraSpins = 6 + Math.floor(Math.random() * 3);
+          const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          const extraSpins = reduceMotion ? 0 : 6 + Math.floor(Math.random() * 3);
           gsap.to(node, {
             rotation: `+=${extraSpins * 360 + forwardDelta}`,
-            duration,
+            duration: reduceMotion ? 0 : duration,
             ease: "power3.out",
             transformOrigin: "50% 50%",
             onComplete: () => resolve(),
@@ -116,12 +118,12 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[];
 
   const slices = useMemo(
     () =>
-      segments.map((name, index) => {
+      segments.map((participant, index) => {
         const startAngle = index * anglePer;
         const endAngle = startAngle + anglePer;
         const midAngle = startAngle + anglePer / 2;
         const tone = style.tones[index % style.tones.length];
-        const label = name.length > 6 ? `${name.slice(0, 5)}…` : name;
+        const label = participant.label.length > 6 ? `${participant.label.slice(0, 5)}…` : participant.label;
         const flip = midAngle > 90 && midAngle < 270;
         const labelPos = polarToCartesian(cx, cy, r * 0.62, midAngle);
         const labelRotate = flip ? midAngle - 90 + 180 : midAngle - 90;
@@ -129,7 +131,7 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: string[];
           path: describeSlice(cx, cy, r, startAngle, endAngle),
           fill: tone.fill,
           textColor: tone.text,
-          key: `${name}-${index}`,
+          key: participant.id,
           labelPos,
           labelRotate,
           label,

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { extractedFilename, mergedFilename, parsePageRanges } from "@/lib/pdf-pages";
 import { formatBytes } from "@/lib/image-compress";
 
@@ -36,12 +36,15 @@ export function PdfToolkitTool() {
   const [rotations, setRotations] = useState<Record<number, number>>({});
   const [globalRotate, setGlobalRotate] = useState(0);
   const dragIdRef = useRef<string | null>(null);
+  const thumbnailRenderIdRef = useRef(0);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   function resetMessages() { setError(""); setNotice(""); }
+
+  useEffect(() => () => { thumbnailRenderIdRef.current += 1; }, []);
 
   function addMergeFiles(event: ChangeEvent<HTMLInputElement>) {
     resetMessages();
@@ -56,6 +59,7 @@ export function PdfToolkitTool() {
   }
 
   async function chooseSplitFile(event: ChangeEvent<HTMLInputElement>) {
+    const renderId = ++thumbnailRenderIdRef.current;
     resetMessages();
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -71,8 +75,9 @@ export function PdfToolkitTool() {
       const buffer = await file.arrayBuffer();
       const { PDFDocument } = await import("pdf-lib");
       const document = await PDFDocument.load(buffer.slice(0), { ignoreEncryption: false });
+      if (thumbnailRenderIdRef.current !== renderId) return;
       setSplitPages(document.getPageCount());
-      void renderThumbnails(buffer, Math.min(document.getPageCount(), 12));
+      void renderThumbnails(buffer, Math.min(document.getPageCount(), 12), renderId);
     } catch {
       setSplitFile(null);
       setError("無法讀取這份 PDF — 檔案可能已加密或損壞");
@@ -80,7 +85,7 @@ export function PdfToolkitTool() {
   }
 
   /** 用 pdf.js 畫前幾頁縮圖；整段包 12 秒逾時，任何失敗或懸掛都靜默降級（縮圖是輔助，不擋功能）。 */
-  async function renderThumbnails(buffer: ArrayBuffer, pageCount: number) {
+  async function renderThumbnails(buffer: ArrayBuffer, pageCount: number, renderId: number) {
     const work = async () => {
       const pdfjs = await import("pdfjs-dist");
       // worker 以靜態資產提供（public/pdf.worker.min.mjs，需與 pdfjs-dist 版本一起更新；
@@ -89,6 +94,7 @@ export function PdfToolkitTool() {
       const documentProxy = await pdfjs.getDocument({ data: buffer.slice(0) }).promise;
       const images: string[] = [];
       for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+        if (thumbnailRenderIdRef.current !== renderId) { void documentProxy.destroy(); return; }
         const page = await documentProxy.getPage(pageNumber);
         const viewport = page.getViewport({ scale: 1 });
         const scale = 120 / viewport.width;
@@ -100,7 +106,7 @@ export function PdfToolkitTool() {
         if (!context) break;
         await page.render({ canvas, canvasContext: context, viewport: scaled }).promise;
         images.push(canvas.toDataURL("image/jpeg", 0.7));
-        setThumbnails([...images]);
+        if (thumbnailRenderIdRef.current === renderId) setThumbnails([...images]);
       }
       void documentProxy.cleanup();
     };

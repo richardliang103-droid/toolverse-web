@@ -35,7 +35,7 @@ export function RosterPicker({ currentText, onLoad }: RosterPickerProps) {
   }, [hydrated, rosters]);
 
   function saveCurrent() {
-    const members = normalizeParticipants(currentText, true);
+    const members = normalizeParticipants(currentText, true).map((participant) => participant.label);
     if (members.length === 0) return;
     setRosters((previous) => {
       const roster: Roster = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, name: rosterDefaultName(members, previous.length), members };

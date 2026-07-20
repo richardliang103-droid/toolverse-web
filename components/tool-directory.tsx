@@ -49,12 +49,13 @@ export function ToolDirectory() {
           onChange={(event) => setQuery(event.target.value)}
         />
         <div className="directory-chips" role="group" aria-label="工具分類">
-          <button className={category === "all" ? "directory-chip directory-chip-active" : "directory-chip"} type="button" onClick={() => setCategory("all")}>全部</button>
+          <button className={category === "all" ? "directory-chip directory-chip-active" : "directory-chip"} type="button" aria-pressed={category === "all"} onClick={() => setCategory("all")}>全部</button>
           {CATEGORIES.map((item) => (
             <button
               key={item.id}
               className={category === item.id ? "directory-chip directory-chip-active" : "directory-chip"}
               type="button"
+              aria-pressed={category === item.id}
               onClick={() => setCategory((current) => (current === item.id ? "all" : item.id))}
             >
               {item.label}
@@ -63,6 +64,7 @@ export function ToolDirectory() {
         </div>
       </div>
       <section className="compact-tool-grid page-shell" id="tools" aria-label="工具列表">
+        <p className="sr-only" role="status" aria-live="polite">找到 {visible.length} 個工具</p>
         {visible.map((tool, index) => (
           <ToolCard className={`compact-tool compact-tool-${tool.accent}`} href={`/tools/${tool.slug}`} key={tool.slug}>
             <span className="compact-tool-number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
