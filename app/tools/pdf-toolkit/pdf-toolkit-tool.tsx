@@ -71,6 +71,7 @@ export function PdfToolkitTool() {
     setThumbnails([]);
     setRotations({});
     setGlobalRotate(0);
+    setRange("");
     try {
       const buffer = await file.arrayBuffer();
       const { PDFDocument } = await import("pdf-lib");
@@ -79,6 +80,8 @@ export function PdfToolkitTool() {
       setSplitPages(document.getPageCount());
       void renderThumbnails(buffer, Math.min(document.getPageCount(), 12), renderId);
     } catch {
+      // 換檔後才報錯的舊檔案不可清掉目前已成功載入的新檔案。
+      if (thumbnailRenderIdRef.current !== renderId) return;
       setSplitFile(null);
       setError("無法讀取這份 PDF — 檔案可能已加密或損壞");
     }
