@@ -94,7 +94,7 @@ export function PdfToolkitTool() {
       const documentProxy = await pdfjs.getDocument({ data: buffer.slice(0) }).promise;
       const images: string[] = [];
       for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
-        if (thumbnailRenderIdRef.current !== renderId) { void documentProxy.destroy(); return; }
+        if (thumbnailRenderIdRef.current !== renderId) return;
         const page = await documentProxy.getPage(pageNumber);
         const viewport = page.getViewport({ scale: 1 });
         const scale = 120 / viewport.width;
