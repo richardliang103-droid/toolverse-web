@@ -746,7 +746,7 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 [data-theme="dark"] .workspace, [data-theme="dark"] .flowchart-workspace, [data-theme="dark"] .gantt-workspace { border-color: #2b3446; box-shadow: 8px 8px 0 rgba(0,0,0,.35); }
 [data-theme="dark"] .participant-input, [data-theme="dark"] .flow-prompt, [data-theme="dark"] .key-input, [data-theme="dark"] .flow-options select, [data-theme="dark"] .number-input, [data-theme="dark"] .qr-color-row input[type="color"] { background: #0e1421; color: var(--ink); }
 [data-theme="dark"] .result-stage { background-color: #141b29; background-image: radial-gradient(#33405c 1px, transparent 1px); border-color: #45536f; }
-[data-theme="dark"] .drop-zone, [data-theme="dark"] .qr-template-fields, [data-theme="dark"] .flowchart-empty, [data-theme="dark"] .mermaid-code, [data-theme="dark"] .model-progress, [data-theme="dark"] .compressor-item, [data-theme="dark"] .pdf-merge-list li, [data-theme="dark"] .pdf-help code, [data-theme="dark"] .password-toggle code, [data-theme="dark"] .favicon-previews, [data-theme="dark"] .favicon-snippets details { background: #141b29; }
+[data-theme="dark"] .drop-zone, [data-theme="dark"] .qr-template-fields, [data-theme="dark"] .flowchart-empty, [data-theme="dark"] .mermaid-code, [data-theme="dark"] .model-progress, [data-theme="dark"] .compressor-item, [data-theme="dark"] .pdf-merge-list li, [data-theme="dark"] .audio-merge-list li, [data-theme="dark"] .pdf-help code, [data-theme="dark"] .password-toggle code, [data-theme="dark"] .favicon-previews, [data-theme="dark"] .favicon-snippets details { background: #141b29; }
 [data-theme="dark"] .password-output, [data-theme="dark"] .password-strength-bar { background: #0e1421; }
 
 /* 首頁卡片與導覽 */
@@ -871,11 +871,18 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .converter-dropzone { margin-top: 14px; }
 .compressor-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 
+.audio-mode-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; }
+.audio-mode-tabs [aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 .audio-file-line { display: flex; align-items: baseline; gap: 12px; margin: 4px 0 12px; }
 .audio-range-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; margin-bottom: 6px; }
 .audio-number { width: 96px; }
 .audio-selection-length { color: var(--muted); font-size: 13px; padding-bottom: 10px; }
 .audio-waveform { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 12px; }
+.audio-merge-list { display: grid; gap: 8px; margin: 14px 0; padding: 0; list-style: none; }
+.audio-merge-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; background: white; }
+.audio-merge-name { min-width: 0; flex: 1; display: grid; overflow: hidden; font-size: 14px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.audio-merge-name small { color: var(--muted); font-size: 11.5px; font-weight: 400; }
+.audio-merge-actions { display: inline-flex; gap: 2px; }
 
 @media (max-width: 860px) {
   .compare-inputs { grid-template-columns: 1fr; }
@@ -889,7 +896,6 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 [data-theme="dark"] body::after { opacity: .07; mix-blend-mode: screen; }
 
 .directory-eyebrow { display: flex; align-items: center; gap: 10px; margin: 0 0 20px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; color: var(--muted); }
-.eyebrow-seal { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: #c73e2e; color: #fff6ee; font-family: "Noto Serif TC", "Songti TC", serif; font-size: 14px; font-weight: 700; letter-spacing: 0; box-shadow: 0 2px 6px rgba(199,62,46,.3); }
 
 .compact-tool-number { position: absolute; top: 10px; right: 14px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; color: #b9b4a8; }
 [data-theme="dark"] .compact-tool-number { color: #4d5871; }
