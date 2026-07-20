@@ -6,6 +6,7 @@ import { formatBytes } from "@/lib/image-compress";
 
 const MAX_FILES = 12;
 const MAX_SIZE = 50 * 1024 * 1024;
+const MAX_TOTAL_SIZE = 150 * 1024 * 1024;
 
 type PdfMode = "merge" | "split";
 
@@ -49,12 +50,16 @@ export function PdfToolkitTool() {
   function addMergeFiles(event: ChangeEvent<HTMLInputElement>) {
     resetMessages();
     const incoming: MergeItem[] = [];
+    let reservedSize = mergeItems.reduce((total, item) => total + item.file.size, 0);
     for (const file of Array.from(event.target.files ?? [])) {
       if (!isPdf(file)) { setError("只支援 PDF 檔案"); continue; }
       if (file.size > MAX_SIZE) { setError(`「${file.name}」超過 50 MB 上限`); continue; }
+      if (reservedSize + file.size > MAX_TOTAL_SIZE) { setError(`合併檔案總計上限為 ${MAX_TOTAL_SIZE / 1024 / 1024} MB，未加入後續檔案。`); continue; }
+      if (mergeItems.length + incoming.length >= MAX_FILES) { setError(`最多可合併 ${MAX_FILES} 份 PDF。`); continue; }
+      reservedSize += file.size;
       incoming.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, file });
     }
-    setMergeItems((previous) => [...previous, ...incoming].slice(0, MAX_FILES));
+    setMergeItems((previous) => [...previous, ...incoming]);
     event.target.value = "";
   }
 
@@ -214,14 +219,14 @@ export function PdfToolkitTool() {
   return <section className="workspace pdf-workspace page-shell" aria-label="PDF 工具">
     <div className="panel">
       <span className="privacy-badge background-remover-badge">⧉ 檔案不上傳</span>
-      <div className="flow-mode-toggle" role="radiogroup" aria-label="PDF 功能">
+      <div className="flow-mode-toggle" role="group" aria-label="PDF 功能">
         <button type="button" className={`button button-small ${mode === "merge" ? "button-blue" : "button-secondary"}`} aria-pressed={mode === "merge"} onClick={() => { setMode("merge"); resetMessages(); }} disabled={busy}>合併多份 PDF</button>
         <button type="button" className={`button button-small ${mode === "split" ? "button-blue" : "button-secondary"}`} aria-pressed={mode === "split"} onClick={() => { setMode("split"); resetMessages(); }} disabled={busy}>取出指定頁面</button>
       </div>
       {mode === "merge"
         ? <>
             <button className="button button-secondary pdf-add-button" type="button" onClick={() => mergeInputRef.current?.click()} disabled={busy || mergeItems.length >= MAX_FILES}>＋ 加入 PDF（{mergeItems.length}/{MAX_FILES}）</button>
-            <input ref={mergeInputRef} className="file-input" type="file" accept="application/pdf,.pdf" multiple onChange={addMergeFiles} aria-label="選擇要合併的 PDF" />
+            <input ref={mergeInputRef} className="file-input" type="file" accept="application/pdf,.pdf" multiple disabled={busy} onChange={addMergeFiles} aria-label="選擇要合併的 PDF" />
             {mergeItems.length > 0 && (
               <ul className="pdf-merge-list">
                 {mergeItems.map((item, index) => (
@@ -229,8 +234,8 @@ export function PdfToolkitTool() {
                     key={item.id}
                     className={dragOverId === item.id ? "pdf-merge-dragover" : undefined}
                     draggable
-                    onDragStart={() => { dragIdRef.current = item.id; }}
-                    onDragOver={(event) => { event.preventDefault(); setDragOverId(item.id); handleDragOverItem(item.id); }}
+                    onDragStart={() => { if (!busy) dragIdRef.current = item.id; }}
+                    onDragOver={(event) => { if (!busy) { event.preventDefault(); setDragOverId(item.id); handleDragOverItem(item.id); } }}
                     onDragEnd={() => { dragIdRef.current = null; setDragOverId(null); }}
                     onDrop={(event) => { event.preventDefault(); dragIdRef.current = null; setDragOverId(null); }}
                   >
@@ -238,9 +243,9 @@ export function PdfToolkitTool() {
                     <span className="pdf-merge-order">{index + 1}</span>
                     <span className="pdf-merge-name">{item.file.name}<small>{formatBytes(item.file.size)}</small></span>
                     <span className="pdf-merge-actions">
-                      <button className="gantt-row-delete" type="button" aria-label="往上移" disabled={index === 0} onClick={() => moveItem(item.id, -1)}>↑</button>
-                      <button className="gantt-row-delete" type="button" aria-label="往下移" disabled={index === mergeItems.length - 1} onClick={() => moveItem(item.id, 1)}>↓</button>
-                      <button className="gantt-row-delete" type="button" aria-label={`移除 ${item.file.name}`} onClick={() => setMergeItems((previous) => previous.filter((entry) => entry.id !== item.id))}>✕</button>
+                      <button className="gantt-row-delete" type="button" aria-label="往上移" disabled={busy || index === 0} onClick={() => moveItem(item.id, -1)}>↑</button>
+                      <button className="gantt-row-delete" type="button" aria-label="往下移" disabled={busy || index === mergeItems.length - 1} onClick={() => moveItem(item.id, 1)}>↓</button>
+                      <button className="gantt-row-delete" type="button" aria-label={`移除 ${item.file.name}`} disabled={busy} onClick={() => setMergeItems((previous) => previous.filter((entry) => entry.id !== item.id))}>✕</button>
                     </span>
                   </li>
                 ))}
@@ -250,27 +255,27 @@ export function PdfToolkitTool() {
           </>
         : <>
             <button className="button button-secondary pdf-add-button" type="button" onClick={() => splitInputRef.current?.click()} disabled={busy}>{splitFile ? `已選：${splitFile.name}` : "選擇 PDF"}</button>
-            <input ref={splitInputRef} className="file-input" type="file" accept="application/pdf,.pdf" onChange={chooseSplitFile} aria-label="選擇要取頁的 PDF" />
+            <input ref={splitInputRef} className="file-input" type="file" accept="application/pdf,.pdf" disabled={busy} onChange={chooseSplitFile} aria-label="選擇要取頁的 PDF" />
             {splitPages !== null && <p className="pdf-page-count">共 {splitPages} 頁{thumbnails.length > 0 ? "（點縮圖可加入／移除頁碼）" : ""}</p>}
             {thumbnails.length > 0 && (
               <div className="pdf-thumb-grid">
                 {thumbnails.map((thumbnail, index) => (
                   <span className="pdf-thumb-wrap" key={index}>
-                    <button type="button" className="pdf-thumb" onClick={() => toggleThumbnailPage(index + 1)} title={`第 ${index + 1} 頁`}>
+                    <button type="button" className="pdf-thumb" disabled={busy} onClick={() => toggleThumbnailPage(index + 1)} title={`第 ${index + 1} 頁`}>
                       {/* eslint-disable-next-line @next/next/no-img-element -- 本機 data URL 縮圖 */}
                       <img src={thumbnail} alt={`第 ${index + 1} 頁縮圖`} style={rotations[index + 1] ? { transform: `rotate(${rotations[index + 1]}deg)` } : undefined} />
                       <span>{index + 1}{rotations[index + 1] ? ` ↻${rotations[index + 1]}°` : ""}</span>
                     </button>
-                    <button type="button" className="pdf-thumb-rotate" aria-label={`旋轉第 ${index + 1} 頁`} title="旋轉 90°" onClick={() => rotatePage(index + 1)}>↻</button>
+                    <button type="button" className="pdf-thumb-rotate" disabled={busy} aria-label={`旋轉第 ${index + 1} 頁`} title="旋轉 90°" onClick={() => rotatePage(index + 1)}>↻</button>
                   </span>
                 ))}
               </div>
             )}
             <label className="field-label" htmlFor="pdf-range">要取出的頁碼
-              <input id="pdf-range" className="key-input" value={range} onChange={(event) => setRange(event.target.value)} placeholder="例如 1-3,5" spellCheck={false} />
+              <input id="pdf-range" className="key-input" value={range} disabled={busy} onChange={(event) => setRange(event.target.value)} placeholder="例如 1-3,5" spellCheck={false} />
             </label>
             <label className="field-label" htmlFor="pdf-rotate">旋轉取出的頁面
-              <select id="pdf-rotate" className="key-input" value={globalRotate} onChange={(event) => setGlobalRotate(Number(event.target.value))}>
+              <select id="pdf-rotate" className="key-input" value={globalRotate} disabled={busy} onChange={(event) => setGlobalRotate(Number(event.target.value))}>
                 <option value={0}>不旋轉</option>
                 <option value={90}>順時針 90°</option>
                 <option value={180}>180°</option>
@@ -288,7 +293,7 @@ export function PdfToolkitTool() {
       <ul className="pdf-help">
         <li><strong>合併</strong>：加入多份 PDF，直接拖曳（或用 ↑↓）調整順序，合併後直接下載，原始檔不會離開你的裝置。</li>
         <li><strong>取頁</strong>：頁碼支援單頁與範圍，例如 <code>1-3,5</code>；<code>8-6</code> 會照 8、7、6 的順序輸出，可用來倒轉頁序。點縮圖右上角的 ↻ 可個別旋轉頁面，或用「旋轉取出的頁面」整批旋轉。</li>
-        <li>加密的 PDF 需要先解除密碼才能處理；每份檔案上限 50 MB。</li>
+              <li>加密的 PDF 需要先解除密碼才能處理；每份檔案上限 50 MB，全部檔案合計上限 150 MB。</li>
       </ul>
     </div>
   </section>;

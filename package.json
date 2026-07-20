@@ -19,6 +19,7 @@
     "@huggingface/transformers": "^4.2.0",
     "canvas-confetti": "^1.9.4",
     "drizzle-orm": "0.45.2",
+    "fflate": "0.7.4",
     "gsap": "^3.15.0",
     "jsbarcode": "^3.12.3",
     "marked": "^18.0.6",

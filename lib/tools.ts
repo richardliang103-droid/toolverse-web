@@ -30,7 +30,7 @@ export const tools = [
   { slug: "markdown-editor", name: "Markdown 編輯器", description: "即時預覽、支援 GFM 表格與程式碼，草稿自動儲存，可下載 .md 或複製 HTML。", symbol: "✎", accent: "sora", status: "READY", category: "text" },
   { slug: "csv-editor", name: "CSV 編輯器", description: "貼上或開啟 CSV／TSV 直接編輯、排序、增刪欄列，匯出 CSV 或 JSON。", symbol: "☰", accent: "mint", status: "READY", category: "utility" },
   { slug: "image-converter", name: "圖片格式轉換", description: "批次把 JPG、PNG、GIF、BMP、SVG 轉成 WebP、PNG、JPG，可調品質。", symbol: "⇋", accent: "coral", status: "READY", category: "image" },
-  { slug: "audio-trimmer", name: "音訊剪輯", description: "看著波形框出片段、先試聽再輸出 PCM WAV，MP3、WAV 等格式不上傳。", symbol: "♪", accent: "matsuba", status: "READY", category: "utility" },
+  { slug: "audio-trimmer", name: "音訊剪輯", description: "看著波形剪輯音檔或合併多段音訊，輸出 PCM WAV，MP3、WAV 等格式不上傳。", symbol: "♪", accent: "matsuba", status: "READY", category: "utility" },
 ] as const;
 
 export type Tool = (typeof tools)[number];

@@ -2,7 +2,9 @@
 
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
 import { CountUp } from "@/components/count-up";
+import { createZip, downloadBlob } from "@/lib/download-zip";
 import { QUALITY_FORMATS, fitDimensions, formatBytes, mimeForFormat, outputFilename, savingsPercent } from "@/lib/image-compress";
+import { exceedsImagePixelLimit, imagePixelLimitMessage } from "@/lib/image-limits";
 import type { OutputFormat } from "@/lib/image-compress";
 
 const STORAGE_KEY = "toolverse:image-compressor:v1";
@@ -38,6 +40,7 @@ function sanitizeOptions(value: unknown): StoredOptions {
 async function compressFile(file: File, options: StoredOptions): Promise<{ blob: Blob; name: string; width: number; height: number }> {
   const bitmap = await createImageBitmap(file);
   try {
+    if (exceedsImagePixelLimit(bitmap.width, bitmap.height)) throw new Error("pixel limit");
     const { width, height } = fitDimensions(bitmap.width, bitmap.height, options.maxEdge);
     const canvas = document.createElement("canvas");
     canvas.width = width;
@@ -55,15 +58,6 @@ async function compressFile(file: File, options: StoredOptions): Promise<{ blob:
   } finally {
     bitmap.close();
   }
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function ImageCompressorTool() {
@@ -124,7 +118,9 @@ export function ImageCompressorTool() {
           ? { ...entry, status: "done", outputBlob, outputName, outputSize: outputBlob.size, width: result.width, height: result.height, keptOriginal }
           : entry)));
       } catch (caught) {
-        const message = caught instanceof Error && /decoded|InvalidState/i.test(`${caught.name} ${caught.message}`)
+        const message = caught instanceof Error && caught.message === "pixel limit"
+          ? imagePixelLimitMessage()
+          : caught instanceof Error && /decoded|InvalidState/i.test(`${caught.name} ${caught.message}`)
           ? "無法解碼，檔案可能損壞或是特殊格式"
           : "壓縮失敗，請重試或換一張圖片";
         setItems((previous) => previous.map((entry) => (entry.id === item.id ? { ...entry, status: "error", message } : entry)));
@@ -140,10 +136,10 @@ export function ImageCompressorTool() {
       : item)));
   }
 
-  function downloadAll() {
-    for (const item of items) {
-      if (item.status === "done" && item.outputBlob && item.outputName) downloadBlob(item.outputBlob, item.outputName);
-    }
+  async function downloadAll() {
+    const completed = items.filter((item): item is CompressItem & { outputBlob: Blob; outputName: string } => item.status === "done" && Boolean(item.outputBlob && item.outputName));
+    if (completed.length < 2) return;
+    downloadBlob(await createZip(completed.map((item) => ({ name: item.outputName, blob: item.outputBlob }))), "toolverse-compressed-images.zip");
   }
 
   function removeItem(id: string) {
@@ -222,7 +218,7 @@ export function ImageCompressorTool() {
               ))}
             </ul>
             <div className="result-actions">
-              {doneCount > 1 && <button className="button button-small button-blue" type="button" onClick={downloadAll}>全部下載（{doneCount} 張）</button>}
+              {doneCount > 1 && <button className="button button-small button-blue" type="button" onClick={() => { void downloadAll(); }}>下載 ZIP（{doneCount} 張）</button>}
               <button className="button button-small button-secondary" type="button" onClick={clearAll} disabled={busy}>清空</button>
               {doneCount > 0 && <span className="compressor-total">合計 {formatBytes(totalOriginal)} → {formatBytes(totalCompressed)}</span>}
             </div>

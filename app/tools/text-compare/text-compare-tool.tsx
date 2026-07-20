@@ -50,13 +50,13 @@ export function TextCompareTool() {
         </label>
       </div>
       <div className="compare-options">
-        <div className="flow-mode-toggle" role="radiogroup" aria-label="比較單位">
+        <div className="flow-mode-toggle" role="group" aria-label="比較單位">
           {GRANULARITIES.map((item) => (
             <button key={item.id} type="button" title={item.hint} className={`button button-small ${granularity === item.id ? "button-blue" : "button-secondary"}`} aria-pressed={granularity === item.id} onClick={() => setGranularity(item.id)}>{item.label}</button>
           ))}
         </div>
         {granularity === "line" && (
-          <div className="flow-mode-toggle" role="radiogroup" aria-label="顯示方式">
+          <div className="flow-mode-toggle" role="group" aria-label="顯示方式">
             <button type="button" className={`button button-small ${view === "split" ? "button-blue" : "button-secondary"}`} aria-pressed={view === "split"} onClick={() => setView("split")}>並排</button>
             <button type="button" className={`button button-small ${view === "unified" ? "button-blue" : "button-secondary"}`} aria-pressed={view === "unified"} onClick={() => setView("unified")}>統一</button>
           </div>

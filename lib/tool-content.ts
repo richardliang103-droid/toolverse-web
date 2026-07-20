@@ -120,7 +120,7 @@ export const toolContent: Record<string, ToolContent> = {
     ],
     faq: [
       { q: "PDF 會上傳到伺服器嗎？", a: "不會。合併與取頁使用 pdf-lib 在你的瀏覽器內完成，適合處理合約、成績單等敏感文件。" },
-      { q: "有檔案大小限制嗎？", a: "每份 PDF 上限 50 MB，合併模式最多 12 份。實際可處理量仍會受裝置記憶體影響。" },
+      { q: "有檔案大小限制嗎？", a: "每份 PDF 上限 50 MB，合併模式最多 12 份，合併檔案總計上限 150 MB。實際可處理量仍會受裝置記憶體影響。" },
       { q: "加密的 PDF 可以處理嗎？", a: "有開啟密碼的 PDF 需要先解鎖才能處理，工具不會也無法繞過文件密碼。" },
     ],
   },
@@ -270,7 +270,7 @@ export const toolContent: Record<string, ToolContent> = {
   "image-converter": {
     steps: [
       "拖入或選擇圖片，一次最多 20 張（JPG、PNG、WebP、GIF、BMP、SVG）。",
-      "選擇輸出格式：WebP（最小）、PNG（無損透明）或 JPG（相容性最好）。",
+      "選擇輸出格式：WebP（通常較小）、PNG（無損透明）或 JPG（相容性最好）。",
       "有損格式可調品質，按「轉換」批次處理。",
       "逐張下載或一鍵全部下載。",
     ],

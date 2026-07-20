@@ -55,7 +55,7 @@ export function UnitConverterTool() {
   return <section className="workspace unit-workspace page-shell" aria-label="單位換算工具">
     <div className="panel">
       <div className="panel-header"><h2>選擇單位</h2><span className="panel-meta">支援坪、甲、台斤等台制單位</span></div>
-      <div className="flow-mode-toggle unit-category-row" role="radiogroup" aria-label="換算類別">
+      <div className="flow-mode-toggle unit-category-row" role="group" aria-label="換算類別">
         {UNIT_CATEGORIES.map((item) => (
           <button key={item.id} type="button" className={`button button-small ${category === item.id ? "button-blue" : "button-secondary"}`} aria-pressed={category === item.id} onClick={() => switchCategory(item.id)}>{item.label}</button>
         ))}

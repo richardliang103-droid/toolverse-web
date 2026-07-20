@@ -2,6 +2,7 @@
 
 import { ChangeEvent, DragEvent, useRef, useState } from "react";
 import { cleanedFilename, stripImageMetadata } from "@/lib/exif-clean";
+import { createZip, downloadBlob } from "@/lib/download-zip";
 import type { RemovedSegment } from "@/lib/exif-clean";
 import { formatBytes } from "@/lib/image-compress";
 
@@ -19,15 +20,6 @@ type CleanItem = {
   removed: RemovedSegment[];
   message?: string;
 };
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
 
 export function ExifCleanerTool() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -100,10 +92,10 @@ export function ExifCleanerTool() {
     void addFiles(event.target.files); event.target.value = "";
   }
 
-  function downloadAll() {
-    for (const item of items) {
-      if (item.status === "done" && item.outputBlob && item.outputName) downloadBlob(item.outputBlob, item.outputName);
-    }
+  async function downloadAll() {
+    const completed = items.filter((item): item is CleanItem & { outputBlob: Blob; outputName: string } => item.status === "done" && Boolean(item.outputBlob && item.outputName));
+    if (completed.length < 2) return;
+    downloadBlob(await createZip(completed.map((item) => ({ name: item.outputName, blob: item.outputBlob }))), "toolverse-privacy-cleaned.zip");
   }
 
   const doneCount = items.filter((item) => item.status === "done").length;
@@ -140,7 +132,7 @@ export function ExifCleanerTool() {
               ))}
             </ul>
             <div className="result-actions">
-              {doneCount > 1 && <button className="button button-small button-blue" type="button" onClick={downloadAll}>全部下載（{doneCount} 張）</button>}
+              {doneCount > 1 && <button className="button button-small button-blue" type="button" onClick={() => { void downloadAll(); }}>下載 ZIP（{doneCount} 張）</button>}
               <button className="button button-small button-secondary" type="button" onClick={() => { setItems([]); setError(""); setNotice(""); }} disabled={busy}>清空</button>
             </div>
           </>}

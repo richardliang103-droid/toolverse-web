@@ -124,7 +124,7 @@ export function RandomGroupsTool() {
       <RosterPicker currentText={raw} onLoad={setRaw} /><div className="form-controls">
         <label className="check-row"><input type="checkbox" checked={dedupe} onChange={(event) => setDedupe(event.target.checked)} />移除重複名字</label>
       </div>
-      <div className="flow-mode-toggle" role="radiogroup" aria-label="分組方式">
+      <div className="flow-mode-toggle" role="group" aria-label="分組方式">
         <button type="button" className={`button button-small ${mode === "byCount" ? "button-blue" : "button-secondary"}`} aria-pressed={mode === "byCount"} onClick={() => setMode("byCount")}>分成幾組</button>
         <button type="button" className={`button button-small ${mode === "bySize" ? "button-blue" : "button-secondary"}`} aria-pressed={mode === "bySize"} onClick={() => setMode("bySize")}>每組幾人</button>
       </div>

@@ -1,14 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createSafeMarkdownRenderer } from "@/lib/markdown-safety";
 
 const STORAGE_KEY = "toolverse:markdown-editor:v1";
 
 const SAMPLE = "# 歡迎使用 Markdown 編輯器\n\n左邊寫、右邊即時預覽，內容自動存在你的瀏覽器。\n\n## 支援語法\n\n- **粗體**、*斜體*、`行內程式碼`\n- [連結](https://example.com)、清單、引用\n\n> 引用區塊長這樣\n\n```\n程式碼區塊\n```\n\n| 欄位 | 說明 |\n| --- | --- |\n| 表格 | 也支援 |\n";
-
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 
 type ToolbarAction = { label: string; title: string; prefix: string; suffix: string; block?: boolean };
 
@@ -48,11 +45,16 @@ export function MarkdownEditorTool() {
     let cancelled = false;
     const timer = setTimeout(() => {
       void (async () => {
-        const { marked } = await import("marked");
-        // 原始 HTML 一律跳脫呈現：預覽只渲染 Markdown 語法本身，杜絕 script 注入。
-        marked.use({ renderer: { html: (token: { text: string }) => escapeHtml(token.text) } });
-        const rendered = await marked.parse(text, { gfm: true, breaks: true });
-        if (!cancelled) setHtml(rendered);
+        try {
+          const { marked } = await import("marked");
+          // 原始 HTML 一律跳脫；連結與圖片 URL 也只保留 allowlist 協定。
+          const renderer = createSafeMarkdownRenderer();
+          renderer.html = ({ text }) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          const rendered = await marked.parse(text, { gfm: true, breaks: true, renderer });
+          if (!cancelled) setHtml(rendered);
+        } catch {
+          if (!cancelled) setHtml("<p>預覽暫時無法產生，請重新整理後再試。</p>");
+        }
       })();
     }, 120);
     return () => { cancelled = true; clearTimeout(timer); };
