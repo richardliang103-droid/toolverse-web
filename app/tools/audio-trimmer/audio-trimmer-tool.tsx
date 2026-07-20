@@ -69,6 +69,20 @@ export function AudioTrimmerTool() {
     context.fillRect(Math.max(0, endX - 2), 0, 2, height);
   }
 
+  /** 用 <audio> 的 metadata 讀時長，回傳保守 PCM 預估（48kHz・立體聲・float32）；讀不到回傳 null 交給解碼後檢查。 */
+  function estimatePcmBytes(file: File): Promise<number | null> {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const probe = document.createElement("audio");
+      probe.preload = "metadata";
+      const finish = (value: number | null) => { URL.revokeObjectURL(url); resolve(value); };
+      probe.onloadedmetadata = () => finish(Number.isFinite(probe.duration) ? probe.duration * 48_000 * 2 * 4 : null);
+      probe.onerror = () => finish(null);
+      window.setTimeout(() => finish(null), 4000);
+      probe.src = url;
+    });
+  }
+
   async function loadFile(file: File | undefined) {
     setError("");
     stopPreview();
@@ -77,6 +91,13 @@ export function AudioTrimmerTool() {
     if (file.size > MAX_SIZE) { setError("檔案超過 30 MB 上限"); return; }
     setBusy(true);
     try {
+      // 解碼前先用 metadata 的長度保守預估 PCM 大小（48kHz 立體聲 float32），
+      // 超標就直接拒絕，避免 decodeAudioData 先配置巨大記憶體才進到事後檢查。
+      const estimatedBytes = await estimatePcmBytes(file);
+      if (estimatedBytes !== null && estimatedBytes > MAX_PCM_BYTES) {
+        setError(`這段音訊約 ${formatSeconds((estimatedBytes / (48_000 * 2 * 4)))} 長，解碼後預估超過 ${MAX_PCM_BYTES / 1024 / 1024} MB 記憶體上限，請先用較短的檔案。`);
+        return;
+      }
       const arrayBuffer = await file.arrayBuffer();
       const context = new AudioContext();
       const buffer = await context.decodeAudioData(arrayBuffer);

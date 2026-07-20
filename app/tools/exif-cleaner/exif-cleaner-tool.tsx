@@ -31,6 +31,9 @@ function downloadBlob(blob: Blob, filename: string) {
 
 export function ExifCleanerTool() {
   const inputRef = useRef<HTMLInputElement>(null);
+  // 併發加入時先預留名額，避免兩批同時看到相同的 items.length 而突破上限。
+  const reservedRef = useRef(0);
+  const [processingCount, setProcessingCount] = useState(0);
   const [items, setItems] = useState<CleanItem[]>([]);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
@@ -65,20 +68,28 @@ export function ExifCleanerTool() {
       if (file.size > MAX_SIZE) { setError(`「${file.name}」超過 50 MB 上限`); continue; }
       accepted.push(file);
     }
-    const remaining = Math.max(0, MAX_FILES - items.length);
+    const remaining = Math.max(0, MAX_FILES - items.length - reservedRef.current);
     const filesToProcess = accepted.slice(0, remaining);
     const skipped = accepted.length - filesToProcess.length;
-    if (skipped > 0) setNotice(`已加入前 ${filesToProcess.length} 張，其餘 ${skipped} 張未處理。`);
-    const processed: CleanItem[] = new Array(filesToProcess.length);
-    let nextIndex = 0;
-    await Promise.all(Array.from({ length: Math.min(3, filesToProcess.length) }, async () => {
-      while (nextIndex < filesToProcess.length) {
-        const index = nextIndex;
-        nextIndex += 1;
-        processed[index] = await processFile(filesToProcess[index]);
-      }
-    }));
-    setItems((previous) => [...previous, ...processed]);
+    if (skipped > 0) setNotice(`已加入前 ${filesToProcess.length} 張，其餘 ${skipped} 張未處理（上限 ${MAX_FILES} 張）。`);
+    if (filesToProcess.length === 0) return;
+    reservedRef.current += filesToProcess.length;
+    setProcessingCount((previous) => previous + filesToProcess.length);
+    try {
+      const processed: CleanItem[] = new Array(filesToProcess.length);
+      let nextIndex = 0;
+      await Promise.all(Array.from({ length: Math.min(3, filesToProcess.length) }, async () => {
+        while (nextIndex < filesToProcess.length) {
+          const index = nextIndex;
+          nextIndex += 1;
+          processed[index] = await processFile(filesToProcess[index]);
+        }
+      }));
+      setItems((previous) => [...previous, ...processed]);
+    } finally {
+      reservedRef.current -= filesToProcess.length;
+      setProcessingCount((previous) => previous - filesToProcess.length);
+    }
   }
 
   function onDrop(event: DragEvent<HTMLDivElement>) {
@@ -101,7 +112,7 @@ export function ExifCleanerTool() {
     <div className="panel">
       <span className="privacy-badge background-remover-badge">◉ 照片不上傳</span>
       <div className={`drop-zone compressor-drop ${dragging ? "dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} onClick={() => inputRef.current?.click()} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") inputRef.current?.click(); }}>
-        <div><div className="drop-icon" aria-hidden="true">◉</div><h2>{items.length > 0 ? `已處理 ${items.length} 張照片` : "把照片拖到這裡"}</h2><p>放進來就會自動移除 metadata</p><span className="button button-secondary">{items.length > 0 ? "繼續加入" : "選擇照片"}</span><input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png" multiple onChange={onFileChange} aria-label="選擇要清除隱私資訊的照片" /><small className="file-note">JPG、PNG · 每張最大 50 MB · 最多 {MAX_FILES} 張</small></div>
+        <div><div className="drop-icon" aria-hidden="true">◉</div><h2>{processingCount > 0 ? `處理中（${processingCount} 張）…` : items.length > 0 ? `已處理 ${items.length} 張照片` : "把照片拖到這裡"}</h2><p>放進來就會自動移除 metadata</p><span className="button button-secondary">{items.length > 0 ? "繼續加入" : "選擇照片"}</span><input ref={inputRef} className="file-input" type="file" accept="image/jpeg,image/png" multiple onChange={onFileChange} disabled={processingCount > 0} aria-label="選擇要清除隱私資訊的照片" /><small className="file-note">JPG、PNG · 每張最大 50 MB · 最多 {MAX_FILES} 張</small></div>
       </div>
       {error && <p className="error-message" role="alert">{error}</p>}
       {notice && <p className="gantt-notice gantt-notice-info" role="status">{notice}</p>}

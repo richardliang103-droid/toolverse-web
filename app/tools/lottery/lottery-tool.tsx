@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import gsap from "gsap";
-import { drawWinners, normalizeParticipants, type Participant } from "@/lib/lottery";
+import { drawWinners, migrateLegacyWinnerNames, normalizeParticipants, type Participant } from "@/lib/lottery";
 import { LotteryWheel, type LotteryWheelHandle, type WheelTheme } from "./lottery-wheel";
 import { RosterPicker } from "@/components/roster-picker";
 import { StarBorder } from "@/components/star-border";
@@ -24,7 +24,10 @@ function sanitizeStoredState(value: unknown): StoredState {
     count: Number.isFinite(Number(data.count)) ? Math.max(1, Math.round(Number(data.count))) : 1,
     dedupe: data.dedupe !== false,
     exclude: data.exclude !== false,
-    previousWinnerIds: stringList(data.previousWinnerIds),
+    // 舊版欄位 previousWinners 存名稱；沒有新欄位時做一次性遷移，避免舊得獎者被重複抽中。
+    previousWinnerIds: Array.isArray(data.previousWinnerIds)
+      ? stringList(data.previousWinnerIds)
+      : migrateLegacyWinnerNames(stringList(data.previousWinners)),
     history: Array.isArray(data.history) ? data.history.map(stringList).filter((round) => round.length > 0) : [],
     theme: data.theme === "neon" ? "neon" : "wa",
   };

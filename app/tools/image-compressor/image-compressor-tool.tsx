@@ -133,6 +133,13 @@ export function ImageCompressorTool() {
     setBusy(false);
   }
 
+  /** 設定變更後，已完成／失敗的項目標回待處理，「開始壓縮」會用新設定重跑。 */
+  function requeueFinished() {
+    setItems((previous) => previous.map((item) => (item.status === "done" || item.status === "error"
+      ? { id: item.id, file: item.file, status: "queued" as const }
+      : item)));
+  }
+
   function downloadAll() {
     for (const item of items) {
       if (item.status === "done" && item.outputBlob && item.outputName) downloadBlob(item.outputBlob, item.outputName);
@@ -167,7 +174,7 @@ export function ImageCompressorTool() {
       </div>
       <div className="flow-options compressor-options">
         <label className="field-label" htmlFor="compress-format">輸出格式
-          <select id="compress-format" value={format} onChange={(event) => setFormat(event.target.value as OutputFormat)}>
+          <select id="compress-format" value={format} onChange={(event) => { setFormat(event.target.value as OutputFormat); requeueFinished(); }}>
             <option value="original">保持原格式</option>
             <option value="jpeg">JPG（相容性高）</option>
             <option value="webp">WebP（通常較小）</option>
@@ -175,7 +182,7 @@ export function ImageCompressorTool() {
           </select>
         </label>
         <label className="field-label" htmlFor="compress-max">尺寸上限（長邊）
-          <select id="compress-max" value={maxEdge} onChange={(event) => setMaxEdge(Number(event.target.value))}>
+          <select id="compress-max" value={maxEdge} onChange={(event) => { setMaxEdge(Number(event.target.value)); requeueFinished(); }}>
             <option value={0}>不縮放</option>
             <option value={4000}>4000 px</option>
             <option value={2000}>2000 px</option>
@@ -184,7 +191,7 @@ export function ImageCompressorTool() {
         </label>
         {(format === "jpeg" || format === "webp" || format === "original") && (
           <label className="field-label" htmlFor="compress-quality">壓縮品質：{quality}%
-            <input id="compress-quality" className="gantt-range" type="range" min={30} max={100} step={5} value={quality} onChange={(event) => setQuality(Number(event.target.value))} />
+            <input id="compress-quality" className="gantt-range" type="range" min={30} max={100} step={5} value={quality} onChange={(event) => { setQuality(Number(event.target.value)); requeueFinished(); }} />
           </label>
         )}
       </div>
