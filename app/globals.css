@@ -934,3 +934,6 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
   .draw-button-busy::after { animation: none; }
   .draw-button-spinner { animation: none; }
 }
+
+/* 去背工具的網路錯誤：訊息下方的「改用 remove.bg」按鈕留一點呼吸空間 */
+.error-message .button { margin-top: 10px; }

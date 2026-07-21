@@ -11,7 +11,9 @@ type WorkerResponse =
   | { type: "progress"; progress: number; stage: string }
   | { type: "ready"; backend: "WebGPU" | "WASM" }
   | { type: "result"; blob: Blob; backend: "WebGPU" | "WASM" }
-  | { type: "error"; message: string; detail?: string };
+  | { type: "error"; message: string; detail?: string; code?: "decode" | "memory" | "network" | "unknown" };
+
+type FailureDetail = { detail?: string; code?: string };
 
 type RemoveBgMode = "local" | "removebg";
 
@@ -28,6 +30,7 @@ export function BackgroundRemover() {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
   const [errorDetail, setErrorDetail] = useState("");
+  const [errorCode, setErrorCode] = useState("");
   const [compare, setCompare] = useState(50);
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState("準備本機模型");
@@ -92,7 +95,8 @@ export function BackgroundRemover() {
         if (message.type === "result") { setBackend(message.backend); resolve(message.blob); }
         if (message.type === "error") {
           const failure = new Error(message.message);
-          if (message.detail) (failure as Error & { detail?: string }).detail = message.detail;
+          if (message.detail) (failure as Error & FailureDetail).detail = message.detail;
+          if (message.code) (failure as Error & FailureDetail).code = message.code;
           reject(failure);
         }
       };
@@ -103,7 +107,7 @@ export function BackgroundRemover() {
   }
 
   function isDecodeFailure(caught: unknown) {
-    const detail = caught instanceof Error ? `${(caught as Error & { detail?: string }).detail ?? ""} ${caught.message}` : String(caught);
+    const detail = caught instanceof Error ? `${(caught as Error & FailureDetail).detail ?? ""} ${caught.message}` : String(caught);
     return /InvalidStateError|could not be decoded|unusable/i.test(detail);
   }
 
@@ -140,7 +144,7 @@ export function BackgroundRemover() {
         normalized = await reencodeAsPng(image);
       } catch {
         const failure = new Error("瀏覽器無法解碼這張圖片 — 檔案可能已損壞，或是改了副檔名的 HEIC 等特殊格式。請先轉存成一般的 JPG 或 PNG 再試。");
-        (failure as Error & { detail?: string }).detail = caught instanceof Error ? (caught as Error & { detail?: string }).detail ?? caught.message : String(caught);
+        (failure as Error & { detail?: string }).detail = caught instanceof Error ? (caught as Error & FailureDetail).detail ?? caught.message : String(caught);
         throw failure;
       }
       return runLocally(normalized);
@@ -163,7 +167,7 @@ export function BackgroundRemover() {
   async function removeBackground() {
     if (!file) return;
     const operationId = ++operationRef.current;
-    setProcessing(true); setError(""); setErrorDetail("");
+    setProcessing(true); setError(""); setErrorDetail(""); setErrorCode("");
     if (mode === "local") { setProgress(modelReady ? 100 : 0); setStage(modelReady ? "正在辨識主體與背景" : "正在下載本機模型"); }
     else { setStage("正在呼叫 remove.bg…"); }
     try {
@@ -176,7 +180,8 @@ export function BackgroundRemover() {
     } catch (caught) {
       if (operationRef.current !== operationId) return;
       setError(caught instanceof Error ? caught.message : "圖片去背失敗");
-      setErrorDetail(caught instanceof Error ? (caught as Error & { detail?: string }).detail ?? "" : "");
+      setErrorDetail(caught instanceof Error ? (caught as Error & FailureDetail).detail ?? "" : "");
+      setErrorCode(caught instanceof Error ? (caught as Error & FailureDetail).code ?? "" : "");
     } finally {
       if (operationRef.current === operationId) setProcessing(false);
     }
@@ -188,7 +193,7 @@ export function BackgroundRemover() {
     if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
     originalUrlRef.current = "";
     resultUrlRef.current = "";
-    setFile(null); setOriginalUrl(""); setResultUrl(""); setError(""); setErrorDetail(""); setProgress(0);
+    setFile(null); setOriginalUrl(""); setResultUrl(""); setError(""); setErrorDetail(""); setErrorCode(""); setProgress(0);
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -204,7 +209,7 @@ export function BackgroundRemover() {
       </div>
       {mode === "removebg" && <label className="field-label" htmlFor="removebg-key">remove.bg API 金鑰<input id="removebg-key" className="key-input" type="password" value={removeBgKey} onChange={(event) => setRemoveBgKey(event.target.value)} autoComplete="off" spellCheck={false} placeholder="貼上你的金鑰" /></label>}
       {file && <div className="preview-actions"><button className="button button-coral" type="button" onClick={removeBackground} disabled={processing}>{processing ? (mode === "local" ? "本機處理中…" : "呼叫 remove.bg 中…") : (mode === "local" ? "開始本機去背" : "用 remove.bg 去背")}</button><button className="button button-secondary" type="button" onClick={clear} disabled={processing}>清除</button></div>}
-      {error && <p className="error-message" role="alert">{error}{errorDetail && <><br /><small>技術細節：{errorDetail}</small></>}</p>}
+      {error && <div className="error-message" role="alert"><p>{error}{errorDetail && <><br /><small>技術細節：{errorDetail}</small></>}</p>{errorCode === "network" && mode === "local" && <button className="button button-small button-secondary" type="button" onClick={() => { setMode("removebg"); setError(""); setErrorDetail(""); setErrorCode(""); }}>改用 remove.bg 模式</button>}</div>}
       {mode === "local"
         ? <div className="service-notice service-notice-private"><strong>100% 本機處理</strong><span>圖片不會上傳。首次使用會下載約數十 MB 的 AI 模型，之後由瀏覽器快取。</span></div>
         : <div className="service-notice"><strong>需要金鑰，圖片會經過 remove.bg</strong><span>金鑰只暫存在這個頁面。圖片會先經過 ToolVerse 伺服器轉送一次（remove.bg 不支援瀏覽器直接呼叫），再送到 remove.bg 處理，不會被儲存。到 <a href="https://www.remove.bg/api" target="_blank" rel="noopener noreferrer">remove.bg</a> 免費申請，每月 50 次免費額度，超過需付費；免費額度可能只回傳較低解析度的預覽圖。</span></div>}

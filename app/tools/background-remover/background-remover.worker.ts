@@ -54,11 +54,22 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     self.postMessage({ type: "result", blob, backend: engine.backend });
   } catch (error) {
     const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-    const message = /InvalidStateError|could not be decoded|unusable/i.test(detail)
-      ? "瀏覽器無法解碼這張圖片"
+    // AI 模型與 WASM 執行檔會從 huggingface.co／jsdelivr 下載；"Failed to fetch" 代表
+    // 連不到這些服務（網路限制、防火牆），跟圖片本身無關，「換一張圖片」對此無效。
+    const isNetworkFailure = error instanceof TypeError && /fetch/i.test(error.message);
+    const code = /InvalidStateError|could not be decoded|unusable/i.test(detail)
+      ? "decode"
       : error instanceof Error && /memory|allocation/i.test(error.message)
-        ? "裝置記憶體不足，請改用尺寸較小的圖片"
-        : "本機去背失敗，請確認網路連線或換一張圖片再試";
-    self.postMessage({ type: "error", message, detail });
+        ? "memory"
+        : isNetworkFailure
+          ? "network"
+          : "unknown";
+    const message = {
+      decode: "瀏覽器無法解碼這張圖片",
+      memory: "裝置記憶體不足，請改用尺寸較小的圖片",
+      network: "無法連線到本機 AI 模型伺服器（Hugging Face／CDN），可能是網路限制或防火牆阻擋，跟這張圖片無關。可以重新整理後再試一次，或改用下方的 remove.bg 模式。",
+      unknown: "本機去背失敗，請重新整理後再試",
+    }[code];
+    self.postMessage({ type: "error", message, detail, code });
   }
 };
