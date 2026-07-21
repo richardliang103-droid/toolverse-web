@@ -460,7 +460,9 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .timer-sound { margin-top: 16px; }
 .timer-workspace .key-note { margin-top: 14px; }
 .timer-stage-panel { display: flex; }
-.timer-stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; min-height: 380px; padding: 30px; border-radius: 14px; background: var(--ink); transition: background .3s ease; }
+/* min-width: 0 覆蓋 flex item 預設的 min-width: auto，否則時鐘/破小時碼表的
+   大字文字會撐大這個 flex 子項目，讓內框寬度超出 .timer-stage-panel 外框。 */
+.timer-stage { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; min-height: 380px; padding: 30px; border-radius: 14px; background: var(--ink); transition: background .3s ease; }
 .timer-stage:fullscreen { border-radius: 0; }
 .timer-display { color: var(--paper); font-size: clamp(72px, 16vw, 200px); font-weight: 850; letter-spacing: -.04em; font-variant-numeric: tabular-nums; line-height: 1; }
 .timer-stage:fullscreen .timer-display { font-size: clamp(120px, 28vw, 480px); }
