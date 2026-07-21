@@ -124,9 +124,13 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: Participa
         const midAngle = startAngle + anglePer / 2;
         const tone = style.tones[index % style.tones.length];
         const label = participant.label.length > 6 ? `${participant.label.slice(0, 5)}…` : participant.label;
-        const flip = midAngle > 90 && midAngle < 270;
         const labelPos = polarToCartesian(cx, cy, r * 0.62, midAngle);
-        const labelRotate = flip ? midAngle - 90 + 180 : midAngle - 90;
+        // 一律用 midAngle - 90（不做「下半圈加轉 180 度比較好讀」的最佳化）。
+        // spinTo() 算出的轉盤停止角度，前提是每個標籤都用這個公式，中獎者
+        // 停在指針（90 度）時才會精準水平；曾經對下半圈的標籤加轉 180 度讓
+        // 靜止瀏覽時比較好讀，但那個額外的 180 度在指針對齊時完全沒被抵銷，
+        // 導致原本排在下半圈的人中獎時，名字會剛好上下顛倒地停在指針上。
+        const labelRotate = midAngle - 90;
         return {
           path: describeSlice(cx, cy, r, startAngle, endAngle),
           fill: tone.fill,
@@ -135,7 +139,6 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: Participa
           labelPos,
           labelRotate,
           label,
-          flip,
         };
       }),
     [segments, anglePer, cx, cy, r, style.tones],
@@ -164,7 +167,7 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: Participa
                     x={slice.labelPos.x}
                     y={slice.labelPos.y}
                     transform={`rotate(${slice.labelRotate} ${slice.labelPos.x} ${slice.labelPos.y})`}
-                    textAnchor={slice.flip ? "end" : "start"}
+                    textAnchor="start"
                     dominantBaseline="middle"
                     fill={slice.textColor}
                     className="lottery-wheel-label"
