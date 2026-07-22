@@ -28,7 +28,8 @@ export function buildRows(project: GanttProject): GanttRow[] {
 
 type DragState =
   | { kind: "move" | "resize"; taskId: string; startX: number; originStart: string; originDuration: number; moved: boolean }
-  | { kind: "link"; taskId: string; x: number; y: number };
+  | { kind: "link"; taskId: string; x: number; y: number }
+  | { kind: "pan"; startX: number; startScrollLeft: number };
 
 export type GanttChartHandle = { scrollToToday: () => void; exportSvg: () => string | null };
 
@@ -89,8 +90,16 @@ export const GanttChart = forwardRef<GanttChartHandle, GanttChartProps>(function
   }
 
   function handlePointerDown(event: React.PointerEvent<SVGSVGElement>) {
+    if (event.button !== 0) return;
     const target = (event.target as Element).closest<SVGElement>("[data-drag]");
-    if (!target || event.button !== 0) return;
+    if (!target) {
+      // 空白處拖曳＝拖動畫布；觸控已有原生 pan-x 捲動，這裡只接手滑鼠／觸控筆。
+      if (event.pointerType === "touch" || !scrollRef.current) return;
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setDrag({ kind: "pan", startX: event.clientX, startScrollLeft: scrollRef.current.scrollLeft });
+      return;
+    }
     const taskId = target.dataset.taskId!;
     const task = project.tasks.find((item) => item.id === taskId);
     if (!task) return;
@@ -107,6 +116,10 @@ export const GanttChart = forwardRef<GanttChartHandle, GanttChartProps>(function
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
     if (!drag) return;
+    if (drag.kind === "pan") {
+      if (scrollRef.current) scrollRef.current.scrollLeft = drag.startScrollLeft - (event.clientX - drag.startX);
+      return;
+    }
     if (drag.kind === "link") {
       const bounds = event.currentTarget.getBoundingClientRect();
       setDrag({ ...drag, x: event.clientX - bounds.left, y: event.clientY - bounds.top });
@@ -124,6 +137,10 @@ export const GanttChart = forwardRef<GanttChartHandle, GanttChartProps>(function
 
   function handlePointerUp(event: React.PointerEvent<SVGSVGElement>) {
     if (!drag) return;
+    if (drag.kind === "pan") {
+      setDrag(null);
+      return;
+    }
     if (drag.kind === "link") {
       const element = document.elementFromPoint(event.clientX, event.clientY);
       const targetId = element?.closest<SVGElement>("[data-task-id]")?.dataset.taskId;
@@ -218,7 +235,7 @@ export const GanttChart = forwardRef<GanttChartHandle, GanttChartProps>(function
         height={height}
         viewBox={`0 0 ${width} ${height}`}
         fontFamily='Inter, "Noto Sans TC", sans-serif'
-        style={{ touchAction: "pan-x pan-y" }}
+        style={{ touchAction: "pan-x pan-y", cursor: drag?.kind === "pan" ? "grabbing" : "grab" }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
