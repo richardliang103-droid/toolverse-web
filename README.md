@@ -3,7 +3,7 @@
 一組免安裝、免登入的實用網頁工具。目前包含：
 
 - 線上抽獎：真的轉盤動畫，使用 Web Crypto API 抽選，名單與紀錄只存在瀏覽器。
-- 圖片去背：使用 Transformers.js 與 MODNet，圖片不會上傳伺服器。
+- 圖片去背：使用 Transformers.js 與 RMBG-1.4，圖片不會上傳伺服器。
 - 流程圖：中文需求轉成經驗證的節點與連線，可匯出 Mermaid、PNG、SVG 與 draw.io。
 - 甘特圖：拖曳排出任務、里程碑與依賴關係，時程只存在瀏覽器，可匯出 PNG、CSV、Mermaid 與 JSON。
 - 隨機分組：貼上名單，用安全隨機來源公平分成小組，可指定組數或每組人數。
@@ -47,7 +47,7 @@ npm test
 
 去背工具支援兩種模式，切換鈕在頁面上：
 
-- **本機 AI（預設、免費）**：模型在 Web Worker 中執行，優先使用 WebGPU，無法使用時自動退回 WASM。首次使用會從 Hugging Face 下載 Apache 2.0 授權的 `Xenova/modnet` 模型，之後由瀏覽器快取。圖片檔案只會傳入使用者自己的 Worker，不經過本站 API，也不需要任何服務金鑰，畫質普通但完全免費、完全本機處理。
+- **本機 AI（預設、免費）**：模型在 Web Worker 中執行，優先使用 WebGPU，無法使用時自動退回 WASM。首次使用會從 Hugging Face 下載 `briaai/RMBG-1.4` 模型，之後由瀏覽器快取。圖片檔案只會傳入使用者自己的 Worker，不經過本站 API，也不需要任何服務金鑰，完全免費、完全本機處理。`RMBG-1.4` 是 [BRIA 的非商業授權](https://huggingface.co/briaai/RMBG-1.4)，商用需另外向 BRIA 取得授權。
 - **remove.bg API**：畫質更高、速度更快，但需要自己的 remove.bg API 金鑰（[免費申請](https://www.remove.bg/api)，每月 50 次免費額度，超過需付費，免費額度可能只回傳較低解析度的預覽圖）。金鑰只暫存在瀏覽器頁面記憶體。因為 remove.bg 的 API 不支援瀏覽器直接跨網域呼叫，圖片與金鑰會先經過 `app/api/remove-background` 這個 ToolVerse 伺服器路由轉送一次，再送到 remove.bg 處理；伺服器不會記錄或儲存金鑰與圖片，只在單次請求中轉送。頁面上的隱私徽章會依目前選擇的模式即時更新，誠實反映圖片是否會上傳。
 
 ## 流程圖
