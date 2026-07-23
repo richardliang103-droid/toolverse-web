@@ -30,7 +30,7 @@ export const toolContent: Record<string, ToolContent> = {
     faq: [
       { q: "圖片會上傳到伺服器嗎？", a: "本機 AI 模式完全不上傳，模型直接在瀏覽器的 Web Worker 執行。remove.bg 模式會經由本站轉送一次給 remove.bg 處理，伺服器不儲存圖片與金鑰。" },
       { q: "為什麼第一次使用比較慢？", a: "首次使用會下載去背模型（約幾十 MB），之後由瀏覽器快取，第二次開始就快很多。" },
-      { q: "本機模式和 remove.bg 模式差在哪？", a: "本機模式免費、隱私最好，畫質普通；remove.bg 畫質與細節更好，但需要自己申請 API 金鑰，免費額度每月 50 次。" },
+      { q: "本機模式和 remove.bg 模式差在哪？", a: "本機模式免費、隱私最好，畫質已經不錯；remove.bg 在毛髮等複雜細節上通常更精細，但需要自己申請 API 金鑰，免費額度每月 50 次。" },
     ],
   },
   "ai-flowchart": {

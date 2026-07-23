@@ -1,6 +1,11 @@
-import { pipeline } from "@huggingface/transformers";
+import { AutoModel, AutoProcessor, RawImage } from "@huggingface/transformers";
 
 type WorkerRequest = { type: "remove"; file: File };
+
+// RMBG-1.4 是通用去背模型（Xenova/modnet 是人像專用，一般物品/商品照效果差很多），
+// 但沒有現成的 "background-removal" pipeline 包裝，要自己跑 model+processor
+// 再手動把 mask 合成到原圖的 alpha 上。
+const MODEL_ID = "briaai/RMBG-1.4";
 
 function reportProgress(data: { status?: string; progress?: number; file?: string }) {
   if (data.status !== "progress" || typeof data.progress !== "number") return;
@@ -8,18 +13,35 @@ function reportProgress(data: { status?: string; progress?: number; file?: strin
   self.postMessage({ type: "progress", progress: Math.max(0, Math.min(100, data.progress)), stage });
 }
 
+async function buildEngine(device: "webgpu" | "wasm", dtype: "fp32" | "q8") {
+  const model = await AutoModel.from_pretrained(MODEL_ID, { device, dtype, progress_callback: reportProgress });
+  const processor = await AutoProcessor.from_pretrained(MODEL_ID);
+  return {
+    async remover(file: File) {
+      const image = await RawImage.fromBlob(file);
+      const { pixel_values } = await processor(image);
+      const { output } = await model({ input: pixel_values });
+      const maskTensor = output.squeeze(0).mul(255).clamp(0, 255).to("uint8");
+      const mask = await RawImage.fromTensor(maskTensor).resize(image.width, image.height);
+      const rgba = image.rgba();
+      rgba.putAlpha(mask);
+      return rgba;
+    },
+  };
+}
+
 async function createEngine(forceWasm = false) {
   const canUseWebGPU = !forceWasm && typeof navigator !== "undefined" && "gpu" in navigator;
   if (canUseWebGPU) {
     try {
-      const remover = await pipeline("background-removal", "Xenova/modnet", { device: "webgpu", dtype: "fp32", progress_callback: reportProgress });
-      return { remover, backend: "WebGPU" as const };
+      const engine = await buildEngine("webgpu", "fp32");
+      return { ...engine, backend: "WebGPU" as const };
     } catch {
       // Some devices expose WebGPU but cannot run this model; WASM is the safe fallback.
     }
   }
-  const remover = await pipeline("background-removal", "Xenova/modnet", { device: "wasm", dtype: "q8", progress_callback: reportProgress });
-  return { remover, backend: "WASM" as const };
+  const engine = await buildEngine("wasm", "q8");
+  return { ...engine, backend: "WASM" as const };
 }
 
 let enginePromise: ReturnType<typeof createEngine> | null = null;
