@@ -951,3 +951,26 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
   /* 手機沒有實體鍵盤，快速鍵提示沒有意義，只留搜尋圖示。 */
   .palette-trigger kbd { display: none; }
 }
+
+/* 本機工作區 —— 版面用既有的 .panel／.drop-zone／.compressor-item，
+   顏色一律走 CSS 變數，所以深色模式由那些元件既有的覆蓋負責，這裡不必重寫一份。 */
+.ws-page { display: grid; gap: 20px; padding-bottom: 90px; }
+.ws-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin: 0 0 14px; }
+.ws-stats > div { display: grid; gap: 4px; }
+.ws-stats dt { color: var(--muted); font-size: 12.5px; }
+.ws-stats dd { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+
+/* 工作區的拖放區只是次要入口，不需要工具頁那種整版高度。 */
+.ws-drop { min-height: 0; padding: 26px; }
+.ws-drop .drop-icon { width: 54px; height: 54px; margin-bottom: 14px; font-size: 24px; }
+.ws-drop h2 { font-size: 20px; }
+.ws-drop p { margin-bottom: 16px; }
+
+.ws-item-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.ws-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 640px) {
+  /* 窄螢幕上三顆按鈕擠不進同一行，讓它們換行到檔名下方，維持 24px 以上的點擊範圍。 */
+  .ws-item { flex-wrap: wrap; }
+  .ws-item-actions { width: 100%; margin-left: 0; }
+}

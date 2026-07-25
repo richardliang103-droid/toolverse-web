@@ -60,6 +60,18 @@ test("server-renders all tool routes", async () => {
   }
 });
 
+test("server-renders the workspace page without touching browser storage", async () => {
+  const response = await render("/workspace");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /本機工作區/);
+  assert.match(html, /把檔案拖到這裡/);
+  // 伺服器端沒有 IndexedDB／OPFS，清單必須是「載入中」而不是渲染時就去讀儲存空間。
+  assert.match(html, /載入中/);
+  // 個人內容不該被索引。
+  assert.match(html, /noindex/);
+});
+
 test("homepage renders search box and category chips", async () => {
   const html = await (await render()).text();
   assert.match(html, /搜尋工具/);

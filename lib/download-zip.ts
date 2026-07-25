@@ -30,11 +30,6 @@ export async function createZip(entries: ZipEntry[]): Promise<Blob> {
   return new Blob([copy.buffer], { type: "application/zip" });
 }
 
-export function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+// downloadBlob 已搬到 lib/download.ts（那裡不需要 fflate）。這裡繼續匯出，
+// 讓同時要打包又要下載的工具維持單一 import。
+export { downloadBlob } from "./download.ts";
