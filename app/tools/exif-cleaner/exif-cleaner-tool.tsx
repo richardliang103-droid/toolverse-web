@@ -5,6 +5,9 @@ import { cleanedFilename, stripImageMetadata } from "@/lib/exif-clean";
 import { createZip, downloadBlob } from "@/lib/download-zip";
 import type { RemovedSegment } from "@/lib/exif-clean";
 import { formatBytes } from "@/lib/image-compress";
+import { fileListOf, toHandoffFile } from "@/lib/handoff";
+import { SendToTools } from "@/components/send-to-tools";
+import { useHandoff } from "@/components/use-handoff";
 
 const MAX_FILES = 20;
 const MAX_SIZE = 50 * 1024 * 1024;
@@ -98,8 +101,14 @@ export function ExifCleanerTool() {
     downloadBlob(await createZip(completed.map((item) => ({ name: item.outputName, blob: item.outputBlob }))), "toolverse-privacy-cleaned.zip");
   }
 
+  useHandoff((incoming) => { void addFiles(fileListOf(incoming)); });
+
   const doneCount = items.filter((item) => item.status === "done").length;
   const busy = processingCount > 0;
+
+  // 下游的裁切／去背是單檔工具，只有剛好一張清乾淨時才提供接力。
+  const cleanedItems = items.filter((item) => item.status === "done" && item.outputBlob && item.outputName);
+  const soleResult = cleanedItems.length === 1 ? cleanedItems[0] : null;
 
   return <section className="workspace upload-workspace page-shell" aria-label="照片隱私清除工具">
     <div className="panel">
@@ -135,6 +144,7 @@ export function ExifCleanerTool() {
               {doneCount > 1 && <button className="button button-small button-blue" type="button" onClick={() => { void downloadAll(); }}>下載 ZIP（{doneCount} 張）</button>}
               <button className="button button-small button-secondary" type="button" onClick={() => { setItems([]); setError(""); setNotice(""); }} disabled={busy}>清空</button>
             </div>
+            {soleResult && <SendToTools from="exif-cleaner" getFile={() => toHandoffFile(soleResult.outputBlob!, soleResult.outputName!)} />}
           </>}
     </div>
   </section>;

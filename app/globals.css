@@ -120,6 +120,10 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .drawing-word { font-size: 32px; font-weight: 850; min-height: 1.2em; }
 .drawing-hint { color: var(--muted); font-size: 13px; letter-spacing: .04em; }
 .result-actions { display: flex; gap: 10px; margin-top: 16px; }
+/* 工具接力：跟主要動作用一條虛線分開，視覺上是「接下去做什麼」而不是另一組按鈕。 */
+.send-to-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
+.send-to-label { color: var(--muted); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; letter-spacing: .08em; }
+.send-to-label::after { content: " →"; }
 .error-message { margin: 13px 0 0; color: #b72a22; font-size: 14px; }
 .history { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--line); }
 .history h3 { margin: 0 0 12px; font-size: 14px; }
