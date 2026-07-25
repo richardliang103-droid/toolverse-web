@@ -5,6 +5,9 @@ import { CountUp } from "@/components/count-up";
 import { createZip, downloadBlob } from "@/lib/download-zip";
 import { QUALITY_FORMATS, fitDimensions, formatBytes, mimeForFormat, outputFilename, savingsPercent } from "@/lib/image-compress";
 import { exceedsImagePixelLimit, imagePixelLimitMessage } from "@/lib/image-limits";
+import { fileListOf, toHandoffFile } from "@/lib/handoff";
+import { SendToTools } from "@/components/send-to-tools";
+import { useHandoff } from "@/components/use-handoff";
 import type { OutputFormat } from "@/lib/image-compress";
 
 const STORAGE_KEY = "toolverse:image-compressor:v1";
@@ -102,6 +105,13 @@ export function ImageCompressorTool() {
     }
     setItems((previous) => [...previous, ...incoming].slice(0, MAX_FILES));
   }
+
+  useHandoff((incoming) => addFiles(fileListOf(incoming)));
+
+  // 只有剛好一個檔案處理完時才提供接力：下游的裁切／去背都是單檔工具，
+  // 一次遞多個檔案沒有合理的對應方式。
+  const doneItems = items.filter((item) => item.status === "done" && item.outputBlob && item.outputName);
+  const soleResult = doneItems.length === 1 ? doneItems[0] : null;
 
   async function compressAll() {
     setBusy(true); setError("");
@@ -222,6 +232,7 @@ export function ImageCompressorTool() {
               <button className="button button-small button-secondary" type="button" onClick={clearAll} disabled={busy}>清空</button>
               {doneCount > 0 && <span className="compressor-total">合計 {formatBytes(totalOriginal)} → {formatBytes(totalCompressed)}</span>}
             </div>
+            {soleResult && <SendToTools from="image-compressor" getFile={() => toHandoffFile(soleResult.outputBlob!, soleResult.outputName!)} />}
           </>}
     </div>
   </section>;

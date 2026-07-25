@@ -3,6 +3,9 @@
 import { useCallback, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { CROP_MIN_SIZE, applyAspect, clampCropRect, toNaturalRect, type CropRect } from "@/lib/crop";
 import { exceedsImagePixelLimit, imagePixelLimitMessage } from "@/lib/image-limits";
+import { toHandoffFile } from "@/lib/handoff";
+import { SendToTools } from "@/components/send-to-tools";
+import { useHandoff } from "@/components/use-handoff";
 
 const ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SIZE = 25 * 1024 * 1024;
@@ -63,6 +66,8 @@ export function ImageCropTool() {
     reader.readAsDataURL(file);
   }, []);
 
+  useHandoff((file) => loadFile(file));
+
   function onPick(event: ChangeEvent<HTMLInputElement>) {
     loadFile(event.target.files?.[0]);
     event.target.value = "";
@@ -120,30 +125,47 @@ export function ImageCropTool() {
 
   function endDrag() { dragRef.current = null; }
 
-  function download() {
-    if (!source || natural.w === 0) return;
-    const scale = natural.w / display.w;
-    const target = toNaturalRect(rect, scale, natural.w, natural.h);
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = target.w;
-      canvas.height = target.h;
-      const context = canvas.getContext("2d");
-      if (!context) return;
-      if (format === "jpeg") { context.fillStyle = "#ffffff"; context.fillRect(0, 0, target.w, target.h); }
-      context.drawImage(image, target.x, target.y, target.w, target.h, 0, 0, target.w, target.h);
-      canvas.toBlob((blob) => {
-        if (!blob) { setError("輸出失敗，請重試"); return; }
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = `${fileName.replace(/\.[^.]+$/, "") || "cropped"}-裁切.${format === "png" ? "png" : "jpg"}`;
-        anchor.click();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }, format === "png" ? "image/png" : "image/jpeg", 0.92);
-    };
-    image.src = source;
+  function outputName() {
+    return `${fileName.replace(/\.[^.]+$/, "") || "cropped"}-裁切.${format === "png" ? "png" : "jpg"}`;
+  }
+
+  /** 依目前框選把圖裁出來。下載與「送到」共用同一條產生路徑。 */
+  function renderCrop(): Promise<Blob | null> {
+    return new Promise((resolve) => {
+      if (!source || natural.w === 0) { resolve(null); return; }
+      const scale = natural.w / display.w;
+      const target = toNaturalRect(rect, scale, natural.w, natural.h);
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = target.w;
+        canvas.height = target.h;
+        const context = canvas.getContext("2d");
+        if (!context) { resolve(null); return; }
+        if (format === "jpeg") { context.fillStyle = "#ffffff"; context.fillRect(0, 0, target.w, target.h); }
+        context.drawImage(image, target.x, target.y, target.w, target.h, 0, 0, target.w, target.h);
+        canvas.toBlob((blob) => resolve(blob), format === "png" ? "image/png" : "image/jpeg", 0.92);
+      };
+      image.onerror = () => resolve(null);
+      image.src = source;
+    });
+  }
+
+  async function download() {
+    const blob = await renderCrop();
+    if (!blob) { setError("輸出失敗，請重試"); return; }
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = outputName();
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function handoffFile() {
+    const blob = await renderCrop();
+    if (!blob) { setError("輸出失敗，請重試"); return null; }
+    return toHandoffFile(blob, outputName());
   }
 
   const scale = display.w > 0 ? natural.w / display.w : 1;
@@ -189,9 +211,10 @@ export function ImageCropTool() {
             </label>
           </div>
           <div className="result-actions">
-            <button className="button button-small button-blue" type="button" onClick={download}>下載裁切結果</button>
+            <button className="button button-small button-blue" type="button" onClick={() => { void download(); }}>下載裁切結果</button>
             <button className="button button-small button-secondary" type="button" onClick={() => inputRef.current?.click()}>換一張圖</button>
           </div>
+          <SendToTools from="image-crop" getFile={handoffFile} />
           {outputSize && <p className="key-note">輸出尺寸：{outputSize.w} × {outputSize.h} px（原圖 {natural.w} × {natural.h}）。拖曳框內移動、拖曳四角縮放。</p>}
         </>
       )}

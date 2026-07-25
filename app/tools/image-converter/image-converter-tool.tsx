@@ -4,6 +4,9 @@ import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "r
 import { createZip, downloadBlob } from "@/lib/download-zip";
 import { formatBytes } from "@/lib/image-compress";
 import { exceedsImagePixelLimit, imagePixelLimitMessage } from "@/lib/image-limits";
+import { fileListOf, toHandoffFile } from "@/lib/handoff";
+import { SendToTools } from "@/components/send-to-tools";
+import { useHandoff } from "@/components/use-handoff";
 
 const MAX_FILES = 20;
 const MAX_SIZE = 25 * 1024 * 1024;
@@ -53,6 +56,12 @@ export function ImageConverterTool() {
     if (accepted.length < incoming.length) setError(`已加入前 ${accepted.length} 張，最多 ${MAX_FILES} 張。`);
     setItems((previous) => [...previous, ...accepted]);
   }
+
+  useHandoff((incoming) => addFiles(fileListOf(incoming)));
+
+  // 下游的裁切／去背是單檔工具，只有剛好一張轉好時才提供接力。
+  const convertedItems = items.filter((item) => item.status === "done" && item.outputBlob);
+  const soleResult = convertedItems.length === 1 ? convertedItems[0] : null;
 
   function loadImage(file: File) {
     return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -165,6 +174,7 @@ export function ImageConverterTool() {
               ))}
             </ul>
             {doneCount > 1 && <div className="result-actions"><button className="button button-small button-blue" type="button" onClick={() => { void (async () => { const ready = items.filter((item) => item.status === "done" && item.outputBlob).map((item) => ({ name: outputName(item.file.name, item.outputFormat ?? format), blob: item.outputBlob! })); downloadBlob(await createZip(ready), "toolverse-images.zip"); })(); }}>下載 ZIP（{doneCount} 張）</button></div>}
+            {soleResult && <SendToTools from="image-converter" getFile={() => toHandoffFile(soleResult.outputBlob!, outputName(soleResult.file.name, soleResult.outputFormat ?? format))} />}
           </>}
     </div>
   </section>;
