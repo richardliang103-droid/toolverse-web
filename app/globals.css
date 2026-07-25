@@ -546,26 +546,6 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .pdf-thumb span { position: absolute; right: 4px; bottom: 4px; padding: 1px 7px; border-radius: 999px; background: var(--ink); color: var(--paper); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 10px; }
 
 /* Password generator */
-.password-length-row { display: grid; gap: 8px; }
-.password-length-row .gantt-range { width: 100%; }
-.password-toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-top: 18px; }
-.password-toggle code { padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; background: white; font-size: 11.5px; color: var(--muted); }
-.password-workspace .key-note { margin-top: 16px; }
-.password-result-panel { display: flex; flex-direction: column; }
-.password-output { display: block; padding: 20px 18px; border: 1px solid var(--ink); border-radius: 12px; background: white; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: clamp(18px, 3.4vw, 26px); font-weight: 700; word-break: break-all; line-height: 1.4; letter-spacing: .02em; }
-.password-strength { margin-top: 16px; }
-.password-strength-bar { height: 9px; overflow: hidden; border: 1px solid var(--ink); border-radius: 999px; background: white; }
-.password-strength-bar span { display: block; height: 100%; border-radius: inherit; transition: width .2s ease, background .2s ease; }
-.password-strength-label { display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 700; }
-.password-strength-weak .password-strength-bar span { background: #d64545; }
-.password-strength-fair .password-strength-bar span { background: #e0922f; }
-.password-strength-strong .password-strength-bar span { background: #2aa96b; }
-.password-strength-excellent .password-strength-bar span { background: var(--blue); }
-.password-strength-weak .password-strength-label { color: #b72a22; }
-.password-strength-fair .password-strength-label { color: #97600f; }
-.password-strength-strong .password-strength-label { color: #23734a; }
-.password-strength-excellent .password-strength-label { color: var(--blue); }
-.password-result-panel .result-actions { margin-top: auto; padding-top: 18px; }
 
 /* Favicon generator */
 .favicon-field { margin-top: 4px; }
@@ -580,9 +560,6 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .favicon-snippets pre { max-height: 200px; overflow: auto; margin: 12px 0; padding: 12px; border-radius: 8px; background: #101628; color: #f5f1e8; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; line-height: 1.6; white-space: pre; }
 .favicon-hidden-canvas { display: none; }
 
-@media (max-width: 560px) {
-  .password-toggles { grid-template-columns: 1fr; }
-}
 
 /* === React Bits 改寫特效（ClickSpark / SplitText / SpotlightCard / StarBorder） === */
 .click-spark-layer { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 9999; }
@@ -698,19 +675,7 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .pdf-thumb-rotate:hover { border-color: var(--ink); }
 
 /* === 生活組工具：單位換算、條碼、圖片裁切 === */
-.unit-category-row { flex-wrap: wrap; margin-bottom: 16px; }
-.unit-row { display: grid; grid-template-columns: 1fr 1.2fr auto 1.2fr; gap: 12px; align-items: end; }
-.unit-swap { margin-bottom: 2px; }
-.unit-result-main { margin: 4px 0 0; font-size: 30px; letter-spacing: -.02em; }
-.unit-result-main strong { font-size: 38px; }
-.unit-result-sub { margin: 2px 0 18px; color: var(--muted); font-size: 14px; }
-.unit-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.unit-table td { padding: 9px 4px; border-top: 1px solid var(--line); }
-.unit-table td:last-child { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 
-.barcode-preview { display: grid; place-items: center; min-height: 200px; padding: 18px; border-radius: 14px; background: white; border: 1px solid var(--line); }
-.barcode-preview-empty { border-style: dashed; background: transparent; }
-.barcode-svg-host svg { max-width: 100%; height: auto; }
 
 .crop-dropzone { display: grid; gap: 8px; place-items: center; padding: 46px 20px; border: 1.5px dashed #9da6cc; border-radius: 14px; text-align: center; }
 .crop-dropzone p { margin: 0; }
@@ -725,10 +690,6 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .crop-handle-sw { bottom: -9px; left: -9px; cursor: nesw-resize; }
 .crop-handle-se { bottom: -9px; right: -9px; cursor: nwse-resize; }
 
-@media (max-width: 720px) {
-  .unit-row { grid-template-columns: 1fr 1fr; }
-  .unit-swap { grid-column: 1 / -1; justify-self: center; margin: 0; }
-}
 
 /* === 全站深色模式：<html data-theme="dark"> 時生效（layout inline script 在繪製前設定） === */
 .theme-toggle { display: inline-grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 999px; background: transparent; font-size: 16px; cursor: pointer; transition: border-color .16s ease; }
@@ -755,8 +716,7 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 [data-theme="dark"] .workspace, [data-theme="dark"] .flowchart-workspace, [data-theme="dark"] .gantt-workspace { border-color: #2b3446; box-shadow: 8px 8px 0 rgba(0,0,0,.35); }
 [data-theme="dark"] .participant-input, [data-theme="dark"] .flow-prompt, [data-theme="dark"] .key-input, [data-theme="dark"] .flow-options select, [data-theme="dark"] .number-input, [data-theme="dark"] .qr-color-row input[type="color"] { background: #0e1421; color: var(--ink); }
 [data-theme="dark"] .result-stage { background-color: #141b29; background-image: radial-gradient(#33405c 1px, transparent 1px); border-color: #45536f; }
-[data-theme="dark"] .drop-zone, [data-theme="dark"] .qr-template-fields, [data-theme="dark"] .flowchart-empty, [data-theme="dark"] .mermaid-code, [data-theme="dark"] .model-progress, [data-theme="dark"] .compressor-item, [data-theme="dark"] .pdf-merge-list li, [data-theme="dark"] .audio-merge-list li, [data-theme="dark"] .pdf-help code, [data-theme="dark"] .password-toggle code, [data-theme="dark"] .favicon-previews, [data-theme="dark"] .favicon-snippets details { background: #141b29; }
-[data-theme="dark"] .password-output, [data-theme="dark"] .password-strength-bar { background: #0e1421; }
+[data-theme="dark"] .drop-zone, [data-theme="dark"] .qr-template-fields, [data-theme="dark"] .flowchart-empty, [data-theme="dark"] .mermaid-code, [data-theme="dark"] .model-progress, [data-theme="dark"] .compressor-item, [data-theme="dark"] .pdf-merge-list li, [data-theme="dark"] .audio-merge-list li, [data-theme="dark"] .pdf-help code, [data-theme="dark"] .favicon-previews, [data-theme="dark"] .favicon-snippets details { background: #141b29; }
 
 /* 首頁卡片與導覽 */
 [data-theme="dark"] .compact-tool { background: #1a2231; border-color: #2b3446; }
@@ -788,8 +748,6 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 [data-theme="dark"] .timer-finished .button-secondary { border-color: #1c130f; color: #1c130f; }
 
 /* 內容輸出面刻意保持白色：條碼、favicon 預覽底、QR 預覽（背景色由使用者選） */
-[data-theme="dark"] .barcode-preview { background: white; }
-[data-theme="dark"] .barcode-preview-empty { background: transparent; }
 
 /* 時鐘與破小時碼表（HH:MM:SS）字數較多，縮小字級避免溢出 */
 .timer-display { max-width: 100%; }

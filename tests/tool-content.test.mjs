@@ -31,7 +31,7 @@ test("每個工具都有使用說明與 FAQ 內容", () => {
 test("filterTools：關鍵字與分類過濾", () => {
   assert.equal(filterTools("", "all").length, tools.length);
   assert.deepEqual(filterTools("pdf", "all").map((tool) => tool.slug), ["pdf-toolkit"]);
-  assert.deepEqual(filterTools("密碼", "all").map((tool) => tool.slug), ["password-generator"]);
+  assert.deepEqual(filterTools("甘特", "all").map((tool) => tool.slug), ["gantt"]);
   const imageTools = filterTools("", "image");
   assert.ok(imageTools.length >= 3 && imageTools.every((tool) => tool.category === "image"));
   assert.deepEqual(filterTools("QR", "image"), []);
