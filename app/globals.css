@@ -979,6 +979,9 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
    因為這裡要同時放文字框跟拖放目標），但顏色與陰影語彙延續 .panel／.workspace
    那套「硬邊陰影＋和色系」，深色模式沿用既有變數，不另外調色。 */
 .intake-section { display: grid; gap: 16px; margin-bottom: 40px; }
+.intake-intro { display: grid; gap: 4px; }
+.intake-intro h2 { margin: 0; font-size: 23px; letter-spacing: -.02em; }
+.intake-intro p { margin: 0; color: var(--muted); font-size: 14px; }
 .intake { border: 1px solid var(--ink); border-radius: 20px; background: var(--white); box-shadow: 6px 6px 0 var(--ink); padding: 22px; display: grid; gap: 14px; transition: background .15s ease, border-color .15s ease; }
 .intake.dragging { background: var(--blue-soft); border-color: var(--blue); }
 .intake-textarea { width: 100%; min-height: 108px; resize: vertical; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: #faf9f6; color: var(--ink); font: inherit; line-height: 1.55; }
