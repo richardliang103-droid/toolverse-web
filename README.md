@@ -61,7 +61,10 @@ npm test
 - `app/`：首頁與工具頁
 - `components/`：共用導覽元件
 - `lib/`：工具註冊表、抽獎核心邏輯、流程圖 schema 與正規化
-- `tests/`：伺服器渲染驗證
+- `docs/`：架構盤點與設計決策紀錄
+- `tests/`：伺服器渲染驗證與純邏輯單元測試
+
+工具清單只有一份：`lib/tool-manifest.ts`。除了卡片要用的名稱、描述、分類之外，它還記錄每個工具「吃什麼格式、吐什麼格式、算在本機還是遠端、能不能批次、離線能不能用」，首頁、⌘K 命令面板與 sitemap 都從它推導。`lib/tools.ts` 是往後相容的卡片視圖，不另外維護資料。`tests/tool-manifest.test.mjs` 會驗證登記內容自洽，並確保 manifest 與 `app/tools/` 的路由一對一。
 
 ## 驗證
 
