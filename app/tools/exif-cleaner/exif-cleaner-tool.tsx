@@ -5,7 +5,7 @@ import { cleanedFilename, stripImageMetadata } from "@/lib/exif-clean";
 import { createZip, downloadBlob } from "@/lib/download-zip";
 import type { RemovedSegment } from "@/lib/exif-clean";
 import { formatBytes } from "@/lib/image-compress";
-import { fileListOf, toHandoffFile } from "@/lib/handoff";
+import { IMAGE_TOOL_SLUGS, fileListOf, toHandoffFile } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
 import { useHandoff } from "@/components/use-handoff";
 
@@ -144,7 +144,7 @@ export function ExifCleanerTool() {
               {doneCount > 1 && <button className="button button-small button-blue" type="button" onClick={() => { void downloadAll(); }}>下載 ZIP（{doneCount} 張）</button>}
               <button className="button button-small button-secondary" type="button" onClick={() => { setItems([]); setError(""); setNotice(""); }} disabled={busy}>清空</button>
             </div>
-            {soleResult && <SendToTools from="exif-cleaner" getFile={() => toHandoffFile(soleResult.outputBlob!, soleResult.outputName!)} />}
+            {soleResult && <SendToTools from="exif-cleaner" targets={IMAGE_TOOL_SLUGS} getFile={() => toHandoffFile(soleResult.outputBlob!, soleResult.outputName!)} />}
           </>}
     </div>
   </section>;

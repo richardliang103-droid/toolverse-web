@@ -5,7 +5,7 @@ import { CountUp } from "@/components/count-up";
 import { createZip, downloadBlob } from "@/lib/download-zip";
 import { QUALITY_FORMATS, fitDimensions, formatBytes, mimeForFormat, outputFilename, savingsPercent } from "@/lib/image-compress";
 import { exceedsImagePixelLimit, imagePixelLimitMessage } from "@/lib/image-limits";
-import { fileListOf, toHandoffFile } from "@/lib/handoff";
+import { IMAGE_TOOL_SLUGS, fileListOf, toHandoffFile } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
 import { useHandoff } from "@/components/use-handoff";
 import type { OutputFormat } from "@/lib/image-compress";
@@ -232,7 +232,7 @@ export function ImageCompressorTool() {
               <button className="button button-small button-secondary" type="button" onClick={clearAll} disabled={busy}>清空</button>
               {doneCount > 0 && <span className="compressor-total">合計 {formatBytes(totalOriginal)} → {formatBytes(totalCompressed)}</span>}
             </div>
-            {soleResult && <SendToTools from="image-compressor" getFile={() => toHandoffFile(soleResult.outputBlob!, soleResult.outputName!)} />}
+            {soleResult && <SendToTools from="image-compressor" targets={IMAGE_TOOL_SLUGS} getFile={() => toHandoffFile(soleResult.outputBlob!, soleResult.outputName!)} />}
           </>}
     </div>
   </section>;

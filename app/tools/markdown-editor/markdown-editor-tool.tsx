@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createSafeMarkdownRenderer } from "@/lib/markdown-safety";
+import { TEXT_TOOL_SLUGS } from "@/lib/handoff";
+import { SendToTools } from "@/components/send-to-tools";
+import { useTextHandoff } from "@/components/use-handoff";
 
 const STORAGE_KEY = "toolverse:markdown-editor:v1";
 
@@ -22,6 +25,8 @@ const TOOLBAR: ToolbarAction[] = [
 export function MarkdownEditorTool() {
   const [text, setText] = useState(SAMPLE);
   const [html, setHtml] = useState("");
+
+  useTextHandoff((incoming) => setText(incoming));
   const [copied, setCopied] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -113,6 +118,7 @@ export function MarkdownEditorTool() {
         <button className="button button-small button-secondary" type="button" onClick={copyHtml} disabled={html === ""}>{copied ? "已複製 ✓" : "複製 HTML"}</button>
         <button className="button button-small button-secondary" type="button" onClick={() => setText("")} disabled={text === ""}>清空</button>
       </div>
+      {text.trim() !== "" && <SendToTools from="markdown-editor" targets={TEXT_TOOL_SLUGS} getText={() => text} />}
     </div>
     <div className="panel panel-tinted markdown-preview-panel">
       <div className="panel-header"><h2>預覽</h2><span className="panel-meta">即時渲染</span></div>

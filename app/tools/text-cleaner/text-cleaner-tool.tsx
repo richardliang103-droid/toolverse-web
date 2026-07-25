@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { CountUp } from "@/components/count-up";
 import { DEFAULT_CLEANER_OPTIONS, cleanText, textStats } from "@/lib/text-cleaner";
 import type { TextCleanerOptions } from "@/lib/text-cleaner";
+import { TEXT_TOOL_SLUGS } from "@/lib/handoff";
+import { SendToTools } from "@/components/send-to-tools";
+import { useTextHandoff } from "@/components/use-handoff";
 
 const STORAGE_KEY = "toolverse:text-cleaner:v1";
 
@@ -51,6 +54,8 @@ export function TextCleanerTool() {
   useEffect(() => {
     if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(options));
   }, [hydrated, options]);
+
+  useTextHandoff((incoming) => setInput(incoming));
 
   const output = useMemo(() => cleanText(input, options), [input, options]);
   const inputStats = useMemo(() => textStats(input), [input]);
@@ -117,6 +122,7 @@ export function TextCleanerTool() {
         <button className="button button-small button-secondary" type="button" onClick={downloadOutput} disabled={output === ""}>下載 .txt</button>
         <button className="button button-small button-secondary" type="button" onClick={() => { setInput(""); setError(""); }} disabled={input === ""}>清空</button>
       </div>
+      {output !== "" && <SendToTools from="text-cleaner" targets={TEXT_TOOL_SLUGS} getText={() => output} />}
       {error && <p className="error-message" role="alert">{error}</p>}
     </div>
   </section>;
