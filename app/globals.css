@@ -14,6 +14,19 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+
+/* 跨頁 View Transitions：工具之間切換時做一次淡入淡出，而不是硬跳。
+   不支援的瀏覽器會整段忽略，導覽行為完全不變。 */
+@view-transition { navigation: auto; }
+::view-transition-old(root) { animation: tool-fade-out .16s ease both; }
+::view-transition-new(root) { animation: tool-fade-in .22s ease both; }
+@keyframes tool-fade-out { to { opacity: 0; } }
+@keyframes tool-fade-in { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  /* 尊重系統設定：關掉過場，但導覽本身照常。 */
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+}
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif; }
 a { color: inherit; text-decoration: none; }
 button, input, textarea { font: inherit; }
@@ -377,8 +390,11 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .gantt-hint { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; }
 .gantt-workspace .export-toolbar { margin-top: 2px; }
 .gantt-workspace .mermaid-code { margin-top: 0; }
-.gantt-editor-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(16,22,40,.32); }
-.gantt-editor { position: fixed; top: 0; right: 0; bottom: 0; z-index: 41; width: min(360px, 92vw); display: flex; flex-direction: column; gap: 14px; padding: 24px 22px 30px; overflow-y: auto; border-left: 1px solid var(--ink); background: var(--white); box-shadow: -8px 0 0 rgba(16,22,40,.08); }
+/* 編輯抽屜是原生 <dialog>：::backdrop 取代原本自刻的遮罩 div。
+   margin 要自己指定——Tailwind preflight 把所有元素的 margin 歸零，
+   連同瀏覽器給 dialog 的置中一起蓋掉；這裡要的是靠右滿高。 */
+.gantt-editor { width: min(360px, 92vw); max-width: none; height: 100dvh; max-height: 100dvh; margin: 0 0 0 auto; display: flex; flex-direction: column; gap: 14px; padding: 24px 22px 30px; overflow-y: auto; border: none; border-left: 1px solid var(--ink); background: var(--white); color: var(--ink); box-shadow: -8px 0 0 rgba(16,22,40,.08); }
+.gantt-editor::backdrop { background: rgba(16,22,40,.32); }
 .gantt-editor .panel-header { margin-bottom: 2px; }
 .gantt-editor-check { font-size: 13px; }
 .gantt-range { width: 100%; accent-color: var(--blue); }

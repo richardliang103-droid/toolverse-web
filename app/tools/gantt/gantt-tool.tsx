@@ -39,6 +39,7 @@ export function GanttTool() {
   const [today] = useState(() => todayIso());
 
   const chartRef = useRef<GanttChartHandle>(null);
+  const editorDialogRef = useRef<HTMLDialogElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const undoRef = useRef<GanttProject[]>([]);
   const redoRef = useRef<GanttProject[]>([]);
@@ -161,6 +162,23 @@ export function GanttTool() {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
+
+  // 編輯抽屜是原生 <dialog>：焦點鎖定、Esc、背景 inert 都交給瀏覽器。
+  // editorId 是「正在編輯哪個任務」的真實狀態，dialog 只跟著它開關；
+  // 反過來，瀏覽器自己關閉時（Esc）也要把 editorId 清掉，否則同一個任務
+  // 再點一次時 editorId 沒變、不會重繪，抽屜就叫不出來了。
+  useEffect(() => {
+    const dialog = editorDialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    const syncClosed = () => setEditorId(null);
+    dialog.addEventListener("close", syncClosed);
+    dialog.addEventListener("cancel", syncClosed);
+    return () => {
+      dialog.removeEventListener("close", syncClosed);
+      dialog.removeEventListener("cancel", syncClosed);
+    };
+  }, [editorId]);
 
   function patchTask(id: string, patch: Partial<GanttTask>, options: { snapshot: boolean } = { snapshot: true }) {
     const apply = (previous: GanttProject) => ({ ...previous, tasks: previous.tasks.map((task) => (task.id === id ? { ...task, ...patch } : task)) });
@@ -436,9 +454,17 @@ export function GanttTool() {
         <details className="mermaid-code"><summary>查看 Mermaid 原始碼</summary><pre>{toMermaid(project)}</pre></details>
       )}
       {project && editingTask && (
-        <>
-          <div className="gantt-editor-backdrop" onClick={() => setEditorId(null)} aria-hidden="true" />
-          <aside className="gantt-editor" role="dialog" aria-label={`編輯 ${editingTask.name}`}>
+        <dialog
+          ref={editorDialogRef}
+          className="gantt-editor"
+          aria-label={`編輯 ${editingTask.name}`}
+          // 點到 dialog 本身（backdrop 區域）才關閉，點抽屜內容不關。
+          onClick={(event) => { if (event.target === editorDialogRef.current) setEditorId(null); }}
+          // Esc 的主要處理靠下面 effect 裡的 cancel／close 監聽；這裡再攔一次，
+          // 讓「瀏覽器關了但事件沒送達」時 editorId 仍然會被清掉，
+          // 否則同一個任務會再也叫不出抽屜。不 preventDefault，原生關閉照常。
+          onKeyDown={(event) => { if (event.key === "Escape") setEditorId(null); }}
+        >
             <div className="panel-header"><h2>編輯{editingTask.milestone ? "里程碑" : "任務"}</h2><button className="gantt-row-delete" type="button" aria-label="關閉編輯" onClick={() => setEditorId(null)}>✕</button></div>
             <label className="field-label" htmlFor="gantt-edit-name">名稱
               <input id="gantt-edit-name" className="key-input" value={editingTask.name} maxLength={80} onChange={(event) => patchTask(editingTask.id, { name: event.target.value }, { snapshot: false })} />
@@ -498,9 +524,8 @@ export function GanttTool() {
                 })}
               </fieldset>
             )}
-            <button className="button button-small button-coral gantt-delete-button" type="button" onClick={() => deleteTask(editingTask.id)}>刪除這個{editingTask.milestone ? "里程碑" : "任務"}</button>
-          </aside>
-        </>
+          <button className="button button-small button-coral gantt-delete-button" type="button" onClick={() => deleteTask(editingTask.id)}>刪除這個{editingTask.milestone ? "里程碑" : "任務"}</button>
+        </dialog>
       )}
     </section>
   );
