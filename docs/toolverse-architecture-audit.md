@@ -28,11 +28,11 @@
 | 4 | 首頁實際顯示數量 | **19**（SSR 出 19 張 `.compact-tool` 卡、19 個 `/tools/*` 連結，頁尾字串「全 19 項工具」由 `tools.length` 產生） |
 | 5 | sitemap 路由數量 | **20**（首頁 1 ＋ 工具 19），由 `lib/site.ts` 的 `sitePaths()` 從同一份清單推導 |
 | 6 | 接受檔案的工具 | **11**：background-remover、image-crop、image-compressor、image-converter、exif-cleaner、favicon-generator、qr-code（logo）、pdf-toolkit、csv-editor、gantt（匯入）、audio-trimmer |
-| 7 | 輸出檔案的工具 | **17**（除了 countdown-timer、text-compare 之外都能下載或匯出；lottery 只有複製，text-compare 只有畫面呈現） |
+| 7 | 輸出檔案的工具 | **16**（其餘三個沒有檔案輸出：lottery 只有複製、text-compare 只有畫面呈現、countdown-timer 沒有產出） |
 | 8 | 使用 localStorage 的工具 | **10**：lottery、random-groups、gantt、markdown-editor、text-cleaner、chinese-converter、qr-code、favicon-generator、image-compressor、countdown-timer（另有 `components/theme-toggle.tsx` 的主題、`lib/rosters.ts` 的共用名單） |
 | 9 | 使用 Web Worker 的工具 | **2**：background-remover（`background-remover.worker.ts`，Transformers.js）、pdf-toolkit（pdf.js 的 `GlobalWorkerOptions.workerSrc = /pdf.worker.min.mjs`） |
 | 10 | 需要遠端 API 的工具 | **2**：ai-flowchart（瀏覽器直連 Gemini／OpenAI，不經本站）、background-remover（**僅在**切到 remove.bg 模式時，經 `app/api/remove-background` 轉送） |
-| 11 | 已具備批次處理的工具 | **4**：image-compressor（20 張）、image-converter（20 張）、exif-cleaner（20 張）、pdf-toolkit（合併 12 份）、audio-trimmer（合併多段） |
+| 11 | 已具備批次處理的工具 | **5**：image-compressor（20 張）、image-converter（20 張）、exif-cleaner（20 張）、pdf-toolkit（合併 12 份）、audio-trimmer（合併多段） |
 | 12 | 適合作為第一批 Tool Handoff 示範 | 已經在做了 —— 見下方第三節 |
 
 ---
