@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CommandPalette } from "@/components/command-palette";
 import { Magnet } from "@/components/magnet";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -6,7 +7,7 @@ export function SiteHeader() {
   return (
     <header className="site-header page-shell">
       <Link className="brand" href="/" aria-label="ToolVerse 首頁"><span className="brand-mark" aria-hidden="true">T</span><span>TOOLVERSE</span></Link>
-      <nav className="site-nav" aria-label="主要導覽"><Magnet><Link href="/#tools">工具</Link></Magnet><ThemeToggle /></nav>
+      <nav className="site-nav" aria-label="主要導覽"><CommandPalette /><Magnet><Link href="/#tools">工具</Link></Magnet><ThemeToggle /></nav>
     </header>
   );
 }
