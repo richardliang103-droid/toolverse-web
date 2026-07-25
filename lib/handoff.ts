@@ -1,70 +1,156 @@
 /**
- * 工具接力：把某個工具的產出直接遞給下一個工具，省掉「下載 → 重新上傳」
- * 或「複製 → 貼上」。
+ * 工具接力：把某個工具的產出存進本機 Workspace，再把項目 id 放進目的地 URL。
  *
- * 內容只放在這個模組的記憶體變數裡，不進 localStorage、不進 IndexedDB，
- * 也不會離開這個分頁——與全站「資料留在本機」的前提一致。
- * 代價是硬重新整理後交接就消失，接收端會退回一般的空狀態，這是可接受的：
- * 接力本來就是「按下去、馬上跳過去」的一次性動作。
+ * 接力不再依賴模組層的記憶體槽：硬重新整理、上一頁／下一頁與批次結果都走同一份
+ * Workspace 資料。URL 只帶 UUID，Blob 與文字內容永遠留在瀏覽器儲存層。
  */
+import { toolsAcceptingHandoff } from "./tool-manifest.ts";
+import { getWorkspaceRepository } from "./workspace/create.ts";
+import type { WorkspaceItem } from "./workspace/types.ts";
+import type { WorkspaceRepository } from "./workspace/repository.ts";
+
 export type HandoffKind = "file" | "text";
 
 export type Handoff =
-  | { kind: "file"; file: File; fromSlug: string }
-  | { kind: "text"; text: string; fromSlug: string };
+  | {
+      kind: "file";
+      /** 單檔工具沿用 file；批次工具讀 files。 */
+      file: File;
+      files: File[];
+      fromSlug: string;
+      workspaceItemId: string;
+      workspaceItemIds: string[];
+    }
+  | { kind: "text"; text: string; fromSlug: string; workspaceItemId: string };
 
-/** 超過這個時間的交接視為過期，避免上一頁停留很久後用上一頁／下一頁回來又被套用。 */
-const HANDOFF_TTL_MS = 5 * 60_000;
+type HandoffRepository = Pick<WorkspaceRepository, "save" | "get" | "list" | "read" | "readAsFile" | "remove" | "cleanup">;
 
-let pending: (Handoff & { at: number }) | null = null;
+const HANDOFF_KIND_KEY = "handoffKind";
+const HANDOFF_GROUP_KEY = "handoffGroupId";
+const HANDOFF_INDEX_KEY = "handoffIndex";
 
-export function putFileHandoff(file: File, fromSlug: string) {
-  pending = { kind: "file", file, fromSlug, at: Date.now() };
+/** 同一個 URL token 在一個分頁內只消費一次；成功後 hook 也會把 query 移除。 */
+const consumedWorkspaceItems = new Set<string>();
+
+function repositoryOrDefault(repository?: HandoffRepository): Promise<HandoffRepository> {
+  return repository ? Promise.resolve(repository) : getWorkspaceRepository();
 }
 
-export function putTextHandoff(text: string, fromSlug: string) {
-  pending = { kind: "text", text, fromSlug, at: Date.now() };
+function metadataString(item: WorkspaceItem, key: string): string | null {
+  const value = item.metadata[key];
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
+function metadataNumber(item: WorkspaceItem, key: string): number {
+  const value = item.metadata[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+}
+
+/** 把一個或多個結果存進 Workspace，回傳第一個項目 id 作為 URL token。 */
+export async function putFileHandoff(
+  input: File | readonly File[],
+  fromSlug: string,
+  repository?: HandoffRepository,
+): Promise<string> {
+  const files = input instanceof File ? [input] : [...input];
+  if (files.length === 0) throw new Error("沒有可交接的檔案");
+
+  const workspace = await repositoryOrDefault(repository);
+  const groupId = crypto.randomUUID();
+  const saved: WorkspaceItem[] = [];
+  try {
+    for (const [index, file] of files.entries()) {
+      saved.push(await workspace.save({
+        name: file.name,
+        blob: file,
+        mimeType: file.type || "application/octet-stream",
+        sourceTool: fromSlug,
+        metadata: {
+          [HANDOFF_KIND_KEY]: "file",
+          [HANDOFF_GROUP_KEY]: groupId,
+          [HANDOFF_INDEX_KEY]: index,
+        },
+      }));
+    }
+  } catch (error) {
+    await Promise.all(saved.map((item) => workspace.remove(item.id).catch(() => false)));
+    throw error;
+  }
+  return saved[0].id;
+}
+
+/** 把文字存成 Workspace 項目，回傳 URL token。 */
+export async function putTextHandoff(text: string, fromSlug: string, repository?: HandoffRepository): Promise<string> {
+  const workspace = await repositoryOrDefault(repository);
+  const item = await workspace.save({
+    name: `${fromSlug}-handoff.txt`,
+    blob: new Blob([text], { type: "text/plain" }),
+    mimeType: "text/plain",
+    sourceTool: fromSlug,
+    metadata: { [HANDOFF_KIND_KEY]: "text" },
+  });
+  return item.id;
 }
 
 /**
- * 取出並清空，但**只在種類相符時**才消費。
+ * 依 URL 裡的 Workspace item id 取出一次接力內容。
  *
- * 圖片工具與文字工具共用同一個交接槽，如果不分種類就取，
- * 使用者從文字清理送出文字、路上先掛載到某個圖片工具時，
- * 那個圖片工具會把文字取走又用不了，交接就這樣憑空消失。
+ * 種類不符時不消費，讓錯誤的工具頁不會把接力內容吃掉。批次檔案會用同一個
+ * handoffGroupId 找回整批項目，並依寫入順序還原。
  */
-export function takeHandoff(kind: HandoffKind): Handoff | null {
-  const current = pending;
-  if (!current || current.kind !== kind) return null;
-  pending = null;
-  if (Date.now() - current.at > HANDOFF_TTL_MS) return null;
-  return current.kind === "file"
-    ? { kind: "file", file: current.file, fromSlug: current.fromSlug }
-    : { kind: "text", text: current.text, fromSlug: current.fromSlug };
+export async function takeHandoff(kind: HandoffKind, workspaceItemId: string | null | undefined, repository?: HandoffRepository): Promise<Handoff | null> {
+  if (!workspaceItemId || consumedWorkspaceItems.has(workspaceItemId)) return null;
+  const workspace = await repositoryOrDefault(repository);
+  // 由 repository 使用它自己的 clock 清理，測試與瀏覽器都不會因為兩個時鐘來源
+  // 不一致而把剛存入的接力誤判成過期。
+  await workspace.cleanup().catch(() => {});
+  const item = await workspace.get(workspaceItemId);
+  if (!item || metadataString(item, HANDOFF_KIND_KEY) !== kind) return null;
+
+  if (kind === "text") {
+    const blob = await workspace.read(item.id);
+    if (!blob) return null;
+    return { kind: "text", text: await blob.text(), fromSlug: item.sourceTool ?? "workspace", workspaceItemId: item.id };
+  }
+
+  const groupId = metadataString(item, HANDOFF_GROUP_KEY);
+  const group = groupId
+    ? (await workspace.list())
+      .filter((candidate) => metadataString(candidate, HANDOFF_KIND_KEY) === "file" && metadataString(candidate, HANDOFF_GROUP_KEY) === groupId)
+      .sort((left, right) => metadataNumber(left, HANDOFF_INDEX_KEY) - metadataNumber(right, HANDOFF_INDEX_KEY))
+    : [item];
+  const files: File[] = [];
+  for (const candidate of group) {
+    const file = await workspace.readAsFile(candidate.id);
+    if (!file) return null;
+    files.push(file);
+  }
+  if (files.length === 0) return null;
+  return {
+    kind: "file",
+    file: files[0],
+    files,
+    fromSlug: item.sourceTool ?? "workspace",
+    workspaceItemId: item.id,
+    workspaceItemIds: group.map((candidate) => candidate.id),
+  };
 }
 
-/** 吃圖片的工具。接力按鈕只列出這些，且會排除來源自己。 */
-export const IMAGE_TOOL_SLUGS = [
-  "background-remover",
-  "image-crop",
-  "image-compressor",
-  "image-converter",
-  "exif-cleaner",
-] as const;
+/** 使用者確認帶入後呼叫；確認前保留 token，離開頁面後仍可重新檢查。 */
+export function consumeHandoff(handoff: Handoff): void {
+  if (handoff.kind === "text") consumedWorkspaceItems.add(handoff.workspaceItemId);
+  else for (const id of handoff.workspaceItemIds) consumedWorkspaceItems.add(id);
+}
 
-/** 吃純文字的工具。 */
-export const TEXT_TOOL_SLUGS = [
-  "text-cleaner",
-  "chinese-converter",
-  "text-compare",
-  "markdown-editor",
-] as const;
+/** 接力目標由 manifest 的實際 canReceive 狀態推導，不再維護手寫白名單。 */
+export const IMAGE_TOOL_SLUGS = toolsAcceptingHandoff("file").map((manifest) => manifest.slug);
+export const TEXT_TOOL_SLUGS = toolsAcceptingHandoff("text").map((manifest) => manifest.slug);
 
 export type ImageToolSlug = (typeof IMAGE_TOOL_SLUGS)[number];
 export type TextToolSlug = (typeof TEXT_TOOL_SLUGS)[number];
 
 /** 把 Blob 包成帶檔名的 File，接收端的副檔名檢查才會過。 */
-export function toHandoffFile(blob: Blob, name: string) {
+export function toHandoffFile(blob: Blob, name: string): File {
   return new File([blob], name, { type: blob.type || "application/octet-stream" });
 }
 

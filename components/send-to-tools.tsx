@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { putFileHandoff, putTextHandoff } from "@/lib/handoff";
+import { getToolManifest } from "@/lib/tool-manifest";
 import { tools } from "@/lib/tools";
 
 const NAMES = new Map<string, string>(tools.map((tool) => [tool.slug, tool.name]));
@@ -19,6 +20,8 @@ type SendToToolsProps = {
    * getFile 與 getText 只會提供其中一個：圖片鏈用前者、文字鏈用後者。
    */
   getFile?: () => Promise<File | null> | File | null;
+  /** 批次工具用這個一次遞交多個結果。 */
+  getFiles?: () => Promise<readonly File[]> | readonly File[];
   getText?: () => string | null;
 };
 
@@ -26,30 +29,39 @@ type SendToToolsProps = {
  * 「送到 →」按鈕列：把結果直接交給下一個工具，不用下載再重新上傳、
  * 也不用複製貼上。
  *
- * 先備好內容再用 router.push 做 client-side 導覽——不重載頁面，
- * 所以模組層的交接區在目的地讀得到。
+ * 先把內容存進 Workspace，再用 router.push 導覽；目的地從 URL 的 workspaceItem
+ * 讀回內容，不依賴來源頁面的記憶體狀態。
  */
-export function SendToTools({ from, targets, getFile, getText }: SendToToolsProps) {
+export function SendToTools({ from, targets, getFile, getFiles, getText }: SendToToolsProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const visible = targets.filter((slug) => slug !== from);
+  const [error, setError] = useState("");
+  const visible = targets.filter((slug) => slug !== from && (!getFiles || getToolManifest(slug)?.supportsBatch));
 
   async function send(slug: string) {
     if (busy) return;
     setBusy(true);
+    setError("");
     try {
+      let workspaceItemId: string | null = null;
       if (getText) {
         const text = getText();
         if (!text) return;
-        putTextHandoff(text, from);
+        workspaceItemId = await putTextHandoff(text, from);
+      } else if (getFiles) {
+        const files = await getFiles();
+        if (files.length === 0) return;
+        workspaceItemId = await putFileHandoff(files, from);
       } else if (getFile) {
         const file = await getFile();
         if (!file) return;
-        putFileHandoff(file, from);
+        workspaceItemId = await putFileHandoff(file, from);
       } else {
         return;
       }
-      router.push(`/tools/${slug}`);
+      router.push(`/tools/${slug}?workspaceItem=${encodeURIComponent(workspaceItemId)}`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "無法存入工作區，請重試。");
     } finally {
       setBusy(false);
     }
@@ -69,6 +81,7 @@ export function SendToTools({ from, targets, getFile, getText }: SendToToolsProp
           {NAMES.get(slug) ?? slug}
         </button>
       ))}
+      {error && <span className="error-message" role="alert">{error}</span>}
     </div>
   );
 }

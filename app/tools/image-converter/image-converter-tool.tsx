@@ -4,9 +4,10 @@ import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "r
 import { createZip, downloadBlob } from "@/lib/download-zip";
 import { formatBytes } from "@/lib/image-compress";
 import { exceedsImagePixelLimit, imagePixelLimitMessage } from "@/lib/image-limits";
-import { IMAGE_TOOL_SLUGS, fileListOf, toHandoffFile } from "@/lib/handoff";
+import { IMAGE_TOOL_SLUGS, toHandoffFile } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
-import { useHandoff } from "@/components/use-handoff";
+import { HandoffStatusBanner } from "@/components/handoff-status";
+import { useHandoffFiles } from "@/components/use-handoff";
 
 const MAX_FILES = 20;
 const MAX_SIZE = 25 * 1024 * 1024;
@@ -42,7 +43,7 @@ export function ImageConverterTool() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  function addFiles(list: FileList | null) {
+  function addFiles(list: FileList | File[] | null) {
     if (busy || !list) return;
     setError("");
     const incoming: Item[] = [];
@@ -57,9 +58,9 @@ export function ImageConverterTool() {
     setItems((previous) => [...previous, ...accepted]);
   }
 
-  useHandoff((incoming) => addFiles(fileListOf(incoming)));
+  const handoffStatus = useHandoffFiles("image-converter", (incoming) => addFiles(incoming));
 
-  // 下游的裁切／去背是單檔工具，只有剛好一張轉好時才提供接力。
+  // 單一結果可以送到所有圖片接收工具；多個結果只列出宣告 supportsBatch 的工具。
   const convertedItems = items.filter((item) => item.status === "done" && item.outputBlob);
   const soleResult = convertedItems.length === 1 ? convertedItems[0] : null;
 
@@ -155,6 +156,7 @@ export function ImageConverterTool() {
       </div>
       <button className="button button-blue draw-button" type="button" onClick={convertAll} disabled={busy || items.length === 0}>{busy ? "轉換中…" : `轉換成 ${FORMAT_LABEL[format]}`}</button>
       {error && <p className="error-message" role="alert">{error}</p>}
+      <HandoffStatusBanner status={handoffStatus} />
       <p className="key-note">GIF 只取第一格；JPG 不支援透明，透明區域會補白底；SVG 以 1024px 寬點陣化。</p>
     </div>
     <div className="panel panel-tinted">
@@ -174,7 +176,9 @@ export function ImageConverterTool() {
               ))}
             </ul>
             {doneCount > 1 && <div className="result-actions"><button className="button button-small button-blue" type="button" onClick={() => { void (async () => { const ready = items.filter((item) => item.status === "done" && item.outputBlob).map((item) => ({ name: outputName(item.file.name, item.outputFormat ?? format), blob: item.outputBlob! })); downloadBlob(await createZip(ready), "toolverse-images.zip"); })(); }}>下載 ZIP（{doneCount} 張）</button></div>}
-            {soleResult && <SendToTools from="image-converter" targets={IMAGE_TOOL_SLUGS} getFile={() => toHandoffFile(soleResult.outputBlob!, outputName(soleResult.file.name, soleResult.outputFormat ?? format))} />}
+            {convertedItems.length > 1
+              ? <SendToTools from="image-converter" targets={IMAGE_TOOL_SLUGS} getFiles={() => convertedItems.map((item) => toHandoffFile(item.outputBlob!, outputName(item.file.name, item.outputFormat ?? format)))} />
+              : soleResult && <SendToTools from="image-converter" targets={IMAGE_TOOL_SLUGS} getFile={() => toHandoffFile(soleResult.outputBlob!, outputName(soleResult.file.name, soleResult.outputFormat ?? format))} />}
           </>}
     </div>
   </section>;

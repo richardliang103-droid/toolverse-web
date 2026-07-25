@@ -5,9 +5,10 @@ import { CountUp } from "@/components/count-up";
 import { createZip, downloadBlob } from "@/lib/download-zip";
 import { QUALITY_FORMATS, fitDimensions, formatBytes, mimeForFormat, outputFilename, savingsPercent } from "@/lib/image-compress";
 import { exceedsImagePixelLimit, imagePixelLimitMessage } from "@/lib/image-limits";
-import { IMAGE_TOOL_SLUGS, fileListOf, toHandoffFile } from "@/lib/handoff";
+import { IMAGE_TOOL_SLUGS, toHandoffFile } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
-import { useHandoff } from "@/components/use-handoff";
+import { HandoffStatusBanner } from "@/components/handoff-status";
+import { useHandoffFiles } from "@/components/use-handoff";
 import type { OutputFormat } from "@/lib/image-compress";
 
 const STORAGE_KEY = "toolverse:image-compressor:v1";
@@ -93,7 +94,7 @@ export function ImageCompressorTool() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ format, quality, maxEdge }));
   }, [hydrated, format, quality, maxEdge]);
 
-  function addFiles(list: FileList | null) {
+  function addFiles(list: FileList | File[] | null) {
     if (!list) return;
     setError("");
     const incoming: CompressItem[] = [];
@@ -106,10 +107,9 @@ export function ImageCompressorTool() {
     setItems((previous) => [...previous, ...incoming].slice(0, MAX_FILES));
   }
 
-  useHandoff((incoming) => addFiles(fileListOf(incoming)));
+  const handoffStatus = useHandoffFiles("image-compressor", (incoming) => addFiles(incoming));
 
-  // 只有剛好一個檔案處理完時才提供接力：下游的裁切／去背都是單檔工具，
-  // 一次遞多個檔案沒有合理的對應方式。
+  // 單一結果可以送到所有圖片接收工具；多個結果只列出宣告 supportsBatch 的工具。
   const doneItems = items.filter((item) => item.status === "done" && item.outputBlob && item.outputName);
   const soleResult = doneItems.length === 1 ? doneItems[0] : null;
 
@@ -203,6 +203,7 @@ export function ImageCompressorTool() {
       </div>
       <button className="button button-blue draw-button" type="button" onClick={compressAll} disabled={busy || items.length === 0}>{busy ? "壓縮中…" : "開始壓縮"}</button>
       {error && <p className="error-message" role="alert">{error}</p>}
+      <HandoffStatusBanner status={handoffStatus} />
     </div>
     <div className="panel panel-tinted">
       <div className="panel-header"><h2>壓縮結果</h2><span className="panel-meta">{doneCount > 0 ? `${doneCount}/${items.length} 完成` : `${items.length} 張待處理`}</span></div>
@@ -232,7 +233,9 @@ export function ImageCompressorTool() {
               <button className="button button-small button-secondary" type="button" onClick={clearAll} disabled={busy}>清空</button>
               {doneCount > 0 && <span className="compressor-total">合計 {formatBytes(totalOriginal)} → {formatBytes(totalCompressed)}</span>}
             </div>
-            {soleResult && <SendToTools from="image-compressor" targets={IMAGE_TOOL_SLUGS} getFile={() => toHandoffFile(soleResult.outputBlob!, soleResult.outputName!)} />}
+            {doneItems.length > 1
+              ? <SendToTools from="image-compressor" targets={IMAGE_TOOL_SLUGS} getFiles={() => doneItems.map((item) => toHandoffFile(item.outputBlob!, item.outputName!))} />
+              : soleResult && <SendToTools from="image-compressor" targets={IMAGE_TOOL_SLUGS} getFile={() => toHandoffFile(soleResult.outputBlob!, soleResult.outputName!)} />}
           </>}
     </div>
   </section>;

@@ -74,6 +74,15 @@ export interface ToolOutputCapability {
   extensions?: string[];
 }
 
+export interface ToolHandoffCapability {
+  /** 這個工具的結果是否有送往其他工具的入口。 */
+  canSend: boolean;
+  /** 這個工具是否有接收其他工具內容的入口。 */
+  canReceive: boolean;
+  /** 接力的資料種類；是收、送兩者的聯集。 */
+  kinds: ToolCapabilityKind[];
+}
+
 export interface ToolManifest {
   slug: string;
   name: string;
@@ -97,6 +106,9 @@ export interface ToolManifest {
   supportsRecipe: boolean;
   /** 斷線也能用：不需要任何網路請求（含首次的模型／字典下載）。 */
   supportsOffline: boolean;
+
+  /** 工具接力的實際接線狀態；由測試對照工具頁中的 hook／按鈕。 */
+  handoff: ToolHandoffCapability;
 
   /** 處理完之後最可能想接的下一站，用於工具接力與推薦。 */
   suggestedNextTools: string[];
@@ -128,6 +140,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: false, canReceive: false, kinds: [] },
     suggestedNextTools: ["random-groups"],
     privacy: "local-only",
     privacyNote: "名單、設定與抽出紀錄只留在這台裝置的 localStorage。",
@@ -148,6 +161,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: false,
+    handoff: { canSend: true, canReceive: true, kinds: ["file"] },
     suggestedNextTools: ["image-compressor", "image-converter", "image-crop"],
     privacy: "conditional",
     privacyNote: "預設用本機 AI（首次需下載 RMBG-1.4 模型）；切到 remove.bg 模式時，圖片與金鑰會經本站 API 轉送到 remove.bg。",
@@ -171,6 +185,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: false,
+    handoff: { canSend: false, canReceive: false, kinds: [] },
     suggestedNextTools: ["markdown-editor"],
     privacy: "third-party",
     privacyNote: "流程描述會由瀏覽器直接送往你選擇的 Gemini 或 OpenAI，不經過本站伺服器；金鑰只暫存在頁面記憶體。",
@@ -197,6 +212,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: false, canReceive: false, kinds: [] },
     suggestedNextTools: ["csv-editor"],
     privacy: "local-only",
     privacyNote: "時程只存在瀏覽器 localStorage，匯出檔案也在本機產生。",
@@ -220,6 +236,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: false, canReceive: false, kinds: [] },
     suggestedNextTools: ["lottery", "text-cleaner"],
     privacy: "local-only",
     privacyNote: "名單只在瀏覽器裡分組，不會傳出去。",
@@ -240,6 +257,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: true, canReceive: true, kinds: ["file"] },
     suggestedNextTools: ["image-converter", "exif-cleaner", "image-crop"],
     privacy: "local-only",
     privacyNote: "壓縮全程用 Canvas 在本機完成，圖片不會離開瀏覽器。",
@@ -263,6 +281,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: false, canReceive: false, kinds: [] },
     suggestedNextTools: ["image-compressor"],
     privacy: "local-only",
     privacyNote: "QR 內容與 logo 圖片都在本機編碼，不會上傳。",
@@ -283,6 +302,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: false, canReceive: false, kinds: [] },
     suggestedNextTools: [],
     privacy: "local-only",
     privacyNote: "計時設定只存在這台裝置。",
@@ -300,9 +320,10 @@ export const toolManifests: readonly ToolManifest[] = [
     inputs: [{ kind: "file", mimeTypes: ["application/pdf"], extensions: [".pdf"], maxFiles: 12, maxSizeBytes: 50 * MB }],
     outputs: [{ kind: "file", mimeTypes: ["application/pdf"], extensions: [".pdf"] }],
     supportsBatch: true,
-    supportsWorkspace: false,
+    supportsWorkspace: true,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: false, canReceive: false, kinds: [] },
     suggestedNextTools: [],
     privacy: "local-only",
     privacyNote: "合併、取頁與縮圖都用 pdf-lib／pdf.js 在本機完成，適合合約這類敏感文件。",
@@ -326,6 +347,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: true, canReceive: true, kinds: ["text"] },
     suggestedNextTools: ["random-groups", "chinese-converter", "text-compare"],
     privacy: "local-only",
     privacyNote: "文字只在瀏覽器裡處理，不會傳出去。",
@@ -346,6 +368,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: true, canReceive: true, kinds: ["file"] },
     suggestedNextTools: ["image-compressor", "image-converter"],
     privacy: "local-only",
     privacyNote: "直接改寫位元組移除 metadata，照片不會離開瀏覽器。",
@@ -369,6 +392,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: true, canReceive: true, kinds: ["text"] },
     suggestedNextTools: ["text-cleaner", "text-compare", "markdown-editor"],
     privacy: "local-only",
     privacyNote: "OpenCC 字典隨網站一起載入，轉換在本機完成。",
@@ -392,6 +416,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: false, canReceive: false, kinds: [] },
     suggestedNextTools: ["image-compressor"],
     privacy: "local-only",
     privacyNote: "圖示在 Canvas 本機繪製並打包成 ZIP，來源圖片不會上傳。",
@@ -412,6 +437,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: true, canReceive: true, kinds: ["file"] },
     suggestedNextTools: ["image-compressor", "image-converter", "exif-cleaner"],
     privacy: "local-only",
     privacyNote: "裁切用 Canvas 在本機完成，圖片不會離開瀏覽器。",
@@ -432,6 +458,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: false, canReceive: true, kinds: ["text"] },
     suggestedNextTools: ["text-cleaner"],
     privacy: "local-only",
     privacyNote: "兩段文字都只在瀏覽器裡比對。",
@@ -455,6 +482,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: true, canReceive: true, kinds: ["text"] },
     suggestedNextTools: ["text-cleaner", "chinese-converter"],
     privacy: "local-only",
     privacyNote: "草稿自動存在瀏覽器 localStorage，不會同步到任何伺服器。",
@@ -478,6 +506,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: false, canReceive: false, kinds: [] },
     suggestedNextTools: ["gantt"],
     privacy: "local-only",
     privacyNote: "表格內容只在瀏覽器裡編輯與匯出。",
@@ -503,6 +532,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: true, canReceive: true, kinds: ["file"] },
     suggestedNextTools: ["image-compressor", "exif-cleaner", "image-crop"],
     privacy: "local-only",
     privacyNote: "轉檔用 Canvas 在本機完成，圖片不會上傳。",
@@ -529,6 +559,7 @@ export const toolManifests: readonly ToolManifest[] = [
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: false, canReceive: false, kinds: [] },
     suggestedNextTools: [],
     privacy: "local-only",
     privacyNote: "解碼與輸出都用 Web Audio API 在本機完成，音檔不會上傳。",
@@ -557,6 +588,11 @@ export function toolsAcceptingFile(mimeType: string, extension?: string): ToolMa
 /** 吃純文字的工具。 */
 export function toolsAcceptingText(): ToolManifest[] {
   return toolManifests.filter((manifest) => manifest.inputs.some((input) => input.kind === "text"));
+}
+
+/** 列出真正接上接收 hook 的工具；接力目標與 Smart Intake 都從這裡推導。 */
+export function toolsAcceptingHandoff(kind: Extract<ToolCapabilityKind, "file" | "text">): ToolManifest[] {
+  return toolManifests.filter((manifest) => manifest.handoff.canReceive && manifest.handoff.kinds.includes(kind));
 }
 
 function isOneOf<T extends string>(allowed: readonly T[], value: unknown): value is T {
@@ -610,6 +646,23 @@ export function validateToolManifests(manifests: readonly ToolManifest[] = toolM
     // 離線可用代表「完全不需要網路」，首次要下載模型／呼叫 API 的都不算。
     if (manifest.supportsOffline && manifest.processing !== "local") problems.push(`${at} supportsOffline 只有 processing 為 local 時才成立`);
     if (manifest.supportsOffline && manifest.privacy !== "local-only") problems.push(`${at} supportsOffline 與 privacy「${manifest.privacy}」矛盾`);
+
+    if (!manifest.handoff || typeof manifest.handoff.canSend !== "boolean" || typeof manifest.handoff.canReceive !== "boolean") {
+      problems.push(`${at} handoff 必須宣告 canSend 與 canReceive`);
+    } else {
+      const handoffKinds = new Set<string>();
+      for (const kind of manifest.handoff.kinds) {
+        if (!isOneOf(CAPABILITY_KINDS, kind)) problems.push(`${at} handoff kind「${kind}」不合法`);
+        if (handoffKinds.has(kind)) problems.push(`${at} handoff kinds 有重複的「${kind}」`);
+        handoffKinds.add(kind);
+      }
+      if (!manifest.handoff.canSend && !manifest.handoff.canReceive && manifest.handoff.kinds.length > 0) {
+        problems.push(`${at} handoff 沒有收送能力卻宣告了 kinds`);
+      }
+      if ((manifest.handoff.canSend || manifest.handoff.canReceive) && manifest.handoff.kinds.length === 0) {
+        problems.push(`${at} handoff 有收送能力卻沒有宣告 kinds`);
+      }
+    }
 
     for (const [label, capabilities] of [["inputs", manifest.inputs], ["outputs", manifest.outputs]] as const) {
       for (const capability of capabilities) {

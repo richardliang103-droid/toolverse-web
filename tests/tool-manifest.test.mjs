@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import {
   PRIVACY_LABELS,
   getToolManifest,
   toolManifests,
   toolsAcceptingFile,
+  toolsAcceptingHandoff,
   toolsAcceptingText,
   validateToolManifests,
 } from "../lib/tool-manifest.ts";
@@ -30,6 +31,7 @@ function sample(overrides = {}) {
     supportsWorkspace: false,
     supportsRecipe: false,
     supportsOffline: true,
+    handoff: { canSend: false, canReceive: false, kinds: [] },
     suggestedNextTools: [],
     privacy: "local-only",
     privacyNote: "只在本機處理。",
@@ -157,4 +159,40 @@ test("toolsAcceptingText：文字鏈的工具都在裡面", () => {
     assert.ok(slugs.includes(slug), `${slug} 應該收文字`);
   }
   assert.ok(!slugs.includes("pdf-toolkit"));
+});
+
+function sourceForTool(slug) {
+  const directory = new URL(`../app/tools/${slug}/`, import.meta.url);
+  return readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".tsx"))
+    .map((entry) => readFileSync(new URL(entry.name, directory), "utf8"))
+    .join("\n");
+}
+
+test("handoff manifest 與工具頁的實際 hook／按鈕一致", () => {
+  for (const manifest of toolManifests) {
+    const source = sourceForTool(manifest.slug);
+    const canReceiveFile = /\buseHandoff(?:Files)?\s*\(/.test(source);
+    const canReceiveText = /\buseTextHandoff\s*\(/.test(source);
+    const canSend = /<SendToTools\b/.test(source);
+    const kinds = [
+      ...(canReceiveFile || /\bgetFiles?\s*=/.test(source) ? ["file"] : []),
+      ...(canReceiveText || /\bgetText\s*=/.test(source) ? ["text"] : []),
+    ];
+
+    assert.equal(manifest.handoff.canReceive, canReceiveFile || canReceiveText, `${manifest.slug} canReceive 漂移`);
+    assert.equal(manifest.handoff.canSend, canSend, `${manifest.slug} canSend 漂移`);
+    assert.deepEqual([...manifest.handoff.kinds].sort(), kinds.sort(), `${manifest.slug} handoff kinds 漂移`);
+  }
+});
+
+test("接力目標由 manifest 的 canReceive 與 kind 推導", () => {
+  assert.deepEqual(
+    toolsAcceptingHandoff("file").map((manifest) => manifest.slug),
+    ["background-remover", "image-compressor", "exif-cleaner", "image-crop", "image-converter"],
+  );
+  assert.deepEqual(
+    toolsAcceptingHandoff("text").map((manifest) => manifest.slug),
+    ["text-cleaner", "chinese-converter", "text-compare", "markdown-editor"],
+  );
 });
