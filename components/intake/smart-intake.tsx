@@ -92,6 +92,10 @@ export function SmartIntake() {
 
   return (
     <section className="intake-section page-shell" aria-label="智慧入口：貼上文字或拖入檔案取得工具建議">
+      <div className="intake-intro">
+        <h2>不確定要用哪個工具？</h2>
+        <p>貼上文字，或把檔案拖進來，我們會依內容推薦合適的工具。</p>
+      </div>
       <IntakeDropZone text={text} onTextChange={setText} onFiles={handleFiles} busy={busy} />
 
       {hasContent && (
