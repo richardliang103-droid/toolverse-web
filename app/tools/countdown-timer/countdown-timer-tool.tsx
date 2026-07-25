@@ -150,6 +150,36 @@ export function CountdownTimerTool() {
     return () => window.clearInterval(interval);
   }, [mode]);
 
+  // 倒數／碼表進行中與大字時鐘都是「擺著給人看」的情境，使用者不會碰裝置，
+  // 沒有 wake lock 螢幕就會自己睡著。分頁切走時瀏覽器一定會釋放，
+  // 回到前景要重新取得，所以同時聽 visibilitychange。
+  useEffect(() => {
+    const keepAwake = mode === "clock" || (mode === "stopwatch" && stopwatchRunning) || (mode === "countdown" && phase === "running");
+    if (!keepAwake || !("wakeLock" in navigator)) return;
+    let sentinel: WakeLockSentinel | null = null;
+    let cancelled = false;
+
+    const acquire = async () => {
+      if (cancelled || sentinel || document.visibilityState !== "visible") return;
+      try {
+        const granted = await navigator.wakeLock.request("screen");
+        if (cancelled) { void granted.release(); return; }
+        sentinel = granted;
+        // 瀏覽器自動釋放（切分頁、低電量）時把參照清掉，回前景才會重新取得。
+        granted.addEventListener("release", () => { sentinel = null; });
+      } catch { /* 使用者拒絕或裝置不允許：照常計時，只是螢幕可能會暗 */ }
+    };
+
+    void acquire();
+    const onVisibilityChange = () => { if (document.visibilityState === "visible") void acquire(); };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      void sentinel?.release();
+    };
+  }, [mode, phase, stopwatchRunning]);
+
   useEffect(() => {
     const original = document.title;
     if (mode !== "countdown") { document.title = original; return () => { document.title = original; }; }
@@ -236,7 +266,7 @@ export function CountdownTimerTool() {
         ))}
       </div>
       {mode === "stopwatch" && <p className="key-note">碼表從 00:00 開始正計時，適合演講、比賽或紀錄工作時間；超過一小時自動顯示小時位。切分頁或螢幕休眠都不影響準確度。</p>}
-      {mode === "clock" && <p className="key-note">全螢幕大字時鐘，適合活動現場或講台上看時間；跟隨你裝置的系統時間。</p>}
+      {mode === "clock" && <p className="key-note">全螢幕大字時鐘，適合活動現場或講台上看時間；跟隨你裝置的系統時間，顯示期間螢幕不會自動休眠。</p>}
       {mode === "countdown" && <><div className="timer-presets">
         {PRESETS.map((preset) => (
           <button key={preset.ms} type="button" className={`button button-small ${totalMs === preset.ms ? "button-blue" : "button-secondary"}`} onClick={() => applyDuration(preset.ms)} disabled={countdownActive}>{preset.label}</button>
@@ -261,7 +291,7 @@ export function CountdownTimerTool() {
         {segments.length > 0 && <p className="key-note">每段結束會響提示音並自動接續下一段；單段的快速預設此時不生效。</p>}
       </details>
       <label className="check-row timer-sound"><input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} />結束時播放提示音</label>
-      <p className="key-note">計時以系統時間為準，切到其他分頁或螢幕休眠也不會漏秒；分頁標題會同步顯示剩餘時間。</p></>}
+      <p className="key-note">倒數進行中會請瀏覽器不要讓螢幕自動休眠。計時以系統時間為準，切到其他分頁也不會漏秒；分頁標題會同步顯示剩餘時間。</p></>}
     </div>
     <div className="panel panel-tinted timer-stage-panel">
       <div ref={stageRef} className={`timer-stage${mode === "countdown" && warning ? " timer-warning" : ""}${mode === "countdown" && phase === "finished" ? " timer-finished" : ""}`}>

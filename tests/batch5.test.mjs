@@ -25,6 +25,29 @@ test("diff 選項：忽略大小寫與空白", () => {
   assert.ok(diffTokens("Hello", "hello", { granularity: "char", ignoreCase: false, ignoreWhitespace: false }).some((op) => op.type !== "equal"));
 });
 
+test("diff 逐詞：中文沒有空格也要斷得出詞", () => {
+  const wordOpts = { granularity: "word", ignoreCase: false, ignoreWhitespace: false };
+  const ops = diffTokens("今天天氣很好", "今天天氣很糟", wordOpts);
+  // 舊的 /\S+|\s+/ 會把整句當成一個 token，結果是整段刪除＋整段新增；
+  // 斷得出詞的話「今天天氣」要保持相等，只有最後一個詞不同。
+  assert.ok(ops.some((op) => op.type === "equal" && op.text.includes("今天")));
+  assert.ok(ops.some((op) => op.type === "remove" && op.text === "很好"));
+  assert.ok(ops.some((op) => op.type === "add" && op.text === "很糟"));
+  // 不論切法為何，還原後都必須等於原文，呈現才不會失真。
+  assert.equal(ops.filter((op) => op.type !== "add").map((op) => op.text).join(""), "今天天氣很好");
+  assert.equal(ops.filter((op) => op.type !== "remove").map((op) => op.text).join(""), "今天天氣很糟");
+});
+
+test("diff 逐字：不拆散組合字元", () => {
+  const charOpts = { granularity: "char", ignoreCase: false, ignoreWhitespace: false };
+  const ops = diffTokens("a👨‍👩‍👧‍👦b", "a👨‍👩‍👧‍👦c", charOpts);
+  // 家庭 emoji 由 7 個 code point 組成，逐字比較不該把它切開來，
+  // 否則只改了尾字卻會顯示成 emoji 也被改動。
+  assert.ok(ops.some((op) => op.type === "equal" && op.text.includes("👨‍👩‍👧‍👦")));
+  assert.ok(ops.some((op) => op.type === "remove" && op.text === "b"));
+  assert.ok(ops.some((op) => op.type === "add" && op.text === "c"));
+});
+
 test("csv：分隔符偵測、解析、欄數對齊", () => {
   assert.equal(detectDelimiter("a\tb\tc\n1\t2\t3"), "\t");
   assert.equal(detectDelimiter("a;b;c\n1;2;3"), ";");
