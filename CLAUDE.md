@@ -1,6 +1,8 @@
 # ToolVerse — AI 協作指南
 
-免登入、資料留本機的中文網頁工具站（22 個工具）。正式站 https://toolverse-web.vercel.app ，由 Vercel 自動部署 `main`。
+免登入、資料留本機的中文網頁工具站。正式站 https://toolverse-web.vercel.app ，由 Vercel 自動部署 `main`。
+
+工具清單的唯一真相是 `lib/tool-manifest.ts`（目前 19 個）——首頁、⌘K 命令面板、sitemap 與 `lib/tools.ts` 的卡片視圖都從它推導，**不要在別處另抄一份**。這裡不寫死數量，數字會過期（曾經寫 22，PR #41 下架三個工具後就不準了）。
 
 ## 鐵律（違反曾造成正式站全站 500）
 
@@ -18,8 +20,10 @@
 
 ## 慣例
 
-- **新增工具流程**：`lib/tools.ts` 登記（slug/name/description/symbol/accent/status/category）→ `lib/tool-content.ts` 寫 steps＋FAQ（內容必須與實際功能核對）→ `app/tools/<slug>/page.tsx`（含 `<ToolInfo slug>`）→ `tests/rendered-html.test.mjs` 加路由 → README 加一條。sitemap 自動涵蓋。
+- **新增工具流程**：`lib/tool-manifest.ts` 登記（卡片欄位＋`processing`／`engines`／`inputs`／`outputs`／`supportsBatch`／`privacy` 等能力欄位，數字要跟工具裡的 `MAX_FILES`／`MAX_SIZE` 對齊）→ `lib/tool-content.ts` 寫 steps＋FAQ（內容必須與實際功能核對）→ `app/tools/<slug>/page.tsx`（含 `<ToolInfo slug>`）→ `tests/rendered-html.test.mjs` 加路由 → README 加一條。首頁、sitemap 與 `tests/tool-manifest.test.mjs` 的路由對照都自動涵蓋。
+- **manifest 要誠實**：`validateToolManifests()` 會擋掉自相矛盾的登記（宣稱 `local` 卻列 `remote-api`、宣稱可離線卻要連線、`supportsBatch` 與 `maxFiles` 對不起來、`suggestedNextTools` 指向不存在的 slug）。隱私標示只有四種說法，含糊的「安全處理」不算。
 - **純邏輯放 `lib/`**：零依賴、用 `node --test --experimental-strip-types` 測。新測試檔要**同時**加進 package.json 的 `test` 與 `test:unit` 兩個 script（明列檔名，不能用目錄）。
+- **`lib/` 內的相對匯入要寫出 `.ts` 副檔名**：這些模組會被 `node --test --experimental-strip-types` 直接載入，而 Node 的 ESM 解析器不補副檔名（bundler 才會）。`tsconfig.json` 為此開了 `allowImportingTsExtensions`。
 - **localStorage**：sanitize 函式逐欄驗證＋`hydrated` 旗標（restore 完成前不寫入）；schema 改欄位要寫一次性遷移（參考 lottery 的 `migrateLegacyWinnerNames`）。
 - **併發防護**：檔案批次工具用「預留名額 ref」防快速重複加入；非同步載入用遞增 id（renderId/operationId）防過期結果覆蓋新狀態，**catch 分支也要檢查 id**。
 - 剪貼簿操作包 try/catch 給使用者回饋；狀態訊息用 `.gantt-notice-info`（綠）/`-error`（紅）。

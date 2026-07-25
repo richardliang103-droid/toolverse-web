@@ -1,4 +1,4 @@
-import { tools } from "./tools";
+import { tools } from "./tools.ts";
 
 // 站台正式網址（單一真相來源）。若之後接自訂網域，只改這裡。
 export const SITE_URL = "https://toolverse-web.vercel.app";
