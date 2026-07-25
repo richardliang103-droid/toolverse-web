@@ -974,3 +974,41 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
   .ws-item { flex-wrap: wrap; }
   .ws-item-actions { width: 100%; margin-left: 0; }
 }
+
+/* Smart Intake —— 首頁的智慧入口。版面自成一格（不是既有 .drop-zone 的變體，
+   因為這裡要同時放文字框跟拖放目標），但顏色與陰影語彙延續 .panel／.workspace
+   那套「硬邊陰影＋和色系」，深色模式沿用既有變數，不另外調色。 */
+.intake-section { display: grid; gap: 16px; margin-bottom: 40px; }
+.intake { border: 1px solid var(--ink); border-radius: 20px; background: var(--white); box-shadow: 6px 6px 0 var(--ink); padding: 22px; display: grid; gap: 14px; transition: background .15s ease, border-color .15s ease; }
+.intake.dragging { background: var(--blue-soft); border-color: var(--blue); }
+.intake-textarea { width: 100%; min-height: 108px; resize: vertical; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: #faf9f6; color: var(--ink); font: inherit; line-height: 1.55; }
+.intake-textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+.intake-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.intake-hint { color: var(--muted); font-size: 12.5px; }
+
+.intake-results { display: grid; gap: 12px; }
+.intake-result { padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--white); display: grid; gap: 12px; }
+.intake-result-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.intake-result-type { font-weight: 750; font-size: 15px; }
+.intake-result-warning { padding: 4px 10px; border-radius: 999px; background: #fdecea; color: #b72a22; font-size: 12px; font-weight: 650; }
+.intake-empty { margin: 0; color: var(--muted); font-size: 14px; }
+
+.intake-recommendation-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.intake-recommendation-list-secondary { margin-top: 4px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.intake-recommendation-button { width: 100%; justify-content: flex-start; gap: 12px; padding: 10px 14px; min-height: 52px; }
+.intake-recommendation-symbol { flex-shrink: 0; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 9px; font-size: 15px; }
+.intake-recommendation-copy { display: grid; gap: 1px; min-width: 0; text-align: left; }
+.intake-recommendation-copy strong { font-size: 14.5px; }
+.intake-recommendation-copy small { overflow: hidden; color: var(--muted); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.intake-recommendation-arrow { margin-left: auto; flex-shrink: 0; color: var(--muted); font-size: 12.5px; font-weight: 650; }
+.intake-expand { justify-self: start; padding: 6px 2px; border: none; background: none; color: var(--blue); font-size: 13px; font-weight: 650; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+[data-theme="dark"] .intake, [data-theme="dark"] .intake-result { background: #1a2231; border-color: #2b3446; }
+[data-theme="dark"] .intake { box-shadow: 6px 6px 0 rgba(0,0,0,.35); }
+[data-theme="dark"] .intake-textarea { background: #0e1421; color: var(--ink); border-color: #2b3446; }
+[data-theme="dark"] .intake-recommendation-warning, [data-theme="dark"] .intake-result-warning { background: #43231f; color: #ffb4a8; }
+
+@media (max-width: 640px) {
+  .intake { padding: 16px; border-radius: 16px; }
+  .intake-recommendation-arrow { display: none; }
+}
