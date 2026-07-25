@@ -18,10 +18,19 @@ export type DiffStats = { added: number; removed: number; modified: number };
 
 export const DEFAULT_DIFF_OPTIONS: DiffOptions = { granularity: "line", ignoreCase: false, ignoreWhitespace: false };
 
+// Segmenter 建構成本高，模組層建一次重複用。切出來的片段（含空白與標點）
+// 接回去等於原文，diff 呈現才不會失真。
+const wordSegmenter = new Intl.Segmenter("zh-Hant", { granularity: "word" });
+const graphemeSegmenter = new Intl.Segmenter("zh-Hant", { granularity: "grapheme" });
+
 function tokenize(text: string, granularity: DiffGranularity): string[] {
   if (granularity === "line") return text.split(/\r?\n/);
-  if (granularity === "word") return text.match(/\S+|\s+/g) ?? [];
-  return Array.from(text);
+  // 中文沒有空格，舊的 /\S+|\s+/ 會把整句當成一個 token，逐詞模式等同無效；
+  // Segmenter 才切得出詞。逐字則用字素叢集，避免拆散 emoji 與組合字。
+  const segmenter = granularity === "word" ? wordSegmenter : graphemeSegmenter;
+  const tokens: string[] = [];
+  for (const segment of segmenter.segment(text)) tokens.push(segment.segment);
+  return tokens;
 }
 
 function normalizeToken(token: string, options: DiffOptions): string {

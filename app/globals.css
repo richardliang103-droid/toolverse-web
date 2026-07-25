@@ -98,8 +98,11 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 18px; }
 .panel-header h2 { margin: 0; font-size: 20px; }
 .panel-meta { color: var(--muted); font-size: 12px; }
-.participant-input { width: 100%; min-height: 330px; resize: vertical; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: #faf9f6; color: var(--ink); line-height: 1.75; outline: none; }
-.participant-input-compact { min-height: 168px; }
+/* field-sizing: content 讓輸入框跟著內容長高（min-height 仍是下限），
+   貼長名單時不用在小框裡捲；max-height 之後才回到內部捲動。
+   不支援的瀏覽器會忽略這行，維持原本的固定高度行為。 */
+.participant-input { width: 100%; min-height: 330px; max-height: 640px; field-sizing: content; resize: vertical; overflow-y: auto; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: #faf9f6; color: var(--ink); line-height: 1.75; outline: none; }
+.participant-input-compact { min-height: 168px; max-height: 420px; }
 .participant-input:focus, .number-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
 .form-controls { display: flex; flex-wrap: wrap; gap: 16px 22px; align-items: center; padding-top: 18px; }
 .check-row { display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 14px; }

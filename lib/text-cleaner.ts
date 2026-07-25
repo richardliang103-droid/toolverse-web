@@ -41,12 +41,35 @@ export function cleanText(input: string, options: TextCleanerOptions) {
   return lines.join("\n");
 }
 
+// Segmenter 建構成本高，模組層建一次重複用。
+// grapheme：把「使用者看到的一個字」當一個單位——展開字串只切到 code point，
+// 家庭 emoji（👨‍👩‍👧‍👦，ZWJ 連接）會被算成 7 個、國旗算 2 個，與直覺不符。
+// word：中文沒有空格，靠 \S+ 之類的規則永遠切不出詞，只有 Segmenter 能斷詞。
+const graphemeSegmenter = new Intl.Segmenter("zh-Hant", { granularity: "grapheme" });
+const wordSegmenter = new Intl.Segmenter("zh-Hant", { granularity: "word" });
+
+/** 只數個數，不把片段收成陣列——字數統計每次輸入都會重算。 */
+function countGraphemes(text: string) {
+  const iterator = graphemeSegmenter.segment(text)[Symbol.iterator]();
+  let count = 0;
+  while (!iterator.next().done) count += 1;
+  return count;
+}
+
+/** 詞數。只計 isWordLike 的片段，跳過空白與標點。 */
+export function countWords(text: string) {
+  let count = 0;
+  for (const segment of wordSegmenter.segment(text)) if (segment.isWordLike) count += 1;
+  return count;
+}
+
 export function textStats(text: string) {
   const lines = text === "" ? [] : text.split(/\r?\n/);
   const nonEmpty = lines.filter((line) => line.trim() !== "");
   return {
-    characters: [...text].length,
-    charactersNoSpaces: [...text.replace(/\s/g, "")].length,
+    characters: countGraphemes(text),
+    charactersNoSpaces: countGraphemes(text.replace(/\s/g, "")),
+    words: countWords(text),
     lines: lines.length,
     nonEmptyLines: nonEmpty.length,
     uniqueLines: new Set(nonEmpty).size,

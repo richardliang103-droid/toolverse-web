@@ -63,6 +63,20 @@ test("text-cleaner: transforms compose correctly", () => {
   assert.equal(textStats("").characters, 0);
 });
 
+test("text-cleaner: 字素叢集字數與中文詞數", () => {
+  // 家庭 emoji 是 7 個 code point 用 ZWJ 串起來、國旗是 2 個，但使用者看到的都是「1 個字」。
+  assert.equal(textStats("👨‍👩‍👧‍👦").characters, 1);
+  assert.equal(textStats("🇹🇼").characters, 1);
+  assert.equal(textStats("a👨‍👩‍👧‍👦b").characters, 3);
+  // 中文沒有空格，用空白切永遠是 1；Segmenter 才斷得出詞。
+  assert.ok(textStats("今天天氣很好").words >= 3);
+  assert.equal(textStats("hello world foo").words, 3);
+  // 標點與空白不算詞。
+  assert.equal(textStats("  ，、。  ").words, 0);
+  assert.equal(textStats("").words, 0);
+  assert.equal(textStats("a b\tc").charactersNoSpaces, 3);
+});
+
 test("qr: contrast warnings and filename slug", () => {
   assert.equal(contrastWarning("#101628", "#ffffff"), null);
   assert.match(contrastWarning("#ffffff", "#101628") ?? "", /前景應比背景深/);
