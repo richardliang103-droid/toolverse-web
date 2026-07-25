@@ -20,6 +20,9 @@ export function ToolDirectory() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // 命令面板開著時，這些鍵歸它管：Esc 應該只關閉面板，
+      // 不該順手把首頁的搜尋條件也清掉。
+      if (document.querySelector("dialog[open]")) return;
       if (event.key === "/" && !isTypingTarget(event.target)) {
         event.preventDefault();
         searchRef.current?.focus();
