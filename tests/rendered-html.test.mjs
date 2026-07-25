@@ -72,6 +72,12 @@ test("server-renders the workspace page without touching browser storage", async
   assert.match(html, /noindex/);
 });
 
+test("homepage renders the smart intake entry", async () => {
+  const html = await (await render()).text();
+  assert.match(html, /貼上文字，或把檔案拖到這裡/);
+  assert.match(html, /內容只在瀏覽器裡分析，不會上傳/);
+});
+
 test("homepage renders search box and category chips", async () => {
   const html = await (await render()).text();
   assert.match(html, /搜尋工具/);

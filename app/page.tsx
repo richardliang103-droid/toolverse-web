@@ -1,4 +1,5 @@
 import { Entrance } from "@/components/entrance";
+import { SmartIntake } from "@/components/intake/smart-intake";
 import { SiteHeader } from "@/components/site-header";
 import { SplitText } from "@/components/split-text";
 import { ToolDirectory } from "@/components/tool-directory";
@@ -14,6 +15,7 @@ export default function Home() {
           <h1><SplitText text="所有工具" /></h1>
           <p data-rise>選一個，直接開始。</p>
         </section>
+        <SmartIntake />
         <ToolDirectory />
         <footer className="directory-footer page-shell" data-rise>
           <div className="footer-brand"><span className="brand-mark" aria-hidden="true">T</span><strong>TOOLVERSE</strong><span className="footer-kana">実用の道具箱</span></div>
