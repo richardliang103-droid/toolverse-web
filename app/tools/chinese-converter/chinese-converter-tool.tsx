@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { textStats } from "@/lib/text-cleaner";
+import { TEXT_TOOL_SLUGS } from "@/lib/handoff";
+import { SendToTools } from "@/components/send-to-tools";
+import { useTextHandoff } from "@/components/use-handoff";
 
 const STORAGE_KEY = "toolverse:chinese-converter:v1";
 
@@ -105,6 +108,8 @@ export function ChineseConverterTool() {
   }
 
   const inputCount = textStats(input).characters;
+  useTextHandoff((incoming) => setInput(incoming));
+
   const outputCount = textStats(output).characters;
 
   return <section className="workspace text-cleaner-workspace page-shell" aria-label="繁簡轉換工具">
@@ -129,6 +134,7 @@ export function ChineseConverterTool() {
         <button className="button button-small button-secondary" type="button" onClick={downloadOutput} disabled={output === ""}>下載 .txt</button>
         <button className="button button-small button-secondary" type="button" onClick={() => { setInput(""); setOutput(""); setError(""); }} disabled={input === ""}>清空</button>
       </div>
+      {output !== "" && <SendToTools from="chinese-converter" targets={TEXT_TOOL_SLUGS} getText={() => output} />}
       {error && <p className="error-message" role="alert">{error}</p>}
     </div>
   </section>;

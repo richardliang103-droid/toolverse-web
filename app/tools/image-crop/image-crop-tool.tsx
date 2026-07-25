@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { CROP_MIN_SIZE, applyAspect, clampCropRect, toNaturalRect, type CropRect } from "@/lib/crop";
 import { exceedsImagePixelLimit, imagePixelLimitMessage } from "@/lib/image-limits";
-import { toHandoffFile } from "@/lib/handoff";
+import { IMAGE_TOOL_SLUGS, toHandoffFile } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
 import { useHandoff } from "@/components/use-handoff";
 
@@ -214,7 +214,7 @@ export function ImageCropTool() {
             <button className="button button-small button-blue" type="button" onClick={() => { void download(); }}>下載裁切結果</button>
             <button className="button button-small button-secondary" type="button" onClick={() => inputRef.current?.click()}>換一張圖</button>
           </div>
-          <SendToTools from="image-crop" getFile={handoffFile} />
+          <SendToTools from="image-crop" targets={IMAGE_TOOL_SLUGS} getFile={handoffFile} />
           {outputSize && <p className="key-note">輸出尺寸：{outputSize.w} × {outputSize.h} px（原圖 {natural.w} × {natural.h}）。拖曳框內移動、拖曳四角縮放。</p>}
         </>
       )}

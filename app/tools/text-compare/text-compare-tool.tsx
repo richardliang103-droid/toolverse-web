@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { diffRows, diffTokens, type DiffGranularity, type DiffOptions } from "@/lib/diff";
+import { useTextHandoff } from "@/components/use-handoff";
 
 const GRANULARITIES: Array<{ id: DiffGranularity; label: string; hint: string }> = [
   { id: "line", label: "逐行", hint: "適合程式碼與名單" },
@@ -27,6 +28,9 @@ function InlineDiff({ left, right, side, options }: { left: string; right: strin
 export function TextCompareTool() {
   const [left, setLeft] = useState("");
   const [right, setRight] = useState("");
+
+  // 接力進來的內容填入左欄（原始版本），右欄留給使用者貼上要比對的版本。
+  useTextHandoff((incoming) => setLeft(incoming));
   const [granularity, setGranularity] = useState<DiffGranularity>("line");
   const [ignoreCase, setIgnoreCase] = useState(false);
   const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);

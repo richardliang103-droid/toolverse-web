@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "r
 import { createZip, downloadBlob } from "@/lib/download-zip";
 import { formatBytes } from "@/lib/image-compress";
 import { exceedsImagePixelLimit, imagePixelLimitMessage } from "@/lib/image-limits";
-import { fileListOf, toHandoffFile } from "@/lib/handoff";
+import { IMAGE_TOOL_SLUGS, fileListOf, toHandoffFile } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
 import { useHandoff } from "@/components/use-handoff";
 
@@ -174,7 +174,7 @@ export function ImageConverterTool() {
               ))}
             </ul>
             {doneCount > 1 && <div className="result-actions"><button className="button button-small button-blue" type="button" onClick={() => { void (async () => { const ready = items.filter((item) => item.status === "done" && item.outputBlob).map((item) => ({ name: outputName(item.file.name, item.outputFormat ?? format), blob: item.outputBlob! })); downloadBlob(await createZip(ready), "toolverse-images.zip"); })(); }}>下載 ZIP（{doneCount} 張）</button></div>}
-            {soleResult && <SendToTools from="image-converter" getFile={() => toHandoffFile(soleResult.outputBlob!, outputName(soleResult.file.name, soleResult.outputFormat ?? format))} />}
+            {soleResult && <SendToTools from="image-converter" targets={IMAGE_TOOL_SLUGS} getFile={() => toHandoffFile(soleResult.outputBlob!, outputName(soleResult.file.name, soleResult.outputFormat ?? format))} />}
           </>}
     </div>
   </section>;
