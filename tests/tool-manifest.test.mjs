@@ -186,6 +186,14 @@ test("handoff manifest 與工具頁的實際 hook／按鈕一致", () => {
   }
 });
 
+test("Workspace manifest 與工具頁的實際儲存按鈕一致", () => {
+  for (const manifest of toolManifests) {
+    const source = sourceForTool(manifest.slug);
+    const canSaveToWorkspace = /<SaveToWorkspace\b/.test(source);
+    assert.equal(manifest.supportsWorkspace, canSaveToWorkspace, `${manifest.slug} supportsWorkspace 漂移`);
+  }
+});
+
 test("接力目標由 manifest 的 canReceive 與 kind 推導", () => {
   assert.deepEqual(
     toolsAcceptingHandoff("file").map((manifest) => manifest.slug),
