@@ -177,6 +177,7 @@ export function WorkspaceView() {
               <WorkspaceItemCard
                 key={item.id}
                 item={item}
+                items={items}
                 busy={busy}
                 duplicateOf={duplicates.get(item.id) ?? null}
                 onDownload={download}
