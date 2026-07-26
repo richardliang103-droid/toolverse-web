@@ -6,6 +6,7 @@ import { DEFAULT_CLEANER_OPTIONS, cleanText, textStats } from "@/lib/text-cleane
 import type { TextCleanerOptions } from "@/lib/text-cleaner";
 import { TEXT_TOOL_SLUGS } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
+import { HandoffStatusBanner } from "@/components/handoff-status";
 import { useTextHandoff } from "@/components/use-handoff";
 
 const STORAGE_KEY = "toolverse:text-cleaner:v1";
@@ -55,7 +56,7 @@ export function TextCleanerTool() {
     if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(options));
   }, [hydrated, options]);
 
-  useTextHandoff((incoming) => setInput(incoming));
+  const handoffStatus = useTextHandoff("text-cleaner", (incoming) => setInput(incoming));
 
   const output = useMemo(() => cleanText(input, options), [input, options]);
   const inputStats = useMemo(() => textStats(input), [input]);
@@ -124,6 +125,7 @@ export function TextCleanerTool() {
       </div>
       {output !== "" && <SendToTools from="text-cleaner" targets={TEXT_TOOL_SLUGS} getText={() => output} />}
       {error && <p className="error-message" role="alert">{error}</p>}
+      <HandoffStatusBanner status={handoffStatus} />
     </div>
   </section>;
 }

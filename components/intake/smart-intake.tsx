@@ -9,6 +9,7 @@ import { detectTextType } from "@/lib/intake/detect-text";
 import { buildFileIntakeDetection, buildTextIntakeDetection } from "@/lib/intake/recommendations";
 import type { IntakeDetection } from "@/lib/intake/types";
 import { IMAGE_TOOL_SLUGS, TEXT_TOOL_SLUGS, putFileHandoff, putTextHandoff } from "@/lib/handoff";
+import { getToolManifest } from "@/lib/tool-manifest";
 
 type FileGroup = { key: string; detection: IntakeDetection; files: File[]; mismatchCount: number };
 
@@ -54,6 +55,7 @@ export function SmartIntake() {
   const [textDetection, setTextDetection] = useState<IntakeDetection | null>(null);
   const [fileGroups, setFileGroups] = useState<FileGroup[]>([]);
   const [busy, setBusy] = useState(false);
+  const [navigationError, setNavigationError] = useState("");
 
   // 兩層防過期：文字用 debounce 計時器，檔案用遞增 id——晚丟出去的分析
   // 有可能因為 await 排隊而比新的一次先跑完，id 對不上就直接丟棄結果。
@@ -82,10 +84,25 @@ export function SmartIntake() {
     });
   }, []);
 
-  function goToTool(slug: string, detection: IntakeDetection, source: { file?: File; text?: string }) {
-    if (detection.kind === "file" && source.file && IMAGE_RECEIVERS.includes(slug)) putFileHandoff(source.file, "smart-intake");
-    else if (detection.kind === "text" && source.text !== undefined && TEXT_RECEIVERS.includes(slug)) putTextHandoff(source.text, "smart-intake");
-    router.push(`/tools/${slug}`);
+  async function goToTool(slug: string, detection: IntakeDetection, source: { files?: File[]; text?: string }) {
+    setNavigationError("");
+    setBusy(true);
+    try {
+      let workspaceItemId: string | null = null;
+      if (detection.kind === "file" && source.files?.length && IMAGE_RECEIVERS.includes(slug)
+        && (source.files.length === 1 || getToolManifest(slug)?.supportsBatch === true)) {
+        workspaceItemId = await putFileHandoff(source.files, "smart-intake");
+      } else if (detection.kind === "text" && source.text !== undefined && TEXT_RECEIVERS.includes(slug)) {
+        workspaceItemId = await putTextHandoff(source.text, "smart-intake");
+      }
+      router.push(workspaceItemId
+        ? `/tools/${slug}?workspaceItem=${encodeURIComponent(workspaceItemId)}`
+        : `/tools/${slug}`);
+    } catch (caught) {
+      setNavigationError(caught instanceof Error ? caught.message : "無法把內容存入工作區，請重試。");
+    } finally {
+      setBusy(false);
+    }
   }
 
   const hasContent = textDetection !== null || fileGroups.length > 0;
@@ -104,7 +121,7 @@ export function SmartIntake() {
             <ToolRecommendationCard
               detection={textDetection}
               canCarryOver={(slug) => TEXT_RECEIVERS.includes(slug)}
-              onSelect={(slug) => goToTool(slug, textDetection, { text })}
+              onSelect={(slug) => { void goToTool(slug, textDetection, { text }); }}
             />
           )}
           {fileGroups.map((group) => (
@@ -113,12 +130,13 @@ export function SmartIntake() {
               detection={group.detection}
               itemCount={group.files.length}
               mismatchCount={group.mismatchCount}
-              canCarryOver={(slug) => group.files.length === 1 && IMAGE_RECEIVERS.includes(slug)}
-              onSelect={(slug) => goToTool(slug, group.detection, { file: group.files[0] })}
+              canCarryOver={(slug) => IMAGE_RECEIVERS.includes(slug) && (group.files.length === 1 || getToolManifest(slug)?.supportsBatch === true)}
+              onSelect={(slug) => { void goToTool(slug, group.detection, { files: group.files }); }}
             />
           ))}
         </div>
       )}
+      {navigationError && <p className="error-message" role="alert">{navigationError}</p>}
     </section>
   );
 }

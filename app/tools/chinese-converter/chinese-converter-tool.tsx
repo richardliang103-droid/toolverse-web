@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { textStats } from "@/lib/text-cleaner";
 import { TEXT_TOOL_SLUGS } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
+import { HandoffStatusBanner } from "@/components/handoff-status";
 import { useTextHandoff } from "@/components/use-handoff";
 
 const STORAGE_KEY = "toolverse:chinese-converter:v1";
@@ -108,7 +109,7 @@ export function ChineseConverterTool() {
   }
 
   const inputCount = textStats(input).characters;
-  useTextHandoff((incoming) => setInput(incoming));
+  const handoffStatus = useTextHandoff("chinese-converter", (incoming) => setInput(incoming));
 
   const outputCount = textStats(output).characters;
 
@@ -136,6 +137,7 @@ export function ChineseConverterTool() {
       </div>
       {output !== "" && <SendToTools from="chinese-converter" targets={TEXT_TOOL_SLUGS} getText={() => output} />}
       {error && <p className="error-message" role="alert">{error}</p>}
+      <HandoffStatusBanner status={handoffStatus} />
     </div>
   </section>;
 }

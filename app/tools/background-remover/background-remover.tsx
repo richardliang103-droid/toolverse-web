@@ -5,6 +5,7 @@
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
 import { IMAGE_TOOL_SLUGS, toHandoffFile } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
+import { HandoffStatusBanner } from "@/components/handoff-status";
 import { useHandoff } from "@/components/use-handoff";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -204,7 +205,7 @@ export function BackgroundRemover() {
     if (inputRef.current) inputRef.current.value = "";
   }
 
-  useHandoff((incoming) => selectFile(incoming));
+  const handoffStatus = useHandoff("background-remover", (incoming) => selectFile(incoming));
 
   function handoffFile() {
     const blob = resultBlobRef.current;
@@ -225,6 +226,7 @@ export function BackgroundRemover() {
       {mode === "removebg" && <label className="field-label" htmlFor="removebg-key">remove.bg API 金鑰<input id="removebg-key" className="key-input" type="password" value={removeBgKey} onChange={(event) => setRemoveBgKey(event.target.value)} autoComplete="off" spellCheck={false} placeholder="貼上你的金鑰" /></label>}
       {file && <div className="preview-actions"><button className="button button-coral" type="button" onClick={removeBackground} disabled={processing}>{processing ? (mode === "local" ? "本機處理中…" : "呼叫 remove.bg 中…") : (mode === "local" ? "開始本機去背" : "用 remove.bg 去背")}</button><button className="button button-secondary" type="button" onClick={clear} disabled={processing}>清除</button></div>}
       {error && <div className="error-message" role="alert"><p>{error}{errorDetail && <><br /><small>技術細節：{errorDetail}</small></>}</p>{errorCode === "network" && mode === "local" && <button className="button button-small button-secondary" type="button" onClick={() => { setMode("removebg"); setError(""); setErrorDetail(""); setErrorCode(""); }}>改用 remove.bg 模式</button>}</div>}
+      <HandoffStatusBanner status={handoffStatus} />
       {mode === "local"
         ? <div className="service-notice service-notice-private"><strong>100% 本機處理</strong><span>圖片不會上傳。首次使用會下載約數十 MB 的 AI 模型，之後由瀏覽器快取。</span></div>
         : <div className="service-notice"><strong>需要金鑰，圖片會經過 remove.bg</strong><span>金鑰只暫存在這個頁面。圖片會先經過 ToolVerse 伺服器轉送一次（remove.bg 不支援瀏覽器直接呼叫），再送到 remove.bg 處理，不會被儲存。到 <a href="https://www.remove.bg/api" target="_blank" rel="noopener noreferrer">remove.bg</a> 免費申請，每月 50 次免費額度，超過需付費；免費額度可能只回傳較低解析度的預覽圖。</span></div>}

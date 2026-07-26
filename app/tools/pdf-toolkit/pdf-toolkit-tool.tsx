@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { extractedFilename, mergedFilename, parsePageRanges } from "@/lib/pdf-pages";
 import { formatBytes } from "@/lib/image-compress";
+import { SaveToWorkspace } from "@/components/save-to-workspace";
 
 const MAX_FILES = 12;
 const MAX_SIZE = 50 * 1024 * 1024;
@@ -42,8 +43,9 @@ export function PdfToolkitTool() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [output, setOutput] = useState<{ blob: Blob; name: string } | null>(null);
 
-  function resetMessages() { setError(""); setNotice(""); }
+  function resetMessages() { setError(""); setNotice(""); setOutput(null); }
 
   useEffect(() => () => { thumbnailRenderIdRef.current += 1; }, []);
 
@@ -183,7 +185,10 @@ export function PdfToolkitTool() {
         for (const page of pages) output.addPage(page);
       }
       const bytes = await output.save();
-      downloadBlob(new Blob([bytes as BlobPart], { type: "application/pdf" }), mergedFilename(mergeItems.map((item) => item.file.name)));
+      const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
+      const name = mergedFilename(mergeItems.map((item) => item.file.name));
+      downloadBlob(blob, name);
+      setOutput({ blob, name });
       setNotice(`已合併 ${mergeItems.length} 份、共 ${output.getPageCount()} 頁`);
     } catch {
       setError("合併失敗 — 其中一份 PDF 可能已加密或損壞");
@@ -207,7 +212,10 @@ export function PdfToolkitTool() {
         output.addPage(page);
       });
       const bytes = await output.save();
-      downloadBlob(new Blob([bytes as BlobPart], { type: "application/pdf" }), extractedFilename(splitFile.name));
+      const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
+      const name = extractedFilename(splitFile.name);
+      downloadBlob(blob, name);
+      setOutput({ blob, name });
       setNotice(`已取出 ${indexes.length} 頁`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "取出頁面失敗");
@@ -287,6 +295,7 @@ export function PdfToolkitTool() {
           </>}
       {error && <p className="error-message" role="alert">{error}</p>}
       {notice && <p className="gantt-notice gantt-notice-info" role="status">{notice}</p>}
+      {output && <SaveToWorkspace blob={output.blob} name={output.name} sourceTool="pdf-toolkit" />}
     </div>
     <div className="panel panel-tinted">
       <div className="panel-header"><h2>使用說明</h2><span className="panel-meta">100% 本機處理</span></div>

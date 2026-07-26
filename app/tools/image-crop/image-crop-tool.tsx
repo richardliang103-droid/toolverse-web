@@ -5,6 +5,7 @@ import { CROP_MIN_SIZE, applyAspect, clampCropRect, toNaturalRect, type CropRect
 import { exceedsImagePixelLimit, imagePixelLimitMessage } from "@/lib/image-limits";
 import { IMAGE_TOOL_SLUGS, toHandoffFile } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
+import { HandoffStatusBanner } from "@/components/handoff-status";
 import { useHandoff } from "@/components/use-handoff";
 
 const ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -66,7 +67,7 @@ export function ImageCropTool() {
     reader.readAsDataURL(file);
   }, []);
 
-  useHandoff((file) => loadFile(file));
+  const handoffStatus = useHandoff("image-crop", (file) => loadFile(file));
 
   function onPick(event: ChangeEvent<HTMLInputElement>) {
     loadFile(event.target.files?.[0]);
@@ -219,6 +220,7 @@ export function ImageCropTool() {
         </>
       )}
       {error && <p className="error-message" role="alert">{error}</p>}
+      <HandoffStatusBanner status={handoffStatus} />
     </div>
     <div className="panel panel-tinted">
       <div className="panel-header"><h2>裁切區域</h2><span className="panel-meta">{source ? "拖曳調整" : "尚未選擇圖片"}</span></div>

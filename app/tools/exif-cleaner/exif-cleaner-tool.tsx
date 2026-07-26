@@ -5,9 +5,10 @@ import { cleanedFilename, stripImageMetadata } from "@/lib/exif-clean";
 import { createZip, downloadBlob } from "@/lib/download-zip";
 import type { RemovedSegment } from "@/lib/exif-clean";
 import { formatBytes } from "@/lib/image-compress";
-import { IMAGE_TOOL_SLUGS, fileListOf, toHandoffFile } from "@/lib/handoff";
+import { IMAGE_TOOL_SLUGS, toHandoffFile } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
-import { useHandoff } from "@/components/use-handoff";
+import { HandoffStatusBanner } from "@/components/handoff-status";
+import { useHandoffFiles } from "@/components/use-handoff";
 
 const MAX_FILES = 20;
 const MAX_SIZE = 50 * 1024 * 1024;
@@ -53,7 +54,7 @@ export function ExifCleanerTool() {
     }
   }
 
-  async function addFiles(list: FileList | null) {
+  async function addFiles(list: FileList | File[] | null) {
     if (!list) return;
     setError(""); setNotice("");
     const accepted: File[] = [];
@@ -101,7 +102,7 @@ export function ExifCleanerTool() {
     downloadBlob(await createZip(completed.map((item) => ({ name: item.outputName, blob: item.outputBlob }))), "toolverse-privacy-cleaned.zip");
   }
 
-  useHandoff((incoming) => { void addFiles(fileListOf(incoming)); });
+  const handoffStatus = useHandoffFiles("exif-cleaner", (incoming) => { void addFiles(incoming); });
 
   const doneCount = items.filter((item) => item.status === "done").length;
   const busy = processingCount > 0;
@@ -118,6 +119,7 @@ export function ExifCleanerTool() {
       </div>
       {error && <p className="error-message" role="alert">{error}</p>}
       {notice && <p className="gantt-notice gantt-notice-info" role="status">{notice}</p>}
+      <HandoffStatusBanner status={handoffStatus} />
       <div className="service-notice service-notice-private"><strong>無損處理，畫質不變</strong><span>只移除 EXIF（GPS 位置、拍攝時間、相機資訊）、IPTC、XMP 與註解等 metadata 區段，不重新壓縮影像；色彩描述檔（ICC）會保留，顏色不會跑掉。</span></div>
     </div>
     <div className="panel panel-tinted">
@@ -144,7 +146,9 @@ export function ExifCleanerTool() {
               {doneCount > 1 && <button className="button button-small button-blue" type="button" onClick={() => { void downloadAll(); }}>下載 ZIP（{doneCount} 張）</button>}
               <button className="button button-small button-secondary" type="button" onClick={() => { setItems([]); setError(""); setNotice(""); }} disabled={busy}>清空</button>
             </div>
-            {soleResult && <SendToTools from="exif-cleaner" targets={IMAGE_TOOL_SLUGS} getFile={() => toHandoffFile(soleResult.outputBlob!, soleResult.outputName!)} />}
+            {cleanedItems.length > 1
+              ? <SendToTools from="exif-cleaner" targets={IMAGE_TOOL_SLUGS} getFiles={() => cleanedItems.map((item) => toHandoffFile(item.outputBlob!, item.outputName!))} />
+              : soleResult && <SendToTools from="exif-cleaner" targets={IMAGE_TOOL_SLUGS} getFile={() => toHandoffFile(soleResult.outputBlob!, soleResult.outputName!)} />}
           </>}
     </div>
   </section>;

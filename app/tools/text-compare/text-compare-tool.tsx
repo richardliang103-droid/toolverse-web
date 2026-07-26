@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { diffRows, diffTokens, type DiffGranularity, type DiffOptions } from "@/lib/diff";
 import { useTextHandoff } from "@/components/use-handoff";
+import { HandoffStatusBanner } from "@/components/handoff-status";
 
 const GRANULARITIES: Array<{ id: DiffGranularity; label: string; hint: string }> = [
   { id: "line", label: "逐行", hint: "適合程式碼與名單" },
@@ -30,7 +31,7 @@ export function TextCompareTool() {
   const [right, setRight] = useState("");
 
   // 接力進來的內容填入左欄（原始版本），右欄留給使用者貼上要比對的版本。
-  useTextHandoff((incoming) => setLeft(incoming));
+  const handoffStatus = useTextHandoff("text-compare", (incoming) => setLeft(incoming));
   const [granularity, setGranularity] = useState<DiffGranularity>("line");
   const [ignoreCase, setIgnoreCase] = useState(false);
   const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
@@ -68,6 +69,7 @@ export function TextCompareTool() {
         <label className="check-row"><input type="checkbox" checked={ignoreWhitespace} onChange={(event) => setIgnoreWhitespace(event.target.checked)} />忽略空白差異</label>
         <label className="check-row"><input type="checkbox" checked={ignoreCase} onChange={(event) => setIgnoreCase(event.target.checked)} />忽略大小寫</label>
       </div>
+      <HandoffStatusBanner status={handoffStatus} />
     </div>
     <div className="panel panel-tinted compare-result-panel">
       <div className="panel-header"><h2>比較結果</h2>

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createSafeMarkdownRenderer } from "@/lib/markdown-safety";
 import { TEXT_TOOL_SLUGS } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
+import { HandoffStatusBanner } from "@/components/handoff-status";
 import { useTextHandoff } from "@/components/use-handoff";
 
 const STORAGE_KEY = "toolverse:markdown-editor:v1";
@@ -26,7 +27,7 @@ export function MarkdownEditorTool() {
   const [text, setText] = useState(SAMPLE);
   const [html, setHtml] = useState("");
 
-  useTextHandoff((incoming) => setText(incoming));
+  const handoffStatus = useTextHandoff("markdown-editor", (incoming) => setText(incoming));
   const [copied, setCopied] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -119,6 +120,7 @@ export function MarkdownEditorTool() {
         <button className="button button-small button-secondary" type="button" onClick={() => setText("")} disabled={text === ""}>清空</button>
       </div>
       {text.trim() !== "" && <SendToTools from="markdown-editor" targets={TEXT_TOOL_SLUGS} getText={() => text} />}
+      <HandoffStatusBanner status={handoffStatus} />
     </div>
     <div className="panel panel-tinted markdown-preview-panel">
       <div className="panel-header"><h2>預覽</h2><span className="panel-meta">即時渲染</span></div>
