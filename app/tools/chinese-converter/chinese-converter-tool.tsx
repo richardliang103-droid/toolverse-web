@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { textStats } from "@/lib/text-cleaner";
 import { TEXT_TOOL_SLUGS } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
+import { SaveToWorkspace } from "@/components/save-to-workspace";
 import { HandoffStatusBanner } from "@/components/handoff-status";
 import { useTextHandoff } from "@/components/use-handoff";
 
@@ -112,6 +113,10 @@ export function ChineseConverterTool() {
   const handoffStatus = useTextHandoff("chinese-converter", (incoming) => setInput(incoming));
 
   const outputCount = textStats(output).characters;
+  const outputBlob = useMemo(
+    () => output === "" ? null : new Blob([output], { type: "text/plain;charset=utf-8" }),
+    [output],
+  );
 
   return <section className="workspace text-cleaner-workspace page-shell" aria-label="繁簡轉換工具">
     <div className="panel">
@@ -135,6 +140,7 @@ export function ChineseConverterTool() {
         <button className="button button-small button-secondary" type="button" onClick={downloadOutput} disabled={output === ""}>下載 .txt</button>
         <button className="button button-small button-secondary" type="button" onClick={() => { setInput(""); setOutput(""); setError(""); }} disabled={input === ""}>清空</button>
       </div>
+      <SaveToWorkspace blob={outputBlob} name="繁簡轉換結果.txt" sourceTool="chinese-converter" handoffKind="text" />
       {output !== "" && <SendToTools from="chinese-converter" targets={TEXT_TOOL_SLUGS} getText={() => output} />}
       {error && <p className="error-message" role="alert">{error}</p>}
       <HandoffStatusBanner status={handoffStatus} />

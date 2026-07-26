@@ -6,6 +6,7 @@ import { DEFAULT_CLEANER_OPTIONS, cleanText, textStats } from "@/lib/text-cleane
 import type { TextCleanerOptions } from "@/lib/text-cleaner";
 import { TEXT_TOOL_SLUGS } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
+import { SaveToWorkspace } from "@/components/save-to-workspace";
 import { HandoffStatusBanner } from "@/components/handoff-status";
 import { useTextHandoff } from "@/components/use-handoff";
 
@@ -59,6 +60,10 @@ export function TextCleanerTool() {
   const handoffStatus = useTextHandoff("text-cleaner", (incoming) => setInput(incoming));
 
   const output = useMemo(() => cleanText(input, options), [input, options]);
+  const outputBlob = useMemo(
+    () => output === "" ? null : new Blob([output], { type: "text/plain;charset=utf-8" }),
+    [output],
+  );
   const inputStats = useMemo(() => textStats(input), [input]);
   const outputStats = useMemo(() => textStats(output), [output]);
 
@@ -77,7 +82,8 @@ export function TextCleanerTool() {
   }
 
   function downloadOutput() {
-    const url = URL.createObjectURL(new Blob([output], { type: "text/plain;charset=utf-8" }));
+    if (!outputBlob) return;
+    const url = URL.createObjectURL(outputBlob);
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = "toolverse-cleaned.txt";
@@ -123,6 +129,7 @@ export function TextCleanerTool() {
         <button className="button button-small button-secondary" type="button" onClick={downloadOutput} disabled={output === ""}>下載 .txt</button>
         <button className="button button-small button-secondary" type="button" onClick={() => { setInput(""); setError(""); }} disabled={input === ""}>清空</button>
       </div>
+      <SaveToWorkspace blob={outputBlob} name="toolverse-cleaned.txt" sourceTool="text-cleaner" handoffKind="text" />
       {output !== "" && <SendToTools from="text-cleaner" targets={TEXT_TOOL_SLUGS} getText={() => output} />}
       {error && <p className="error-message" role="alert">{error}</p>}
       <HandoffStatusBanner status={handoffStatus} />

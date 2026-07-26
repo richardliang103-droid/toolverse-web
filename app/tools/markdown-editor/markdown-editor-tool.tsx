@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createSafeMarkdownRenderer } from "@/lib/markdown-safety";
 import { TEXT_TOOL_SLUGS } from "@/lib/handoff";
 import { SendToTools } from "@/components/send-to-tools";
+import { SaveToWorkspace } from "@/components/save-to-workspace";
 import { HandoffStatusBanner } from "@/components/handoff-status";
 import { useTextHandoff } from "@/components/use-handoff";
 
@@ -103,6 +104,10 @@ export function MarkdownEditorTool() {
 
   const characters = text.length;
   const lines = text === "" ? 0 : text.split("\n").length;
+  const markdownBlob = useMemo(
+    () => text.trim() === "" ? null : new Blob([text], { type: "text/markdown;charset=utf-8" }),
+    [text],
+  );
 
   return <section className="workspace markdown-workspace page-shell" aria-label="Markdown 編輯器">
     <div className="panel markdown-editor-panel">
@@ -119,6 +124,7 @@ export function MarkdownEditorTool() {
         <button className="button button-small button-secondary" type="button" onClick={copyHtml} disabled={html === ""}>{copied ? "已複製 ✓" : "複製 HTML"}</button>
         <button className="button button-small button-secondary" type="button" onClick={() => setText("")} disabled={text === ""}>清空</button>
       </div>
+      <SaveToWorkspace blob={markdownBlob} name="toolverse-筆記.md" sourceTool="markdown-editor" handoffKind="text" />
       {text.trim() !== "" && <SendToTools from="markdown-editor" targets={TEXT_TOOL_SLUGS} getText={() => text} />}
       <HandoffStatusBanner status={handoffStatus} />
     </div>
