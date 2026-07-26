@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { usePersonalTools } from "@/components/personal/use-personal-tools";
+import { orderToolsForPersonal } from "@/lib/personal-tools";
 import { filterTools } from "@/lib/tools";
 
 /**
@@ -20,8 +22,14 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  const { favoriteSlugs, recentSlugs } = usePersonalTools();
 
-  const results = useMemo(() => filterTools(query, "all"), [query]);
+  const results = useMemo(
+    () => orderToolsForPersonal(filterTools(query, "all"), favoriteSlugs, recentSlugs),
+    [query, favoriteSlugs, recentSlugs],
+  );
+  const favorites = useMemo(() => new Set(favoriteSlugs), [favoriteSlugs]);
+  const recents = useMemo(() => new Set(recentSlugs), [recentSlugs]);
 
   const openPalette = useCallback(() => {
     const dialog = dialogRef.current;
@@ -101,7 +109,7 @@ export function CommandPalette() {
             aria-controls="palette-results"
             aria-activedescendant={results[active] ? `palette-option-${results[active].slug}` : undefined}
             autoComplete="off"
-            placeholder="跳到工具… 例如：甘特、去背、PDF"
+            placeholder="搜尋工具或格式… 例如：甘特、PNG、PDF"
             value={query}
             // 關鍵字改變時選取移回第一筆，否則游標會停在已經被過濾掉的位置。
             onChange={(event) => { setQuery(event.target.value); setActive(0); }}
@@ -127,6 +135,9 @@ export function CommandPalette() {
                         <strong>{tool.name}</strong>
                         <small>{tool.description}</small>
                       </span>
+                      {favorites.has(tool.slug)
+                        ? <span className="palette-personal-badge">收藏</span>
+                        : recents.has(tool.slug) && <span className="palette-personal-badge">最近</span>}
                     </button>
                   </li>
                 ))}

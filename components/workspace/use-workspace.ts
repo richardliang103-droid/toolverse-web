@@ -10,8 +10,8 @@ export type WorkspaceNotice = { kind: "info" | "error"; text: string };
 /**
  * `/workspace` 的狀態與動作。
  *
- * 目前只有工作區頁面在用，所以刻意用 hook 而不是 context provider——PR 5 首頁也要
- * 顯示工作區摘要時，再把它提升成 context，那時候才真的需要共用同一份狀態。
+ * 工作區頁面與首頁摘要共用這個 hook。兩者是不同路由、不會同時掛載，因此不需要
+ * 為了共用程式碼再加一層全站 context。
  */
 export function useWorkspace() {
   const [items, setItems] = useState<WorkspaceItem[]>([]);

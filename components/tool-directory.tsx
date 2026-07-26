@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePersonalTools } from "@/components/personal/use-personal-tools";
 import { ToolCard } from "@/components/tool-card";
 import { CATEGORIES, filterTools, type CategoryId } from "@/lib/tools";
 
@@ -16,6 +17,8 @@ export function ToolDirectory() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CategoryId | "all">("all");
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const { favoriteSlugs, toggleFavorite } = usePersonalTools();
+  const favorites = useMemo(() => new Set(favoriteSlugs), [favoriteSlugs]);
   const visible = useMemo(() => filterTools(query, category), [query, category]);
 
   useEffect(() => {
@@ -69,7 +72,14 @@ export function ToolDirectory() {
       <section className="compact-tool-grid page-shell" id="tools" aria-label="工具列表">
         <p className="sr-only" role="status" aria-live="polite">找到 {visible.length} 個工具</p>
         {visible.map((tool, index) => (
-          <ToolCard className={`compact-tool compact-tool-${tool.accent}`} href={`/tools/${tool.slug}`} key={tool.slug}>
+          <ToolCard
+            className={`compact-tool compact-tool-${tool.accent}`}
+            href={`/tools/${tool.slug}`}
+            key={tool.slug}
+            toolName={tool.name}
+            favorite={favorites.has(tool.slug)}
+            onToggleFavorite={() => toggleFavorite(tool.slug)}
+          >
             <span className="compact-tool-number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
             <span className="compact-tool-icon" aria-hidden="true">{tool.symbol}</span>
             <span className="compact-tool-copy">

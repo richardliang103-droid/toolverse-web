@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { ClickSpark } from "@/components/click-spark";
+import { RecentToolTracker } from "@/components/personal/recent-tool-tracker";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 import "./globals.css";
 
@@ -40,5 +41,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-Hant" suppressHydrationWarning><body><script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} /><ServiceWorkerRegister /><ClickSpark />{children}</body></html>;
+  return <html lang="zh-Hant" suppressHydrationWarning><body><script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} /><ServiceWorkerRegister /><RecentToolTracker /><ClickSpark />{children}</body></html>;
 }
