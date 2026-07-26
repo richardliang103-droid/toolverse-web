@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { detectFileType } from "@/lib/intake/detect-file";
 import { getToolManifest } from "@/lib/tool-manifest";
-import { consumeHandoff, takeHandoff, type HandoffKind } from "@/lib/handoff";
+import { consumeHandoff, handoffSourceName, takeHandoff, type HandoffKind } from "@/lib/handoff";
 
 export type HandoffStatus = {
   kind: "info" | "error";
@@ -95,7 +95,7 @@ function useHandoffOfKind(
         setStatus({ kind: "error", text: "找不到這份接力內容，可能已過期或已被使用。" });
         return;
       }
-      const fromName = toolName(handoff.fromSlug);
+      const fromName = handoffSourceName(handoff.fromSlug);
       if (handoff.kind === "text") {
         const manifest = getToolManifest(targetSlug);
         if (!manifest?.inputs.some((input) => input.kind === "text")) {

@@ -4,7 +4,7 @@
  * 接力不再依賴模組層的記憶體槽：硬重新整理、上一頁／下一頁與批次結果都走同一份
  * Workspace 資料。URL 只帶 UUID，Blob 與文字內容永遠留在瀏覽器儲存層。
  */
-import { toolsAcceptingHandoff } from "./tool-manifest.ts";
+import { getToolManifest, toolsAcceptingHandoff } from "./tool-manifest.ts";
 import { getWorkspaceRepository } from "./workspace/create.ts";
 import type { WorkspaceItem } from "./workspace/types.ts";
 import type { WorkspaceRepository } from "./workspace/repository.ts";
@@ -28,6 +28,10 @@ type HandoffRepository = Pick<WorkspaceRepository, "save" | "get" | "list" | "re
 const HANDOFF_KIND_KEY = "handoffKind";
 const HANDOFF_GROUP_KEY = "handoffGroupId";
 const HANDOFF_INDEX_KEY = "handoffIndex";
+const HANDOFF_SOURCE_NAMES: Readonly<Record<string, string>> = {
+  "smart-intake": "智慧入口",
+  workspace: "工作區",
+};
 
 /** 同一個 URL token 在一個分頁內只消費一次；成功後 hook 也會把 query 移除。 */
 const consumedWorkspaceItems = new Set<string>();
@@ -44,6 +48,11 @@ function metadataString(item: WorkspaceItem, key: string): string | null {
 function metadataNumber(item: WorkspaceItem, key: string): number {
   const value = item.metadata[key];
   return typeof value === "number" && Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+}
+
+/** 把工具 slug 或系統來源轉成使用者看得懂的名稱，避免顯示內部代稱。 */
+export function handoffSourceName(slug: string): string {
+  return getToolManifest(slug)?.name ?? HANDOFF_SOURCE_NAMES[slug] ?? "其他來源";
 }
 
 /** 把一個或多個結果存進 Workspace，回傳第一個項目 id 作為 URL token。 */

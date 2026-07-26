@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { consumeHandoff, IMAGE_TOOL_SLUGS, TEXT_TOOL_SLUGS, putFileHandoff, putTextHandoff, takeHandoff, toHandoffFile } from "../lib/handoff.ts";
+import { consumeHandoff, handoffSourceName, IMAGE_TOOL_SLUGS, TEXT_TOOL_SLUGS, putFileHandoff, putTextHandoff, takeHandoff, toHandoffFile } from "../lib/handoff.ts";
 import { WorkspaceRepository } from "../lib/workspace/repository.ts";
 
 function memoryMetadataStore() {
@@ -39,7 +39,7 @@ function sampleFile(name = "a.png") {
   return new File([new Uint8Array([137, 80, 78, 71])], name, { type: "image/png" });
 }
 
-test("handoff：檔案存進 Workspace，取出一次後 token 失效", async () => {
+test("handoff：檔案存進 Workspace，同一分頁確認消費後 token 失效", async () => {
   const workspace = repository();
   const id = await putFileHandoff(sampleFile(), "image-crop", workspace);
   const first = await takeHandoff("file", id, workspace);
@@ -51,6 +51,11 @@ test("handoff：檔案存進 Workspace，取出一次後 token 失效", async ()
   assert.equal(await takeHandoff("file", id, workspace), null);
 });
 
+test("handoff：找不到 Workspace 項目時乾淨地回傳 null", async () => {
+  const workspace = repository();
+  assert.equal(await takeHandoff("text", `missing-${crypto.randomUUID()}`, workspace), null);
+});
+
 test("handoff：文字存進 Workspace，種類不符時不消費", async () => {
   const workspace = repository();
   const id = await putTextHandoff("今天天氣很好", "text-cleaner", workspace);
@@ -59,6 +64,16 @@ test("handoff：文字存進 Workspace，種類不符時不消費", async () => 
   assert.equal(first?.kind, "text");
   assert.equal(first?.text, "今天天氣很好");
   assert.equal(first?.fromSlug, "text-cleaner");
+});
+
+test("handoff：檔案存進 Workspace，種類不符時不消費", async () => {
+  const workspace = repository();
+  const id = await putFileHandoff(sampleFile(), "image-crop", workspace);
+  assert.equal(await takeHandoff("text", id, workspace), null);
+  const first = await takeHandoff("file", id, workspace);
+  assert.equal(first?.kind, "file");
+  assert.equal(first?.file.name, "a.png");
+  assert.equal(first?.fromSlug, "image-crop");
 });
 
 test("handoff：批次結果以同一個 Workspace group 還原整批", async () => {
@@ -75,6 +90,13 @@ test("toHandoffFile：保留檔名與 MIME，空 type 有退路", () => {
   assert.equal(named.name, "out.webp");
   assert.equal(named.type, "image/webp");
   assert.equal(toHandoffFile(new Blob([new Uint8Array([1])]), "x.bin").type, "application/octet-stream");
+});
+
+test("handoffSourceName：系統來源與工具 slug 都顯示友善名稱", () => {
+  assert.equal(handoffSourceName("smart-intake"), "智慧入口");
+  assert.equal(handoffSourceName("workspace"), "工作區");
+  assert.equal(handoffSourceName("image-crop"), "圖片裁切");
+  assert.equal(handoffSourceName("unknown-internal-source"), "其他來源");
 });
 
 test("接力目標由 manifest 推導，且都是已註冊的工具 slug", async () => {
