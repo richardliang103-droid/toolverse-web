@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { acceptsHandoffFiles, describeHandoffFile } from "@/lib/handoff-compatibility";
 import { putFileHandoff, putTextHandoff } from "@/lib/handoff";
 import { getToolManifest } from "@/lib/tool-manifest";
 import { tools } from "@/lib/tools";
@@ -21,7 +22,7 @@ type SendToToolsProps = {
    */
   getFile?: () => Promise<File | null> | File | null;
   /** 批次工具用這個一次遞交多個結果。 */
-  getFiles?: () => Promise<readonly File[]> | readonly File[];
+  getFiles?: () => readonly File[];
   getText?: () => string | null;
 };
 
@@ -36,7 +37,13 @@ export function SendToTools({ from, targets, getFile, getFiles, getText }: SendT
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const visible = targets.filter((slug) => slug !== from && (!getFiles || getToolManifest(slug)?.supportsBatch));
+  const batchFiles = getFiles?.() ?? null;
+  const visible = targets.filter((slug) => {
+    if (slug === from) return false;
+    if (!batchFiles) return true;
+    const manifest = getToolManifest(slug);
+    return Boolean(manifest && acceptsHandoffFiles(manifest, batchFiles.map(describeHandoffFile)));
+  });
 
   async function send(slug: string) {
     if (busy) return;
@@ -49,7 +56,7 @@ export function SendToTools({ from, targets, getFile, getFiles, getText }: SendT
         if (!text) return;
         workspaceItemId = await putTextHandoff(text, from);
       } else if (getFiles) {
-        const files = await getFiles();
+        const files = batchFiles ?? [];
         if (files.length === 0) return;
         workspaceItemId = await putFileHandoff(files, from);
       } else if (getFile) {

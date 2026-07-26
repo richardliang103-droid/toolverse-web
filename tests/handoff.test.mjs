@@ -36,8 +36,8 @@ function repository() {
   });
 }
 
-function sampleFile(name = "a.png") {
-  return new File([new Uint8Array([137, 80, 78, 71])], name, { type: "image/png" });
+function sampleFile(name = "a.png", type = "image/png") {
+  return new File([new Uint8Array([137, 80, 78, 71])], name, { type });
 }
 
 test("handoff：Workspace 輸出可重複讀取，不會在第一次帶入後失效", async () => {
@@ -134,6 +134,40 @@ test("首頁最近輸出：批次圖片只推薦可接整批且數量未超限�
   assert.deepEqual(
     workspaceContinuationTargets(item, items).map((manifest) => manifest.slug),
     ["image-converter", "exif-cleaner"],
+  );
+});
+
+test("首頁最近輸出：批次推薦會檢查每個檔案的格式", async () => {
+  const workspace = repository();
+  const id = await putFileHandoff(
+    [sampleFile("one.png"), sampleFile("two.webp", "image/webp")],
+    "image-compressor",
+    workspace,
+  );
+  const item = await workspace.get(id);
+  const items = await workspace.list();
+  assert.ok(item);
+  assert.deepEqual(
+    workspaceContinuationTargets(item, items).map((manifest) => manifest.slug),
+    ["image-converter"],
+  );
+});
+
+test("首頁最近輸出：批次推薦會檢查每個檔案的大小上限", async () => {
+  const workspace = repository();
+  const id = await putFileHandoff(
+    [sampleFile("one.png"), sampleFile("two.png")],
+    "image-compressor",
+    workspace,
+  );
+  const item = await workspace.get(id);
+  const items = (await workspace.list()).map((candidate) =>
+    candidate.id === id ? candidate : { ...candidate, sizeBytes: 25 * 1024 * 1024 + 1 },
+  );
+  assert.ok(item);
+  assert.deepEqual(
+    workspaceContinuationTargets(item, items).map((manifest) => manifest.slug),
+    ["exif-cleaner"],
   );
 });
 

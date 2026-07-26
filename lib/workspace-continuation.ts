@@ -7,9 +7,9 @@
 import {
   getToolManifest,
   toolManifests,
-  type ToolInputCapability,
   type ToolManifest,
 } from "./tool-manifest.ts";
+import { acceptsHandoffFiles } from "./handoff-compatibility.ts";
 import type { WorkspaceItem } from "./workspace/types.ts";
 
 export type WorkspaceHandoffKind = "file" | "text";
@@ -28,35 +28,26 @@ export function workspaceHandoffKind(item: WorkspaceItem): WorkspaceHandoffKind 
   return kind === "file" || kind === "text" ? kind : null;
 }
 
-function groupSize(item: WorkspaceItem, items: readonly WorkspaceItem[]): number {
+function groupedFileItems(item: WorkspaceItem, items: readonly WorkspaceItem[]): WorkspaceItem[] {
   const groupId = metadataString(item, WORKSPACE_HANDOFF_GROUP_KEY);
-  if (!groupId) return 1;
-  return Math.max(1, items.filter((candidate) =>
+  if (!groupId) return [item];
+  const group = items.filter((candidate) =>
     workspaceHandoffKind(candidate) === "file"
     && metadataString(candidate, WORKSPACE_HANDOFF_GROUP_KEY) === groupId,
-  ).length);
-}
-
-function acceptsFile(input: ToolInputCapability, item: WorkspaceItem, count: number): boolean {
-  if (input.kind !== "file") return false;
-  if (input.maxFiles !== undefined && count > input.maxFiles) return false;
-  if (input.maxSizeBytes !== undefined && item.sizeBytes > input.maxSizeBytes) return false;
-  const mimeAccepted = item.mimeType !== "" && (input.mimeTypes?.includes(item.mimeType.toLowerCase()) ?? false);
-  const extensionAccepted = item.extension !== null && (input.extensions?.includes(item.extension.toLowerCase()) ?? false);
-  return mimeAccepted || extensionAccepted;
+  );
+  return group.length > 0 ? group : [item];
 }
 
 function canContinueWith(
   manifest: ToolManifest,
   item: WorkspaceItem,
   kind: WorkspaceHandoffKind,
-  count: number,
+  groupedItems: readonly WorkspaceItem[],
 ): boolean {
   if (manifest.slug === item.sourceTool) return false;
   if (!manifest.handoff.canReceive || !manifest.handoff.kinds.includes(kind)) return false;
   if (kind === "text") return manifest.inputs.some((input) => input.kind === "text");
-  if (count > 1 && !manifest.supportsBatch) return false;
-  return manifest.inputs.some((input) => acceptsFile(input, item, count));
+  return acceptsHandoffFiles(manifest, groupedItems);
 }
 
 /**
@@ -69,12 +60,12 @@ export function workspaceContinuationTargets(
 ): ToolManifest[] {
   const kind = workspaceHandoffKind(item);
   if (!kind) return [];
-  const count = kind === "file" ? groupSize(item, items) : 1;
+  const groupedItems = kind === "file" ? groupedFileItems(item, items) : [item];
   const suggested = getToolManifest(item.sourceTool ?? "")?.suggestedNextTools ?? [];
   const priority = new Map(suggested.map((slug, index) => [slug, index]));
 
   return toolManifests
-    .filter((manifest) => canContinueWith(manifest, item, kind, count))
+    .filter((manifest) => canContinueWith(manifest, item, kind, groupedItems))
     .sort((left, right) => {
       const leftPriority = priority.get(left.slug) ?? Number.MAX_SAFE_INTEGER;
       const rightPriority = priority.get(right.slug) ?? Number.MAX_SAFE_INTEGER;
