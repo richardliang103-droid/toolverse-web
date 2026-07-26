@@ -109,7 +109,7 @@ export function PersonalHome() {
                   </ul>
                 )}
               </>}
-          <Link className="button button-small button-secondary personal-workspace-link" href="/workspace">繼續處理 →</Link>
+          <Link className="button button-small button-secondary personal-workspace-link" href="/workspace#backup">管理與備份 →</Link>
         </article>
       </div>
     </section>

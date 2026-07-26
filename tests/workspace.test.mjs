@@ -215,6 +215,17 @@ test("repository：存進去讀得回來，欄位齊全", async () => {
   assert.equal(await (await repository.read(item.id)).text(), "hello");
 });
 
+test("repository：備份還原可保留原始建立時間，但更新時間仍是本次匯入時間", async () => {
+  const { repository } = makeRepository();
+  const item = await repository.save({
+    name: "old.txt",
+    blob: blobOf("old"),
+    createdAt: "2025-01-02T03:04:05.000Z",
+  });
+  assert.equal(item.createdAt, "2025-01-02T03:04:05.000Z");
+  assert.equal(item.updatedAt, new Date(1_000_000).toISOString());
+});
+
 test("repository：readAsFile 帶著檔名與 MIME 回來", async () => {
   const { repository } = makeRepository();
   const item = await repository.save({ name: "note.txt", blob: blobOf("hi") });

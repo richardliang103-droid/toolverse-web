@@ -5,7 +5,7 @@ import { WorkspaceView } from "./workspace-view";
 
 export const metadata: Metadata = {
   title: "本機工作區",
-  description: "把處理結果暫存在這台裝置的瀏覽器裡，不必下載再重新上傳。檔案不會離開你的瀏覽器。",
+  description: "把處理結果暫存在這台裝置的瀏覽器裡，並用單一 ZIP 備份收藏、最近使用與工作區檔案。資料不會離開你的瀏覽器。",
   // 工作區的內容因人而異，對搜尋引擎沒有意義，也不該被索引。
   robots: { index: false, follow: true },
 };
