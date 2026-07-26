@@ -32,6 +32,8 @@ test("filterTools：關鍵字與分類過濾", () => {
   assert.equal(filterTools("", "all").length, tools.length);
   assert.deepEqual(filterTools("pdf", "all").map((tool) => tool.slug), ["pdf-toolkit"]);
   assert.deepEqual(filterTools("甘特", "all").map((tool) => tool.slug), ["gantt"]);
+  assert.ok(filterTools("png", "all").some((tool) => tool.slug === "image-crop"));
+  assert.deepEqual(filterTools(".pdf", "all").map((tool) => tool.slug), ["pdf-toolkit"]);
   const imageTools = filterTools("", "image");
   assert.ok(imageTools.length >= 3 && imageTools.every((tool) => tool.category === "image"));
   assert.deepEqual(filterTools("QR", "image"), []);

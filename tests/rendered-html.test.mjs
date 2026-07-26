@@ -84,6 +84,9 @@ test("homepage renders search box and category chips", async () => {
   assert.match(html, /搜尋工具/);
   assert.match(html, /圖表/);
   assert.match(html, /抽選分組/);
+  assert.match(html, /你的工具/);
+  assert.match(html, /不記錄最近使用/);
+  assert.match(html, /本機工作區/);
 });
 
 test("tool pages render usage guide, FAQ, and JSON-LD", async () => {

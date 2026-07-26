@@ -47,18 +47,28 @@ function toCard(manifest: ToolManifest): Tool {
 export const tools: readonly Tool[] = toolManifests.map(toCard);
 
 const CATEGORY_LABELS = new Map<string, string>(CATEGORIES.map((category) => [category.id, category.label]));
+const MANIFESTS_BY_SLUG = new Map(toolManifests.map((manifest) => [manifest.slug, manifest]));
 
 function categoryLabel(id: CategoryId): string {
   return CATEGORY_LABELS.get(id) ?? "";
 }
 
-/** 首頁搜尋／分類過濾。query 比對名稱、描述、slug 與分類名，不分大小寫。 */
+function inputFormatTerms(slug: string): string {
+  const manifest = MANIFESTS_BY_SLUG.get(slug);
+  if (!manifest) return "";
+  return manifest.inputs.flatMap((input) => [
+    ...(input.mimeTypes ?? []).flatMap((mime) => [mime, mime.split("/").at(-1) ?? "", mime.replace("jpeg", "jpg")]),
+    ...(input.extensions ?? []),
+  ]).join(" ");
+}
+
+/** 首頁與 ⌘K 搜尋：比對名稱、描述、slug、分類與可接受格式，不分大小寫。 */
 export function filterTools(query: string, category: CategoryId | "all"): Tool[] {
   const keyword = query.trim().toLowerCase();
   return tools.filter((tool) => {
     if (category !== "all" && tool.category !== category) return false;
     if (keyword === "") return true;
-    const haystack = `${tool.name} ${tool.description} ${tool.slug} ${categoryLabel(tool.category)}`.toLowerCase();
+    const haystack = `${tool.name} ${tool.description} ${tool.slug} ${categoryLabel(tool.category)} ${inputFormatTerms(tool.slug)}`.toLowerCase();
     return haystack.includes(keyword);
   });
 }
