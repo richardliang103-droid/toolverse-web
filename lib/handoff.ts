@@ -35,9 +35,6 @@ const HANDOFF_SOURCE_NAMES: Readonly<Record<string, string>> = {
   workspace: "工作區",
 };
 
-/** 同一個 URL token 在一個分頁內只消費一次；成功後 hook 也會把 query 移除。 */
-const consumedWorkspaceItems = new Set<string>();
-
 function repositoryOrDefault(repository?: HandoffRepository): Promise<HandoffRepository> {
   return repository ? Promise.resolve(repository) : getWorkspaceRepository();
 }
@@ -110,7 +107,7 @@ export async function putTextHandoff(text: string, fromSlug: string, repository?
  * handoffGroupId 找回整批項目，並依寫入順序還原。
  */
 export async function takeHandoff(kind: HandoffKind, workspaceItemId: string | null | undefined, repository?: HandoffRepository): Promise<Handoff | null> {
-  if (!workspaceItemId || consumedWorkspaceItems.has(workspaceItemId)) return null;
+  if (!workspaceItemId) return null;
   const workspace = await repositoryOrDefault(repository);
   // 由 repository 使用它自己的 clock 清理，測試與瀏覽器都不會因為兩個時鐘來源
   // 不一致而把剛存入的接力誤判成過期。
@@ -145,12 +142,6 @@ export async function takeHandoff(kind: HandoffKind, workspaceItemId: string | n
     workspaceItemId: item.id,
     workspaceItemIds: group.map((candidate) => candidate.id),
   };
-}
-
-/** 使用者確認帶入後呼叫；確認前保留 token，離開頁面後仍可重新檢查。 */
-export function consumeHandoff(handoff: Handoff): void {
-  if (handoff.kind === "text") consumedWorkspaceItems.add(handoff.workspaceItemId);
-  else for (const id of handoff.workspaceItemIds) consumedWorkspaceItems.add(id);
 }
 
 /** 接力目標由 manifest 的實際 canReceive 狀態推導，不再維護手寫白名單。 */

@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { formatBytes } from "@/lib/image-compress";
 import { getToolManifest } from "@/lib/tools";
+import { workspaceContinuationTargets } from "@/lib/workspace-continuation";
 import type { WorkspaceItem } from "@/lib/workspace/types";
 
 function relativeTime(iso: string): string {
@@ -27,6 +29,7 @@ function expiryLabel(item: WorkspaceItem): string {
 
 type WorkspaceItemCardProps = {
   item: WorkspaceItem;
+  items: readonly WorkspaceItem[];
   busy: boolean;
   duplicateOf: string | null;
   onDownload: (item: WorkspaceItem) => void;
@@ -34,9 +37,10 @@ type WorkspaceItemCardProps = {
   onRemove: (id: string) => void;
 };
 
-export function WorkspaceItemCard({ item, busy, duplicateOf, onDownload, onTogglePinned, onRemove }: WorkspaceItemCardProps) {
+export function WorkspaceItemCard({ item, items, busy, duplicateOf, onDownload, onTogglePinned, onRemove }: WorkspaceItemCardProps) {
   const source = item.sourceTool ? getToolManifest(item.sourceTool) : undefined;
   const sourceLabel = source ? source.name : item.sourceTool ? item.sourceTool : "手動加入";
+  const continuation = workspaceContinuationTargets(item, items)[0];
 
   return (
     <li id={`workspace-item-${item.id}`} className={item.pinned ? "compressor-item ws-item compressor-item-done" : "compressor-item ws-item"}>
@@ -45,9 +49,19 @@ export function WorkspaceItemCard({ item, busy, duplicateOf, onDownload, onToggl
         <span>
           {formatBytes(item.sizeBytes)} · {sourceLabel} · {relativeTime(item.createdAt)} · {expiryLabel(item)}
           {duplicateOf ? ` · 內容與「${duplicateOf}」相同` : ""}
+          {continuation ? ` · 可接到「${continuation.name}」` : ""}
         </span>
       </div>
       <div className="ws-item-actions">
+        {continuation && (
+          <Link
+            className="button button-small button-secondary"
+            href={`/tools/${continuation.slug}?workspaceItem=${encodeURIComponent(item.id)}`}
+            aria-label={`用「${continuation.name}」繼續處理「${item.name}」`}
+          >
+            繼續處理
+          </Link>
+        )}
         <button
           className="button button-small button-secondary"
           type="button"

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { detectFileType } from "@/lib/intake/detect-file";
 import { getToolManifest } from "@/lib/tool-manifest";
-import { consumeHandoff, handoffSourceName, takeHandoff, type HandoffKind } from "@/lib/handoff";
+import { handoffSourceName, takeHandoff, type HandoffKind } from "@/lib/handoff";
 
 export type HandoffStatus = {
   kind: "info" | "error";
@@ -75,7 +75,6 @@ function useHandoffOfKind(
   apply: (handoff: { files?: File[]; text?: string; fromName: string }) => void,
 ): HandoffStatus {
   const [status, setStatus] = useState<HandoffStatus>(null);
-  const consumedRef = useRef(false);
   const applyRef = useRef(apply);
 
   useEffect(() => {
@@ -83,8 +82,6 @@ function useHandoffOfKind(
   }, [apply]);
 
   useEffect(() => {
-    if (consumedRef.current) return;
-    consumedRef.current = true;
     const workspaceItemId = new URLSearchParams(window.location.search).get("workspaceItem");
     if (!workspaceItemId) return;
 
@@ -92,7 +89,7 @@ function useHandoffOfKind(
     void takeHandoff(kind, workspaceItemId).then(async (handoff) => {
       if (!active) return;
       if (!handoff) {
-        setStatus({ kind: "error", text: "找不到這份接力內容，可能已過期或已被使用。" });
+        setStatus({ kind: "error", text: "找不到這份接力內容，可能已過期、已被刪除，或內容已被瀏覽器清除。" });
         return;
       }
       const fromName = handoffSourceName(handoff.fromSlug);
@@ -108,7 +105,6 @@ function useHandoffOfKind(
           action: {
             label: "確認帶入",
             onClick: () => {
-              consumeHandoff(handoff);
               removeWorkspaceQuery();
               setStatus({ kind: "info", text: `已從「${fromName}」帶入文字。` });
               applyRef.current({ text: handoff.text, fromName });
@@ -135,7 +131,6 @@ function useHandoffOfKind(
         action: {
           label: "確認帶入",
           onClick: () => {
-            consumeHandoff(handoff);
             removeWorkspaceQuery();
             setStatus({ kind: "info", text: `已從「${fromName}」帶入 ${handoff.files.length > 1 ? `${handoff.files.length} 個檔案` : "檔案"}。` });
             applyRef.current({ files: handoff.files, fromName });
@@ -143,7 +138,7 @@ function useHandoffOfKind(
         },
       });
     }).catch(() => {
-      if (active) setStatus({ kind: "error", text: "讀取工作區接力失敗，請回到來源工具再試一次。" });
+      if (active) setStatus({ kind: "error", text: "讀取工作區內容失敗，請回到 Workspace 或來源工具再試一次。" });
     });
 
     return () => { active = false; };

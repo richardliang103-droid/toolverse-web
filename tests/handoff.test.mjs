@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { consumeHandoff, handoffSourceName, IMAGE_TOOL_SLUGS, TEXT_TOOL_SLUGS, putFileHandoff, putTextHandoff, takeHandoff, toHandoffFile } from "../lib/handoff.ts";
+import { handoffSourceName, IMAGE_TOOL_SLUGS, TEXT_TOOL_SLUGS, putFileHandoff, putTextHandoff, takeHandoff, toHandoffFile } from "../lib/handoff.ts";
 import { workspaceContinuationTargets } from "../lib/workspace-continuation.ts";
 import { WorkspaceRepository } from "../lib/workspace/repository.ts";
 
@@ -40,7 +40,7 @@ function sampleFile(name = "a.png") {
   return new File([new Uint8Array([137, 80, 78, 71])], name, { type: "image/png" });
 }
 
-test("handoff：檔案存進 Workspace，同一分頁確認消費後 token 失效", async () => {
+test("handoff：Workspace 輸出可重複讀取，不會在第一次帶入後失效", async () => {
   const workspace = repository();
   const id = await putFileHandoff(sampleFile(), "image-crop", workspace);
   const first = await takeHandoff("file", id, workspace);
@@ -48,8 +48,9 @@ test("handoff：檔案存進 Workspace，同一分頁確認消費後 token 失�
   assert.equal(first?.fromSlug, "image-crop");
   assert.equal(first?.file.name, "a.png");
   assert.deepEqual(first?.workspaceItemIds, [id]);
-  consumeHandoff(first);
-  assert.equal(await takeHandoff("file", id, workspace), null);
+  const second = await takeHandoff("file", id, workspace);
+  assert.equal(second?.kind, "file");
+  assert.equal(second?.file.name, "a.png");
 });
 
 test("handoff：找不到 Workspace 項目時乾淨地回傳 null", async () => {
