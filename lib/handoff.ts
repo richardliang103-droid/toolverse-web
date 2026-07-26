@@ -8,6 +8,11 @@ import { getToolManifest, toolsAcceptingHandoff } from "./tool-manifest.ts";
 import { getWorkspaceRepository } from "./workspace/create.ts";
 import type { WorkspaceItem } from "./workspace/types.ts";
 import type { WorkspaceRepository } from "./workspace/repository.ts";
+import {
+  WORKSPACE_HANDOFF_GROUP_KEY,
+  WORKSPACE_HANDOFF_INDEX_KEY,
+  WORKSPACE_HANDOFF_KIND_KEY,
+} from "./workspace-continuation.ts";
 
 export type HandoffKind = "file" | "text";
 
@@ -25,9 +30,6 @@ export type Handoff =
 
 type HandoffRepository = Pick<WorkspaceRepository, "save" | "get" | "list" | "read" | "readAsFile" | "remove" | "cleanup">;
 
-const HANDOFF_KIND_KEY = "handoffKind";
-const HANDOFF_GROUP_KEY = "handoffGroupId";
-const HANDOFF_INDEX_KEY = "handoffIndex";
 const HANDOFF_SOURCE_NAMES: Readonly<Record<string, string>> = {
   "smart-intake": "智慧入口",
   workspace: "工作區",
@@ -75,9 +77,9 @@ export async function putFileHandoff(
         mimeType: file.type || "application/octet-stream",
         sourceTool: fromSlug,
         metadata: {
-          [HANDOFF_KIND_KEY]: "file",
-          [HANDOFF_GROUP_KEY]: groupId,
-          [HANDOFF_INDEX_KEY]: index,
+          [WORKSPACE_HANDOFF_KIND_KEY]: "file",
+          [WORKSPACE_HANDOFF_GROUP_KEY]: groupId,
+          [WORKSPACE_HANDOFF_INDEX_KEY]: index,
         },
       }));
     }
@@ -96,7 +98,7 @@ export async function putTextHandoff(text: string, fromSlug: string, repository?
     blob: new Blob([text], { type: "text/plain" }),
     mimeType: "text/plain",
     sourceTool: fromSlug,
-    metadata: { [HANDOFF_KIND_KEY]: "text" },
+    metadata: { [WORKSPACE_HANDOFF_KIND_KEY]: "text" },
   });
   return item.id;
 }
@@ -114,7 +116,7 @@ export async function takeHandoff(kind: HandoffKind, workspaceItemId: string | n
   // 不一致而把剛存入的接力誤判成過期。
   await workspace.cleanup().catch(() => {});
   const item = await workspace.get(workspaceItemId);
-  if (!item || metadataString(item, HANDOFF_KIND_KEY) !== kind) return null;
+  if (!item || metadataString(item, WORKSPACE_HANDOFF_KIND_KEY) !== kind) return null;
 
   if (kind === "text") {
     const blob = await workspace.read(item.id);
@@ -122,11 +124,11 @@ export async function takeHandoff(kind: HandoffKind, workspaceItemId: string | n
     return { kind: "text", text: await blob.text(), fromSlug: item.sourceTool ?? "workspace", workspaceItemId: item.id };
   }
 
-  const groupId = metadataString(item, HANDOFF_GROUP_KEY);
+  const groupId = metadataString(item, WORKSPACE_HANDOFF_GROUP_KEY);
   const group = groupId
     ? (await workspace.list())
-      .filter((candidate) => metadataString(candidate, HANDOFF_KIND_KEY) === "file" && metadataString(candidate, HANDOFF_GROUP_KEY) === groupId)
-      .sort((left, right) => metadataNumber(left, HANDOFF_INDEX_KEY) - metadataNumber(right, HANDOFF_INDEX_KEY))
+      .filter((candidate) => metadataString(candidate, WORKSPACE_HANDOFF_KIND_KEY) === "file" && metadataString(candidate, WORKSPACE_HANDOFF_GROUP_KEY) === groupId)
+      .sort((left, right) => metadataNumber(left, WORKSPACE_HANDOFF_INDEX_KEY) - metadataNumber(right, WORKSPACE_HANDOFF_INDEX_KEY))
     : [item];
   const files: File[] = [];
   for (const candidate of group) {

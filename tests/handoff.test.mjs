@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { consumeHandoff, handoffSourceName, IMAGE_TOOL_SLUGS, TEXT_TOOL_SLUGS, putFileHandoff, putTextHandoff, takeHandoff, toHandoffFile } from "../lib/handoff.ts";
+import { workspaceContinuationTargets } from "../lib/workspace-continuation.ts";
 import { WorkspaceRepository } from "../lib/workspace/repository.ts";
 
 function memoryMetadataStore() {
@@ -105,4 +106,50 @@ test("接力目標由 manifest 推導，且都是已註冊的工具 slug", async
   assert.deepEqual(IMAGE_TOOL_SLUGS, ["background-remover", "image-compressor", "exif-cleaner", "image-crop", "image-converter"]);
   assert.deepEqual(TEXT_TOOL_SLUGS, ["text-cleaner", "chinese-converter", "text-compare", "markdown-editor"]);
   for (const slug of [...IMAGE_TOOL_SLUGS, ...TEXT_TOOL_SLUGS]) assert.ok(slugs.has(slug), `${slug} 不在工具註冊表`);
+});
+
+test("首頁最近輸出：單張圖片依來源推薦排序相容的下一站", async () => {
+  const workspace = repository();
+  const id = await putFileHandoff(sampleFile("crop.png"), "image-crop", workspace);
+  const item = await workspace.get(id);
+  const items = await workspace.list();
+  assert.ok(item);
+  assert.deepEqual(
+    workspaceContinuationTargets(item, items).map((manifest) => manifest.slug),
+    ["image-compressor", "image-converter", "exif-cleaner", "background-remover"],
+  );
+});
+
+test("首頁最近輸出：批次圖片只推薦可接整批且數量未超限的工具", async () => {
+  const workspace = repository();
+  const id = await putFileHandoff(
+    [sampleFile("one.png"), sampleFile("two.png")],
+    "image-compressor",
+    workspace,
+  );
+  const item = await workspace.get(id);
+  const items = await workspace.list();
+  assert.ok(item);
+  assert.deepEqual(
+    workspaceContinuationTargets(item, items).map((manifest) => manifest.slug),
+    ["image-converter", "exif-cleaner"],
+  );
+});
+
+test("首頁最近輸出：文字可接到文字工具，一般 Workspace 檔案不會誤顯示接力", async () => {
+  const workspace = repository();
+  const textId = await putTextHandoff("整理好的文字", "text-cleaner", workspace);
+  const textItem = await workspace.get(textId);
+  assert.ok(textItem);
+  assert.deepEqual(
+    workspaceContinuationTargets(textItem, await workspace.list()).map((manifest) => manifest.slug),
+    ["chinese-converter", "text-compare", "markdown-editor"],
+  );
+
+  const pdfItem = await workspace.save({
+    name: "result.pdf",
+    blob: new Blob(["pdf"], { type: "application/pdf" }),
+    sourceTool: "pdf-toolkit",
+  });
+  assert.deepEqual(workspaceContinuationTargets(pdfItem, await workspace.list()), []);
 });
