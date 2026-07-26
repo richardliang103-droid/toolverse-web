@@ -2,15 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { QR_MAX_LENGTH, contrastWarning, qrFilename } from "@/lib/qr";
-import { smsPayload, vcardPayload, wifiPayload, type WifiAuth } from "@/lib/qr-templates";
+import { qrTextForTemplate, type QrTemplate, type WifiAuth } from "@/lib/qr-templates";
 import type { QrErrorLevel } from "@/lib/qr";
 
 const STORAGE_KEY = "toolverse:qr-code:v1";
 const SIZES = [256, 512, 1024] as const;
 
 type StoredState = { dark: string; light: string; level: QrErrorLevel; size: number };
-
-type QrTemplate = "free" | "wifi" | "vcard" | "sms";
 
 const TEMPLATES: Array<{ id: QrTemplate; label: string }> = [
   { id: "free", label: "自由輸入" },
@@ -153,10 +151,19 @@ export function QrCodeTool() {
 
   const warning = contrastWarning(dark, light);
 
-  // 模板欄位一變就把組好的 payload 填進內容框；使用者仍可切回自由輸入手動微調。
-  function applyWifi(next: typeof wifi) { setWifi(next); if (next.ssid.trim()) setText(wifiPayload(next.ssid, next.password, next.auth)); }
-  function applyVcard(next: typeof vcard) { setVcard(next); if (next.name.trim()) setText(vcardPayload(next)); }
-  function applySms(next: typeof sms) { setSms(next); if (next.phone.trim()) setText(smsPayload(next.phone, next.message)); }
+  function textForTemplate(next: QrTemplate, overrides?: Partial<{ wifi: typeof wifi; vcard: typeof vcard; sms: typeof sms }>) {
+    return qrTextForTemplate(next, text, {
+      wifi: overrides?.wifi ?? wifi,
+      vcard: overrides?.vcard ?? vcard,
+      sms: overrides?.sms ?? sms,
+    });
+  }
+
+  // 結構化模板只使用自己的欄位；必填欄位為空時清除預覽，避免沿用上一份 QR 內容。
+  function selectTemplate(next: QrTemplate) { setTemplate(next); setText(textForTemplate(next)); }
+  function applyWifi(next: typeof wifi) { setWifi(next); setText(textForTemplate("wifi", { wifi: next })); }
+  function applyVcard(next: typeof vcard) { setVcard(next); setText(textForTemplate("vcard", { vcard: next })); }
+  function applySms(next: typeof sms) { setSms(next); setText(textForTemplate("sms", { sms: next })); }
 
   function downloadPng() {
     if (!dataUrl) return;
@@ -184,7 +191,7 @@ export function QrCodeTool() {
       <div className="panel-header"><h2>內容與樣式</h2><span className="panel-meta">{text.trim().length}/{QR_MAX_LENGTH}</span></div>
       <div className="flow-mode-toggle qr-template-row" role="group" aria-label="內容模板">
         {TEMPLATES.map((item) => (
-          <button key={item.id} type="button" className={`button button-small ${template === item.id ? "button-blue" : "button-secondary"}`} aria-pressed={template === item.id} onClick={() => setTemplate(item.id)}>{item.label}</button>
+          <button key={item.id} type="button" className={`button button-small ${template === item.id ? "button-blue" : "button-secondary"}`} aria-pressed={template === item.id} onClick={() => selectTemplate(item.id)}>{item.label}</button>
         ))}
       </div>
       {template === "wifi" && (
