@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { usePersonalTools } from "@/components/personal/use-personal-tools";
 import { WorkspaceItemCard } from "@/components/workspace/workspace-item-card";
 import { useWorkspace } from "@/components/workspace/use-workspace";
 import { formatBytes } from "@/lib/image-compress";
@@ -24,8 +25,30 @@ function duplicateNames(items: { id: string; name: string; checksumSha256?: stri
 }
 
 export function WorkspaceView() {
-  const { items, usage, backend, ready, busy, notice, addFiles, remove, togglePinned, clearAll, download } = useWorkspace();
+  const {
+    items,
+    usage,
+    backend,
+    ready,
+    busy,
+    notice,
+    addFiles,
+    remove,
+    togglePinned,
+    clearAll,
+    download,
+    exportBackup,
+    importBackup,
+  } = useWorkspace();
+  const {
+    favoriteSlugs,
+    recentSlugs,
+    trackRecent,
+    hydrated: personalHydrated,
+    mergePersonalTools,
+  } = usePersonalTools();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const backupInputRef = useRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const duplicates = useMemo(() => duplicateNames(items), [items]);
@@ -39,6 +62,12 @@ export function WorkspaceView() {
   function onPick(event: ChangeEvent<HTMLInputElement>) {
     if (event.target.files) void addFiles(event.target.files);
     // 清掉 value，否則選同一個檔案第二次不會觸發 change。
+    event.target.value = "";
+  }
+
+  function onBackupPick(event: ChangeEvent<HTMLInputElement>) {
+    const archive = event.target.files?.[0];
+    if (archive) void importBackup(archive, mergePersonalTools);
     event.target.value = "";
   }
 
@@ -59,6 +88,48 @@ export function WorkspaceView() {
           <div><dt>檔案大小總計</dt><dd>{ready && usage ? formatBytes(usage.totalBytes) : "—"}</dd></div>
         </dl>
         <p className="file-note">{quotaLine}</p>
+      </div>
+
+      <div className="panel ws-backup" id="backup">
+        <div className="panel-header">
+          <div>
+            <h2>備份與移轉</h2>
+            <p>把收藏、最近使用設定與所有工作區檔案收進一個 ZIP，方便換裝置或自行留存。</p>
+          </div>
+          <span className="panel-meta">全程本機處理</span>
+        </div>
+        <div className="ws-backup-actions">
+          <button
+            className="button button-small button-blue"
+            type="button"
+            disabled={busy || !ready || !personalHydrated}
+            onClick={() => {
+              void exportBackup({ favoriteSlugs, recentSlugs, trackRecent });
+            }}
+          >
+            匯出備份
+          </button>
+          <button
+            className="button button-small button-secondary"
+            type="button"
+            disabled={busy || !personalHydrated}
+            onClick={() => backupInputRef.current?.click()}
+          >
+            合併匯入備份
+          </button>
+          <input
+            ref={backupInputRef}
+            className="file-input"
+            type="file"
+            accept=".zip,application/zip"
+            onChange={onBackupPick}
+            disabled={busy}
+            aria-label="選擇 ToolVerse 備份 ZIP"
+          />
+        </div>
+        <p className="file-note">
+          匯入不會刪除目前資料；同名檔案會自動加上序號。若任一邊停用最近使用，匯入後仍維持停用。
+        </p>
       </div>
 
       <div

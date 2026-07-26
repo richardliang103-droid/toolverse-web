@@ -70,6 +70,25 @@ export function setRecentTracking(state: PersonalToolsState, enabled: boolean): 
   return { ...state, trackRecent: enabled, recentSlugs: enabled ? state.recentSlugs : [] };
 }
 
+/** 匯入採合併；任一邊停用最近使用，就保留較嚴格的隱私設定。 */
+export function mergePersonalToolsState(
+  current: PersonalToolsState,
+  incoming: PersonalToolsState,
+  validSlugs: readonly string[],
+): PersonalToolsState {
+  const left = sanitizePersonalToolsState(current, validSlugs);
+  const right = sanitizePersonalToolsState(incoming, validSlugs);
+  const unique = (values: readonly string[]) => [...new Set(values)];
+  const trackRecent = left.trackRecent && right.trackRecent;
+  return {
+    favoriteSlugs: unique([...left.favoriteSlugs, ...right.favoriteSlugs]),
+    recentSlugs: trackRecent
+      ? unique([...left.recentSlugs, ...right.recentSlugs]).slice(0, MAX_RECENT_TOOLS)
+      : [],
+    trackRecent,
+  };
+}
+
 /** ⌘K 把收藏放前面，其次是最近使用，其餘維持 manifest 原始順序。 */
 export function orderToolsForPersonal<T extends { slug: string }>(
   items: readonly T[],

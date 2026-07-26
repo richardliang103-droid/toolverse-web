@@ -1028,6 +1028,12 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 .ws-stats > div { display: grid; gap: 4px; }
 .ws-stats dt { color: var(--muted); font-size: 12.5px; }
 .ws-stats dd { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.ws-backup { scroll-margin-top: 24px; }
+.ws-backup .panel-header { align-items: flex-start; }
+.ws-backup .panel-header > div { display: grid; gap: 5px; }
+.ws-backup h2 { margin: 0; font-size: 20px; }
+.ws-backup .panel-header p { max-width: 680px; margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+.ws-backup-actions { display: flex; flex-wrap: wrap; gap: 9px; margin: 16px 0 10px; }
 
 /* 工作區的拖放區只是次要入口，不需要工具頁那種整版高度。 */
 .ws-drop { min-height: 0; padding: 26px; }
@@ -1042,6 +1048,8 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
   /* 窄螢幕上三顆按鈕擠不進同一行，讓它們換行到檔名下方，維持 24px 以上的點擊範圍。 */
   .ws-item { flex-wrap: wrap; }
   .ws-item-actions { width: 100%; margin-left: 0; }
+  .ws-backup .panel-header { align-items: stretch; flex-direction: column; }
+  .ws-backup-actions .button { flex: 1 1 150px; }
 }
 
 /* Smart Intake —— 首頁的智慧入口。版面自成一格（不是既有 .drop-zone 的變體，

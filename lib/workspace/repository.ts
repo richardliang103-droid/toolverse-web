@@ -29,6 +29,8 @@ export interface WorkspaceSaveInput {
   metadata?: Record<string, unknown>;
   /** 使用者明確要求保留，不受自動清理影響。 */
   pinned?: boolean;
+  /** 備份還原時保留原始建立時間；一般儲存不需提供。 */
+  createdAt?: string;
 }
 
 export interface WorkspaceRepositoryDeps {
@@ -110,7 +112,11 @@ export class WorkspaceRepository {
       throw toWorkspaceError(error);
     }
 
-    const timestamp = new Date(nowMs).toISOString();
+    const importedCreatedAt = typeof input.createdAt === "string" ? Date.parse(input.createdAt) : Number.NaN;
+    const timestamp = Number.isFinite(importedCreatedAt)
+      ? new Date(importedCreatedAt).toISOString()
+      : new Date(nowMs).toISOString();
+    const updatedAt = new Date(nowMs).toISOString();
     const item: WorkspaceItem = {
       id,
       name,
@@ -119,7 +125,7 @@ export class WorkspaceRepository {
       sizeBytes: input.blob.size,
       sourceTool: input.sourceTool ?? null,
       createdAt: timestamp,
-      updatedAt: timestamp,
+      updatedAt,
       expiresAt: pinned ? null : temporaryExpiry(nowMs, this.#ttlMs),
       pinned,
       storageBackend: this.#blobs.kind,

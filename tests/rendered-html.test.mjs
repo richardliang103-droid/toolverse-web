@@ -66,6 +66,9 @@ test("server-renders the workspace page without touching browser storage", async
   const html = await response.text();
   assert.match(html, /本機工作區/);
   assert.match(html, /把檔案拖到這裡/);
+  assert.match(html, /備份與移轉/);
+  assert.match(html, /匯出備份/);
+  assert.match(html, /合併匯入備份/);
   // 伺服器端沒有 IndexedDB／OPFS，清單必須是「載入中」而不是渲染時就去讀儲存空間。
   assert.match(html, /載入中/);
   // 個人內容不該被索引。

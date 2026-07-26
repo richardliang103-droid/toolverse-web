@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { downloadBlob } from "@/lib/download";
+import type { PersonalToolsState } from "@/lib/personal-tools";
+import { tools } from "@/lib/tools";
 import { getWorkspaceRepository } from "@/lib/workspace/create";
 import { WorkspaceQuotaError, type WorkspaceItem, type WorkspaceStorageBackend, type WorkspaceUsage } from "@/lib/workspace/types";
 
 export type WorkspaceNotice = { kind: "info" | "error"; text: string };
+const VALID_TOOL_SLUGS = tools.map((tool) => tool.slug);
 
 /**
  * `/workspace` 的狀態與動作。
@@ -75,7 +78,9 @@ export function useWorkspace() {
       if (!mountedRef.current) return;
       setNotice({
         kind: "error",
-        text: error instanceof WorkspaceQuotaError ? error.message : "操作失敗，請重試。",
+        text: error instanceof WorkspaceQuotaError || (error instanceof Error && error.name === "PersonalBackupError")
+          ? error.message
+          : "操作失敗，請重試。",
       });
     } finally {
       busyRef.current = false;
@@ -139,5 +144,54 @@ export function useWorkspace() {
     });
   }, [run]);
 
-  return { items, usage, backend, ready, busy, notice, addFiles, remove, togglePinned, clearAll, download, setNotice };
+  const exportBackup = useCallback(async (personalTools: PersonalToolsState) => {
+    await run(async () => {
+      // fflate 只在使用者真的按下備份時才載入，不增加首頁的初始 bundle。
+      const {
+        collectPersonalBackupSources,
+        createPersonalBackupArchive,
+        personalBackupFileName,
+      } = await import("@/lib/personal-backup");
+      const repository = await getWorkspaceRepository();
+      const sources = await collectPersonalBackupSources(repository);
+      const now = new Date();
+      const archive = await createPersonalBackupArchive(personalTools, sources, VALID_TOOL_SLUGS, now);
+      downloadBlob(archive, personalBackupFileName(now));
+      return { kind: "info", text: `備份已建立：${sources.length} 個工作區項目與個人設定。` };
+    });
+  }, [run]);
+
+  const importBackup = useCallback(async (
+    archive: File,
+    onPersonalTools: (state: PersonalToolsState) => void,
+  ) => {
+    await run(async () => {
+      const { readPersonalBackupArchive, restorePersonalBackupWorkspace } = await import("@/lib/personal-backup");
+      const backup = await readPersonalBackupArchive(archive, VALID_TOOL_SLUGS);
+      const repository = await getWorkspaceRepository();
+      await restorePersonalBackupWorkspace(repository, backup.workspace);
+      onPersonalTools(backup.personalTools);
+      return {
+        kind: "info",
+        text: `已合併匯入 ${backup.workspace.length} 個工作區項目；收藏與最近使用設定也已更新。`,
+      };
+    });
+  }, [run]);
+
+  return {
+    items,
+    usage,
+    backend,
+    ready,
+    busy,
+    notice,
+    addFiles,
+    remove,
+    togglePinned,
+    clearAll,
+    download,
+    exportBackup,
+    importBackup,
+    setNotice,
+  };
 }

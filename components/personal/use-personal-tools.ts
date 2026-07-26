@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import {
   DEFAULT_PERSONAL_TOOLS_STATE,
+  mergePersonalToolsState,
   recordRecentTool,
   sanitizePersonalToolsState,
   setRecentTracking,
@@ -93,6 +94,10 @@ export function setRecentTrackingEnabled(enabled: boolean) {
   update((state) => setRecentTracking(state, enabled));
 }
 
+export function mergePersonalTools(incoming: PersonalToolsState) {
+  update((state) => mergePersonalToolsState(state, incoming, VALID_SLUGS));
+}
+
 export function usePersonalTools() {
   const current = useSyncExternalStore(subscribe, () => snapshot, () => SERVER_SNAPSHOT);
   return {
@@ -100,5 +105,6 @@ export function usePersonalTools() {
     hydrated: current.hydrated,
     toggleFavorite,
     setRecentTrackingEnabled,
+    mergePersonalTools,
   };
 }
