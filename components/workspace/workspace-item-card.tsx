@@ -39,7 +39,7 @@ export function WorkspaceItemCard({ item, busy, duplicateOf, onDownload, onToggl
   const sourceLabel = source ? source.name : item.sourceTool ? item.sourceTool : "手動加入";
 
   return (
-    <li className={item.pinned ? "compressor-item ws-item compressor-item-done" : "compressor-item ws-item"}>
+    <li id={`workspace-item-${item.id}`} className={item.pinned ? "compressor-item ws-item compressor-item-done" : "compressor-item ws-item"}>
       <div className="compressor-item-info">
         <strong>{item.name}</strong>
         <span>

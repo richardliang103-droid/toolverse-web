@@ -6,6 +6,8 @@ import { usePersonalTools } from "@/components/personal/use-personal-tools";
 import { useWorkspace } from "@/components/workspace/use-workspace";
 import { formatBytes } from "@/lib/image-compress";
 import { getToolManifest, tools, type Tool } from "@/lib/tools";
+import { workspaceContinuationTargets } from "@/lib/workspace-continuation";
+import type { WorkspaceItem } from "@/lib/workspace/types";
 
 const TOOLS_BY_SLUG = new Map(tools.map((tool) => [tool.slug, tool]));
 
@@ -26,6 +28,57 @@ function PersonalToolLink({ tool }: { tool: Tool }) {
   );
 }
 
+function PersonalOutputItem({
+  item,
+  items,
+  busy,
+  onDownload,
+}: {
+  item: WorkspaceItem;
+  items: readonly WorkspaceItem[];
+  busy: boolean;
+  onDownload: (item: WorkspaceItem) => Promise<void>;
+}) {
+  const sourceName = item.sourceTool ? getToolManifest(item.sourceTool)?.name ?? "其他工具" : "手動加入";
+  const continuation = workspaceContinuationTargets(item, items)[0];
+
+  return (
+    <li>
+      <span className="personal-output-copy">
+        <strong>{item.name}</strong>
+        <small>{continuation ? `${sourceName} · 可接到「${continuation.name}」` : sourceName}</small>
+      </span>
+      <span className="personal-output-actions">
+        {continuation && (
+          <Link
+            className="button button-small button-secondary"
+            href={`/tools/${continuation.slug}?workspaceItem=${encodeURIComponent(item.id)}`}
+            aria-label={`用「${continuation.name}」繼續處理「${item.name}」`}
+          >
+            繼續處理
+          </Link>
+        )}
+        <button
+          className="button button-small button-secondary"
+          type="button"
+          disabled={busy}
+          onClick={() => { void onDownload(item); }}
+          aria-label={`下載「${item.name}」`}
+        >
+          下載
+        </button>
+        <Link
+          className="button button-small button-secondary"
+          href={`/workspace#workspace-item-${encodeURIComponent(item.id)}`}
+          aria-label={`在工作區查看「${item.name}」`}
+        >
+          查看
+        </Link>
+      </span>
+    </li>
+  );
+}
+
 export function PersonalHome() {
   const {
     favoriteSlugs,
@@ -35,7 +88,7 @@ export function PersonalHome() {
     toggleFavorite,
     setRecentTrackingEnabled,
   } = usePersonalTools();
-  const { items, usage, ready, notice } = useWorkspace();
+  const { items, usage, ready, busy, notice, download } = useWorkspace();
   const favoriteTools = useMemo(() => resolveTools(favoriteSlugs), [favoriteSlugs]);
   const recentTools = useMemo(() => resolveTools(recentSlugs), [recentSlugs]);
   const recentOutputs = useMemo(() => items.filter((item) => item.sourceTool !== null).slice(0, 3), [items]);
@@ -91,7 +144,7 @@ export function PersonalHome() {
         <article className="panel personal-panel personal-workspace-panel">
           <div className="panel-header"><h3>本機工作區</h3><span className="panel-meta">{ready ? `${items.length} 個項目` : "讀取中…"}</span></div>
           {notice?.kind === "error"
-            ? <p className="personal-empty">目前讀不到工作區，瀏覽器可能封鎖了本機儲存空間。</p>
+            ? <p className="personal-empty" role="alert">{notice.text}</p>
             : <>
                 <dl className="personal-workspace-stats">
                   <div><dt>使用量</dt><dd>{ready && usage ? formatBytes(usage.totalBytes) : "—"}</dd></div>
@@ -101,10 +154,13 @@ export function PersonalHome() {
                 {recentOutputs.length > 0 && (
                   <ul className="personal-output-list">
                     {recentOutputs.map((item) => (
-                      <li key={item.id}>
-                        <strong>{item.name}</strong>
-                        <small>{item.sourceTool ? getToolManifest(item.sourceTool)?.name ?? "其他工具" : "手動加入"}</small>
-                      </li>
+                      <PersonalOutputItem
+                        key={item.id}
+                        item={item}
+                        items={items}
+                        busy={busy}
+                        onDownload={download}
+                      />
                     ))}
                   </ul>
                 )}
