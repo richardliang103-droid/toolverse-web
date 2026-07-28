@@ -1097,3 +1097,39 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
   .intake { padding: 16px; border-radius: 16px; }
   .intake-recommendation-arrow { display: none; }
 }
+
+/* 月曆 */
+.calendar-nav { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.calendar-month-picker { flex: 1; min-width: 0; width: auto; min-height: 40px; padding: 0 10px; font-size: 14px; }
+.calendar-today-button { margin-top: 12px; }
+.calendar-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 8px; }
+.calendar-weekday { padding: 4px 0; color: var(--muted); font-size: 12.5px; font-weight: 700; text-align: center; }
+.calendar-weekday-weekend { color: var(--coral); }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: minmax(64px, 1fr); gap: 6px; }
+.calendar-day { display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: white; }
+.calendar-day-number { font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.calendar-day-outside { background: transparent; border-color: transparent; opacity: .38; }
+.calendar-day-weekend:not(.calendar-day-outside) { background: #fff4f1; }
+.calendar-day-holiday:not(.calendar-day-outside) { border-color: var(--coral); background: #fff0ea; }
+.calendar-day-holiday .calendar-day-number { color: var(--coral); }
+.calendar-day-holiday-label { overflow: hidden; color: var(--coral); font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-day-today:not(.calendar-day-outside) { border-color: var(--blue); border-width: 2px; padding: 7px; box-shadow: 0 0 0 3px var(--blue-soft); }
+.calendar-day-today .calendar-day-number { color: var(--blue); }
+
+[data-theme="dark"] .calendar-weekday-weekend { color: #ff9d94; }
+[data-theme="dark"] .calendar-day { background: #141b29; border-color: #2b3446; }
+[data-theme="dark"] .calendar-day-weekend:not(.calendar-day-outside) { background: #2a1b1c; }
+[data-theme="dark"] .calendar-day-holiday:not(.calendar-day-outside) { border-color: #ff9d94; background: #3a2220; }
+[data-theme="dark"] .calendar-day-holiday .calendar-day-number, [data-theme="dark"] .calendar-day-holiday-label { color: #ffb4a8; }
+[data-theme="dark"] .calendar-day-today:not(.calendar-day-outside) { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(53,87,255,.28); }
+
+@media (max-width: 640px) {
+  .calendar-grid { grid-auto-rows: minmax(44px, 1fr); gap: 4px; }
+  .calendar-day { padding: 5px; border-radius: 8px; }
+  .calendar-day-today:not(.calendar-day-outside) { padding: 4px; }
+  .calendar-day-holiday-label { display: none; }
+  /* 三個控制項擠在窄螢幕同一行，月份選擇器的原生文字會被裁掉——
+     讓它自己獨立一行，換取足夠寬度顯示完整的「2026年07月」。 */
+  .calendar-nav { flex-wrap: wrap; }
+  .calendar-month-picker { flex-basis: 100%; order: 3; }
+}
