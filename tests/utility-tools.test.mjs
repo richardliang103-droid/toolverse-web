@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { fitDimensions, formatBytes, mimeForFormat, outputFilename, savingsPercent } from "../lib/image-compress.ts";
-import { clampTimerMs, formatClock, isWarningZone } from "../lib/timer.ts";
+import { clampTimerMs, computeLaps, formatClock, formatStopwatch, isWarningZone } from "../lib/timer.ts";
 import { extractedFilename, mergedFilename, parsePageRanges } from "../lib/pdf-pages.ts";
 import { cleanText, DEFAULT_CLEANER_OPTIONS, fullwidthToHalfwidth, textStats } from "../lib/text-cleaner.ts";
 import { contrastWarning, qrFilename } from "../lib/qr.ts";
@@ -33,6 +33,27 @@ test("timer: clock formatting, clamping and warning zone", () => {
   assert.equal(isWarningZone(44_000, 300_000), true); // 15% = 45 秒
   assert.equal(isWarningZone(9_000, 30_000), true);   // 最少 10 秒警示
   assert.equal(isWarningZone(0, 300_000), false);
+});
+
+test("timer: stopwatch formatting includes centiseconds, and lap splits/records", () => {
+  assert.equal(formatStopwatch(0), "00:00.00");
+  assert.equal(formatStopwatch(65_432), "01:05.43");
+  assert.equal(formatStopwatch(3_661_000), "1:01:01.00"); // 破小時補上小時位
+  assert.equal(formatStopwatch(-5), "00:00.00"); // 負值視為 0，不噴錯
+
+  // 累計時間 [1200, 2000, 5000] → 單圈耗時 1200 / 800 / 3000。
+  const { laps, fastestIndex, slowestIndex } = computeLaps([1200, 2000, 5000]);
+  assert.deepEqual(laps, [
+    { index: 1, lapMs: 1200, totalMs: 1200 },
+    { index: 2, lapMs: 800, totalMs: 2000 },
+    { index: 3, lapMs: 3000, totalMs: 5000 },
+  ]);
+  assert.equal(fastestIndex, 1); // 第 2 圈（800ms）最快
+  assert.equal(slowestIndex, 2); // 第 3 圈（3000ms）最慢
+
+  // 少於兩圈無從比較最快最慢。
+  assert.deepEqual(computeLaps([]), { laps: [], fastestIndex: null, slowestIndex: null });
+  assert.deepEqual(computeLaps([500]), { laps: [{ index: 1, lapMs: 500, totalMs: 500 }], fastestIndex: null, slowestIndex: null });
 });
 
 test("pdf-pages: range parsing keeps order, supports reverse, rejects garbage", () => {
