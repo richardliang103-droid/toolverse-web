@@ -545,24 +545,37 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 
 /* Countdown timer */
 .timer-presets { display: flex; flex-wrap: wrap; gap: 8px; }
-.timer-custom { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
-.timer-custom-value { min-width: 74px; text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; }
+.timer-custom { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.timer-custom-input { width: 64px; text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; }
+.timer-custom-unit { color: var(--muted); font-size: 14px; }
+.timer-input-hint { margin-top: 8px; }
 .timer-sound { margin-top: 16px; }
 .timer-workspace .key-note { margin-top: 14px; }
 .timer-stage-panel { display: flex; }
-/* min-width: 0 覆蓋 flex item 預設的 min-width: auto，否則時鐘/破小時碼表的
-   大字文字會撐大這個 flex 子項目，讓內框寬度超出 .timer-stage-panel 外框。 */
-.timer-stage { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; min-height: 380px; padding: 30px; border-radius: 14px; background: var(--ink); transition: background .3s ease; }
+/* min-width: 0 覆蓋 flex item 預設的 min-width: auto，否則時鐘/碼表的
+   大字文字會撐大這個 flex 子項目，讓內框寬度超出 .timer-stage-panel 外框。
+   container-type 讓 .timer-display 的字級能用 cqw（容器寬度百分比）計算——
+   這裡不是接近全螢幕寬，用 vw（視窗寬度）算字級在雙欄版面下永遠太大，
+   數字會爆出這個框（cqw 只在非全螢幕生效；:fullscreen 那組仍用 vw，
+   因為全螢幕時這個元素本身就接近整個視窗寬，兩種算法在那個情境下等價）。 */
+.timer-stage { container-type: inline-size; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; min-height: 380px; padding: 30px; border-radius: 14px; background: var(--ink); transition: background .3s ease; }
 .timer-stage:fullscreen { border-radius: 0; }
-.timer-display { color: var(--paper); font-size: clamp(72px, 16vw, 200px); font-weight: 850; letter-spacing: -.04em; font-variant-numeric: tabular-nums; line-height: 1; }
+.timer-display { color: var(--paper); font-size: clamp(48px, 13cqw, 200px); font-weight: 850; letter-spacing: -.04em; font-variant-numeric: tabular-nums; line-height: 1; }
 .timer-stage:fullscreen .timer-display { font-size: clamp(120px, 28vw, 480px); }
 .timer-warning { background: #7c1d12; }
 .timer-warning .timer-display { color: #ffd9ce; }
 .timer-finished { background: var(--coral); }
-.timer-finished .timer-display { color: var(--ink); font-size: clamp(56px, 12vw, 140px); }
+.timer-finished .timer-display { color: var(--ink); font-size: clamp(56px, 12cqw, 140px); }
 .timer-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 .timer-stage .button-secondary { border-color: var(--paper); color: var(--paper); }
 .timer-finished .button-secondary { border-color: var(--ink); color: var(--ink); }
+.timer-lap-list { display: grid; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; max-height: 260px; overflow-y: auto; }
+.timer-lap-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.timer-lap-index { flex-shrink: 0; color: var(--muted); font-variant-numeric: normal; }
+.timer-lap-split { font-weight: 750; }
+.timer-lap-total { margin-left: auto; color: var(--muted); }
+.timer-lap-fastest { border-color: #83b89a; background: #f2fbf6; }
+.timer-lap-slowest { border-color: #e0a9a4; background: #fdecea; }
 
 /* PDF toolkit */
 .pdf-add-button { margin-top: 16px; width: 100%; }
@@ -832,11 +845,15 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 
 /* 內容輸出面刻意保持白色：條碼、favicon 預覽底、QR 預覽（背景色由使用者選） */
 
-/* 時鐘與破小時碼表（HH:MM:SS）字數較多，縮小字級避免溢出 */
+/* 時鐘（HH:MM:SS）與碼表（含百分之一秒）字數較多，縮小字級避免溢出；
+   同樣用 cqw 而非 vw，理由見 .timer-stage 定義處的註解。 */
 .timer-display { max-width: 100%; }
-.timer-display-long { font-size: clamp(44px, 9.5vw, 120px); }
+.timer-display-long { font-size: clamp(32px, 8cqw, 120px); }
 .timer-stage:fullscreen .timer-display-long { font-size: clamp(80px, 17vw, 300px); }
 [data-theme="dark"] .timer-stage .button-secondary { border-color: #e9edf6; color: #e9edf6; }
+[data-theme="dark"] .timer-lap-row { background: #141b29; }
+[data-theme="dark"] .timer-lap-fastest { background: #1d3a2c; border-color: #3c6b52; }
+[data-theme="dark"] .timer-lap-slowest { background: #43231f; border-color: #7c3f38; }
 
 /* 分組結果卡片保留和色粉彩底，深色模式下文字固定深色才可讀 */
 [data-theme="dark"] .group-card { color: #2a3040; box-shadow: 3px 3px 0 rgba(0,0,0,.35); border-color: #3a4358; }
