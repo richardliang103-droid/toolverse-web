@@ -58,7 +58,7 @@ export function CalendarTool() {
       </div>
       <div className="calendar-grid" role="grid" aria-label={`${year} 年 ${month} 月`} suppressHydrationWarning>
         {days.map((day) => {
-          const holiday = day.inCurrentMonth ? holidayFor(day.month, day.day) : null;
+          const holiday = day.inCurrentMonth ? holidayFor(day.date) : null;
           const classes = ["calendar-day"];
           if (!day.inCurrentMonth) classes.push("calendar-day-outside");
           if (day.isWeekend) classes.push("calendar-day-weekend");
@@ -82,7 +82,7 @@ export function CalendarTool() {
         <button className="button button-small button-secondary" type="button" onClick={() => go(1)} aria-label="下個月">下個月 →</button>
       </div>
       <button className="button button-small button-blue calendar-today-button" type="button" onClick={jumpToday} disabled={isCurrentMonth}>回到本月</button>
-      <p className="key-note">週末與週六日以外的休假日會標色；國定假日目前只涵蓋日期每年固定的部分（元旦、228、兒童節、勞動節、國慶日）。農曆節日（春節、端午、中秋）與政府公告的彈性補班尚未收錄，需要時請另外查詢人事行政總處官方行事曆。</p>
+      <p className="key-note">週末與國定假日會標色，包含農曆節日（春節、端午、中秋）與政府公告的補假，資料來自行政院人事行政總處<a href="https://data.gov.tw/dataset/14718" target="_blank" rel="noopener noreferrer">政府行政機關辦公日曆表</a>，目前涵蓋 2026～2027 年。範圍以外的年份查不到資料就不會標色，需要時請另外查詢官方行事曆。</p>
     </div>
   </section>;
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildMonthGrid, shiftMonth } from "../lib/calendar/month-grid.ts";
-import { FIXED_HOLIDAYS_TW, holidayFor } from "../lib/calendar/holidays-tw.ts";
+import { HOLIDAYS_TW, holidayFor } from "../lib/calendar/holidays-tw.ts";
 
 test("buildMonthGrid：固定 42 格，週日開頭、週六結尾", () => {
   const days = buildMonthGrid(2026, 2, new Date(2026, 1, 15));
@@ -65,21 +65,28 @@ test("shiftMonth：加減月份正確跨年", () => {
   assert.deepEqual(shiftMonth(2026, 7, -7), { year: 2025, month: 12 });
 });
 
-test("holidayFor：查得到固定假日，查不到就回 null 不硬猜", () => {
-  assert.deepEqual(holidayFor(1, 1), { monthDay: "01-01", name: "元旦" });
-  assert.deepEqual(holidayFor(2, 28), { monthDay: "02-28", name: "和平紀念日" });
-  assert.equal(holidayFor(6, 15), null); // 端午節日期逐年變動，刻意不收錄
-  assert.equal(holidayFor(1, 2), null);
+test("holidayFor：查得到官方公告的國定假日（含農曆節日與補假），查不到就回 null 不硬猜", () => {
+  assert.deepEqual(holidayFor("2026-01-01"), { date: "2026-01-01", name: "開國紀念日" });
+  assert.deepEqual(holidayFor("2026-02-17"), { date: "2026-02-17", name: "春節" }); // 農曆節日，官方換算好的西元日期
+  assert.deepEqual(holidayFor("2026-02-20"), { date: "2026-02-20", name: "補假" });
+  assert.deepEqual(holidayFor("2027-02-06"), { date: "2027-02-06", name: "春節" });
+  assert.equal(holidayFor("2026-06-16"), null); // 涵蓋範圍內、但本來就不是假日的普通一天
+  assert.equal(holidayFor("2025-01-01"), null); // 涵蓋範圍（2026～2027）以外的年份，刻意不硬猜
+  assert.equal(holidayFor("2028-01-01"), null);
 });
 
-test("FIXED_HOLIDAYS_TW：每筆資料格式都合法，且是 buildMonthGrid 認得的真實日期", () => {
-  for (const holiday of FIXED_HOLIDAYS_TW) {
-    assert.match(holiday.monthDay, /^\d{2}-\d{2}$/, `${holiday.name} 的 monthDay 格式不對`);
+test("HOLIDAYS_TW：每筆資料格式都合法、日期不重複、且是真實存在的日期", () => {
+  const seen = new Set();
+  for (const holiday of HOLIDAYS_TW) {
+    assert.match(holiday.date, /^\d{4}-\d{2}-\d{2}$/, `${holiday.name} 的 date 格式不對`);
     assert.ok(holiday.name.length > 0, "假日名稱不可為空");
-    const [month, day] = holiday.monthDay.split("-").map(Number);
-    // 用非平年（2028 是閏年）驗證，2/29 這種只在閏年存在的日期不該被當成固定假日。
-    const probe = new Date(2028, month - 1, day);
-    assert.equal(probe.getMonth() + 1, month, `${holiday.monthDay} 不是合法日期`);
-    assert.equal(probe.getDate(), day, `${holiday.monthDay} 不是合法日期`);
+    assert.ok(!seen.has(holiday.date), `${holiday.date} 重複出現`);
+    seen.add(holiday.date);
+
+    const [year, month, day] = holiday.date.split("-").map(Number);
+    const probe = new Date(year, month - 1, day);
+    assert.equal(probe.getFullYear(), year, `${holiday.date} 不是合法日期`);
+    assert.equal(probe.getMonth() + 1, month, `${holiday.date} 不是合法日期`);
+    assert.equal(probe.getDate(), day, `${holiday.date} 不是合法日期`);
   }
 });
