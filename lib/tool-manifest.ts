@@ -567,7 +567,7 @@ export const toolManifests: readonly ToolManifest[] = [
   {
     slug: "calendar",
     name: "月曆",
-    description: "快速檢視日期的月曆：標示今天、週末與固定日期的國定假日，可跳到任何月份。",
+    description: "快速檢視日期的月曆：標示今天、週末與國定假日（含農曆節日），可跳到任何月份。",
     category: "utility",
     symbol: "⊞",
     accent: "sumi",
