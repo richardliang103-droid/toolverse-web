@@ -16,6 +16,7 @@ import {
   eventBackupFileName,
   exportEventBackup,
   findDuplicateEmployeeId,
+  MAX_DRAW_COUNT_PER_ROUND,
   mergeParticipantsFromCsv,
   parseEventBackup,
   parseParticipantsCsv,
@@ -71,6 +72,15 @@ test("normalize 修復錯誤資料：損壞欄位換成安全預設值，不會�
   assert.equal(state.revealMode, "sequential");
   assert.equal(state.animationDurationMs, 3200);
   assert.equal(state.soundEnabled, true);
+  assert.equal(state.stageDrawCount, 1, "舊 localStorage／舊備份缺少 stageDrawCount 時安全回退為 1");
+});
+
+test("sanitizeEventState：stageDrawCount 依 1 到 MAX_DRAW_COUNT_PER_ROUND 夾住", () => {
+  assert.equal(sanitizeEventState({ stageDrawCount: 0 }).stageDrawCount, 1);
+  assert.equal(sanitizeEventState({ stageDrawCount: -5 }).stageDrawCount, 1);
+  assert.equal(sanitizeEventState({ stageDrawCount: "abc" }).stageDrawCount, 1);
+  assert.equal(sanitizeEventState({ stageDrawCount: 3.6 }).stageDrawCount, 4);
+  assert.equal(sanitizeEventState({ stageDrawCount: MAX_DRAW_COUNT_PER_ROUND + 100 }).stageDrawCount, MAX_DRAW_COUNT_PER_ROUND);
 });
 
 test("normalize：損壞的 pendingReveal（指向不存在的獎項或得獎者、缺 revealAt）一律捨棄", () => {
@@ -442,11 +452,28 @@ test("resolveStageAdvance：idle 狀態下，準備 order 最小、還有剩餘�
   assert.deepEqual(resolveStageAdvance(current), { action: "prepare", prizeId: "prize-next" });
 });
 
-test("resolveStageAdvance：prepared 狀態下，把這個獎項剩餘名額一次抽完", () => {
+test("resolveStageAdvance：prepared 狀態下，預設 stageDrawCount=1 時只抽 1 位，不會一次抽光剩餘名額", () => {
   const { state, prize } = buildBasicState();
   const bigPrize = { ...prize, totalCount: 3, order: 0 };
   const current = prepareStagePrize({ ...state, prizes: [bigPrize] }, prize.id);
-  assert.deepEqual(resolveStageAdvance(current), { action: "draw", prizeId: prize.id, count: 3 });
+  assert.equal(current.stageDrawCount, 1);
+  assert.deepEqual(resolveStageAdvance(current), { action: "draw", prizeId: prize.id, count: 1 });
+});
+
+test("resolveStageAdvance：prepared 狀態下抽出人數＝min(stageDrawCount, 剩餘名額, 候選人數, MAX_DRAW_COUNT_PER_ROUND)", () => {
+  const { state, prize } = buildBasicState();
+  const bigPrize = { ...prize, totalCount: 3, order: 0 };
+  let current = prepareStagePrize({ ...state, prizes: [bigPrize], stageDrawCount: 2 }, prize.id);
+  assert.deepEqual(resolveStageAdvance(current), { action: "draw", prizeId: prize.id, count: 2 }, "stageDrawCount 小於剩餘名額與候選人數時，直接用 stageDrawCount");
+
+  // 候選人只有 3 位（buildBasicState），stageDrawCount 設得比剩餘名額還大時要被剩餘名額收斂。
+  current = { ...current, stageDrawCount: 10 };
+  assert.deepEqual(resolveStageAdvance(current), { action: "draw", prizeId: prize.id, count: 3 }, "不能超過獎項剩餘名額");
+
+  // 剩餘名額給到很大，但候選人池只有 3 位，要被候選人數收斂。
+  const hugePrize = { ...bigPrize, totalCount: 100 };
+  current = prepareStagePrize({ ...state, prizes: [hugePrize], stageDrawCount: 50 }, prize.id);
+  assert.deepEqual(resolveStageAdvance(current), { action: "draw", prizeId: prize.id, count: 3 }, "不能超過符合資格的候選人數");
 });
 
 test("resolveStageAdvance：正在揭曉中（drawing）時不做事，避免跟目前這輪疊在一起", () => {
@@ -456,6 +483,45 @@ test("resolveStageAdvance：正在揭曉中（drawing）時不做事，避免跟
   const { nextState } = drawEventWinners(current, prize.id, 1, new Date("2026-01-01T00:00:00.000Z"));
   const midCountdown = new Date(Date.parse(nextState.pendingReveal.revealAt) - 1);
   assert.deepEqual(resolveStageAdvance(nextState, midCountdown), { action: "none" });
+});
+
+test("resolveStageAdvance：sequential 逐一揭曉時，revealAt 當下（第一位剛顯示）仍要回傳 none，不能準備下一獎項或再抽一次", () => {
+  const { state, prize } = buildBasicState();
+  const bigPrize = { ...prize, totalCount: 3, order: 0 };
+  const current = { ...state, prizes: [bigPrize], revealMode: "sequential" };
+  const { nextState } = drawEventWinners(current, prize.id, 3, new Date("2026-01-01T00:00:00.000Z"));
+  const revealAtMs = Date.parse(nextState.pendingReveal.revealAt);
+  assert.deepEqual(resolveStageAdvance(nextState, new Date(revealAtMs)), { action: "none" });
+});
+
+test("resolveStageAdvance：sequential 逐一揭曉在完整完成時間（pendingRevealCompleteAt）前 1ms 仍為 none", () => {
+  const { state, prize } = buildBasicState();
+  const bigPrize = { ...prize, totalCount: 3, order: 0 };
+  const current = { ...state, prizes: [bigPrize], revealMode: "sequential" };
+  const { nextState } = drawEventWinners(current, prize.id, 3, new Date("2026-01-01T00:00:00.000Z"));
+  const completeAt = pendingRevealCompleteAt(nextState.pendingReveal);
+  assert.deepEqual(resolveStageAdvance(nextState, new Date(completeAt - 1)), { action: "none" });
+});
+
+test("resolveStageAdvance：sequential 逐一揭曉到達完整完成時間後，才允許準備下一獎項", () => {
+  const { state, prize } = buildBasicState();
+  const prizeA = { ...prize, id: "prize-a", order: 0, totalCount: 3, drawnCount: 0 };
+  const prizeB = { ...prize, id: "prize-b", order: 1, totalCount: 1, drawnCount: 0 };
+  const current = { ...state, prizes: [prizeA, prizeB], revealMode: "sequential" };
+  const { nextState } = drawEventWinners(current, prizeA.id, 3, new Date("2026-01-01T00:00:00.000Z"));
+  const completeAt = pendingRevealCompleteAt(nextState.pendingReveal);
+  assert.deepEqual(resolveStageAdvance(nextState, new Date(completeAt)), { action: "prepare", prizeId: prizeB.id });
+});
+
+test("resolveStageAdvance：simultaneous 一次揭曉在 revealAt 之後就能立刻前進（不必額外等待）", () => {
+  const { state, prize } = buildBasicState();
+  const prizeA = { ...prize, id: "prize-a", order: 0, totalCount: 3, drawnCount: 0 };
+  const prizeB = { ...prize, id: "prize-b", order: 1, totalCount: 1, drawnCount: 0 };
+  const current = { ...state, prizes: [prizeA, prizeB], revealMode: "simultaneous" };
+  const { nextState } = drawEventWinners(current, prizeA.id, 3, new Date("2026-01-01T00:00:00.000Z"));
+  const revealAtMs = Date.parse(nextState.pendingReveal.revealAt);
+  assert.equal(pendingRevealCompleteAt(nextState.pendingReveal), revealAtMs, "一次揭曉的完整完成時間等同 revealAt");
+  assert.deepEqual(resolveStageAdvance(nextState, new Date(revealAtMs)), { action: "prepare", prizeId: prizeB.id });
 });
 
 test("resolveStageAdvance：目前獎項已抽完後，準備下一個還有名額的獎項；全部抽完就回傳 none", () => {

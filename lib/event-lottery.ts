@@ -83,6 +83,9 @@ export type LotteryEventState = {
   activePrizeId: string | null;
   /** 舞台目前這一輪的揭曉狀態；null 代表沒有正在進行或剛結束的抽選。 */
   pendingReveal: PendingReveal | null;
+  /** 舞台「下一步」（鍵盤／滑鼠／簡報筆／手機遙控／控制台）一次抽出的人數；
+   *  控制台的「本輪抽出人數」欄位直接讀寫這個欄位，不是各自維護的 local state。 */
+  stageDrawCount: number;
   updatedAt: string;
 };
 
@@ -135,6 +138,7 @@ export function createEmptyEventState(now = new Date()): LotteryEventState {
     backgroundImageDataUrl: null,
     activePrizeId: null,
     pendingReveal: null,
+    stageDrawCount: 1,
     updatedAt: now.toISOString(),
   };
 }
@@ -329,6 +333,8 @@ export function sanitizeEventState(value: unknown, now = new Date()): LotteryEve
     // pendingReveal 指向的獎項若跟 activePrizeId 對不上（例如手改壞的資料），
     // 寧可捨棄這輪揭曉狀態，也不要顯示跟目前準備獎項不符的得獎者。
     pendingReveal: pendingReveal && pendingReveal.prizeId === activePrizeId ? pendingReveal : null,
+    // 舊 localStorage／舊備份沒有這個欄位時安全回退為 1。
+    stageDrawCount: clampInt(data.stageDrawCount, 1, MAX_DRAW_COUNT_PER_ROUND, 1),
     updatedAt: validIsoDate(data.updatedAt) ?? now.toISOString(),
   };
 }
@@ -680,24 +686,36 @@ export type StageAdvanceAction =
   | { action: "draw"; prizeId: string; count: number };
 
 /**
- * 舞台可以用簡報筆／鍵盤／點擊畫面控制「下一步」，不需要回到控制台操作。這個
- * 函式純粹依目前狀態決定下一步該做什麼，方便在舞台與（如果同時開著）控制台
- * 共用同一套判斷，也方便單獨測試：
- * - 正在揭曉中：不做事，避免跟目前這輪疊在一起。
+ * 舞台可以用簡報筆／鍵盤／點擊畫面／手機遙控控制「下一步」，不需要回到控制台
+ * 操作。這個函式純粹依目前狀態決定下一步該做什麼，方便在舞台與（如果同時開
+ * 著）控制台共用同一套判斷，也方便單獨測試：
+ * - 這一輪揭曉還沒完全播完（逐一揭曉可能還在顯示中間的得獎者）：不做事，避免
+ *   跟目前這輪疊在一起準備下一獎項或再抽一次。
  * - 還沒準備獎項、或目前獎項已經沒有剩餘名額：準備下一個還有名額的獎項
  *   （依 order 排序，找不到就代表全部抽完了，回傳 none）。
- * - 已經準備好、還有剩餘名額：把這個獎項剩下的名額一次抽完。
+ * - 已經準備好、還有剩餘名額：抽出 state.stageDrawCount（並依剩餘名額、候選人數
+ *   與單輪上限收斂）位，而不是一次把整個獎項抽光。
  */
 export function resolveStageAdvance(state: LotteryEventState, now = new Date()): StageAdvanceAction {
+  if (state.pendingReveal !== null && now.getTime() < pendingRevealCompleteAt(state.pendingReveal)) {
+    return { action: "none" };
+  }
+
   const display = resolveStageDisplay(state, now);
-  if (display.phase === "drawing") return { action: "none" };
 
   const nextPreparablePrize = [...state.prizes].sort((a, b) => a.order - b.order).find((prize) => remainingSlots(prize) > 0);
 
   if (display.phase === "prepared") {
     const prize = state.prizes.find((item) => item.id === display.prizeId);
-    const count = prize ? remainingSlots(prize) : 0;
-    if (prize && count > 0) return { action: "draw", prizeId: prize.id, count };
+    if (prize) {
+      const count = Math.min(
+        state.stageDrawCount,
+        remainingSlots(prize),
+        candidatePool(state, prize.id).length,
+        MAX_DRAW_COUNT_PER_ROUND,
+      );
+      if (count > 0) return { action: "draw", prizeId: prize.id, count };
+    }
   }
 
   return nextPreparablePrize ? { action: "prepare", prizeId: nextPreparablePrize.id } : { action: "none" };

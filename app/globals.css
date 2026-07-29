@@ -1190,6 +1190,12 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 .event-lottery-roster-checks { display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 10px 0; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: 11px; }
 .event-lottery-roster-checks legend { padding: 0 4px; font-size: 12px; color: var(--muted); }
 
+.event-lottery-remote-panel { display: grid; gap: 10px; }
+.event-lottery-remote-qr { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.event-lottery-remote-qr img { width: 168px; height: 168px; border-radius: 12px; border: 1px solid var(--line); background: white; padding: 8px; }
+.event-lottery-remote-qr-meta { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.event-lottery-remote-qr-meta strong { color: var(--ink); }
+
 .event-lottery-table td, .event-lottery-table th { padding: 8px 10px; text-align: left; white-space: nowrap; }
 .event-lottery-row-disqualified { color: var(--muted); text-decoration: line-through; }
 
@@ -1260,3 +1266,36 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
   .event-lottery-stage { gap: 26px; }
   .event-lottery-inline-form .key-input { min-width: 0; flex-basis: 100%; }
 }
+
+/* === 手機遙控頁（/tools/event-lottery/remote） === */
+.event-lottery-remote-page { min-height: 100dvh; display: grid; place-items: center; padding: 28px 20px; }
+.event-lottery-remote-card { display: grid; justify-items: center; gap: 18px; width: min(360px, 100%); text-align: center; }
+.event-lottery-remote-title { margin: 0; font-size: 18px; color: var(--muted); }
+.event-lottery-remote-prize { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+.event-lottery-remote-count { margin: 0; font-size: 14px; color: var(--muted); }
+.event-lottery-remote-connection { font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 999px; background: var(--paper); color: var(--muted); }
+.event-lottery-remote-connection-offline { background: rgba(183,42,34,.14); color: #b72a22; }
+.event-lottery-remote-connection-online { background: rgba(53,87,255,.12); color: var(--blue); }
+
+.event-lottery-remote-button {
+  width: min(260px, 72vw);
+  height: min(260px, 72vw);
+  border-radius: 999px;
+  border: none;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+  color: white;
+  background: var(--blue);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform .12s ease, opacity .18s ease;
+}
+.event-lottery-remote-button:disabled { background: var(--line); color: var(--muted); }
+.event-lottery-remote-button-pressing { transform: scale(0.94); }
+@media (prefers-reduced-motion: reduce) { .event-lottery-remote-button { transition: none; } }
+
+.event-lottery-remote-disconnect { margin-top: 4px; }
+.event-lottery-remote-message { font-size: 13px; min-height: 18px; }
+.event-lottery-remote-message-error { color: #b72a22; }

@@ -4,6 +4,22 @@ import confetti from "canvas-confetti";
 import gsap from "gsap";
 import { useEffect, useRef, useState } from "react";
 import { createEmptyEventState, pendingRevealCompleteAt, resolveStageAdvance, resolveStageDisplay, visibleWinnerCount, type LotteryEventState, type PendingReveal } from "@/lib/event-lottery";
+import {
+  buildHostStatus,
+  commitAcceptedCommand,
+  createRemoteCommandLog,
+  EVENT_LOTTERY_REMOTE_STORAGE_KEY,
+  HOST_STATUS_HEARTBEAT_MS,
+  remoteCommandLogStorageKey,
+  resolveIncomingCommand,
+  sanitizeRemoteCommandLog,
+  sanitizeStoredRemoteSessionPointer,
+  type RemoteCommandLog,
+  type StoredRemoteSessionPointer,
+} from "@/lib/event-lottery-remote";
+import { connectRemoteChannel, type RemoteChannelHandle } from "@/lib/event-lottery-remote-channel";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase-browser";
+import type { RemoteMessage } from "@/lib/event-lottery-remote-types";
 import { clearStageAction, prepareStage, startDraw } from "../actions";
 import { loadEventState, useEventLotterySync } from "../sync";
 import { StageParticles } from "./stage-particles";
@@ -107,6 +123,139 @@ export function EventLotteryStage() {
       if (audioContextRef.current) void audioContextRef.current.close();
     };
   }, []);
+
+  // ---- 手機遙控：舞台是唯一的 Remote Command Host ----
+  // 手機遙控是 optional enhancement；Supabase 沒設定、連不上、session 過期或被
+  // 撤銷，都只會讓這個區塊悄悄不生效，不影響上面鍵盤／滑鼠／簡報筆的本機操作。
+  const [remotePointer, setRemotePointer] = useState<StoredRemoteSessionPointer | null>(null);
+  const remoteChannelRef = useRef<RemoteChannelHandle | null>(null);
+  const remoteCommandLogRef = useRef<RemoteCommandLog>(createRemoteCommandLog());
+  const remoteRevokedRef = useRef(false);
+  const remoteHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 舞台讀取控制台寫進同源 localStorage 的 session 指標；控制台撤銷或重新啟用
+  // 時會改到同一把 key，跨分頁的 storage 事件讓舞台即時跟上，不需要輪詢。
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function readPointer() {
+      try {
+        const raw = window.localStorage.getItem(EVENT_LOTTERY_REMOTE_STORAGE_KEY);
+        return raw ? sanitizeStoredRemoteSessionPointer(JSON.parse(raw)) : null;
+      } catch {
+        return null;
+      }
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRemotePointer(readPointer());
+    function onStorage(event: StorageEvent) {
+      if (event.key === EVENT_LOTTERY_REMOTE_STORAGE_KEY) setRemotePointer(readPointer());
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  function sendHostStatus() {
+    const channel = remoteChannelRef.current;
+    if (!channel) return;
+    void channel.send(buildHostStatus(loadEventState(), remoteCommandLogRef.current.revision, new Date()));
+  }
+
+  async function handleRemoteMessage(sessionId: string, expiresAt: string, message: RemoteMessage) {
+    const channel = remoteChannelRef.current;
+    if (message.type === "REMOTE_HELLO") {
+      sendHostStatus();
+      return;
+    }
+    if (message.type !== "ADVANCE_COMMAND") return;
+
+    const session = { expiresAt, revokedAt: remoteRevokedRef.current ? new Date().toISOString() : null };
+    const decision = resolveIncomingCommand(remoteCommandLogRef.current, session, message.commandId, message.expectedRevision, new Date());
+
+    if (decision.kind === "session-invalid") {
+      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: decision.revision, reason: "session-invalid" });
+      return;
+    }
+    if (decision.kind === "duplicate") {
+      // ACK 遺失後的重送：不再執行第二次抽選，只重新回報這個 commandId 當初的結果。
+      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: true, revision: decision.revision });
+      sendHostStatus();
+      return;
+    }
+    if (decision.kind === "stale-revision") {
+      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: decision.revision, reason: "stale-revision" });
+      sendHostStatus();
+      return;
+    }
+
+    // accepted：跟簡報筆／鍵盤／滑鼠共用同一套 resolveStageAdvance／prepareStage／
+    // startDraw，不另寫第二套抽獎邏輯，也不信任手機端宣稱要做什麼動作。
+    const currentState = loadEventState();
+    const action = resolveStageAdvance(currentState, new Date());
+    const result = action.action === "none"
+      ? { ok: true as const, state: currentState }
+      : action.action === "prepare"
+        ? prepareStage(currentState, action.prizeId, post)
+        : startDraw(currentState, action.prizeId, action.count, post);
+
+    if (!result.ok) {
+      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: remoteCommandLogRef.current.revision, reason: result.reason });
+      return;
+    }
+
+    setState(result.state);
+    remoteCommandLogRef.current = commitAcceptedCommand(remoteCommandLogRef.current, message.commandId);
+    try {
+      window.localStorage.setItem(remoteCommandLogStorageKey(sessionId), JSON.stringify(remoteCommandLogRef.current));
+    } catch {
+      /* 儲存失敗不影響這次指令已經執行成功，只是下次重新整理後去重清單會重來 */
+    }
+    void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: true, revision: remoteCommandLogRef.current.revision });
+    sendHostStatus();
+  }
+
+  useEffect(() => {
+    if (!remotePointer || !isSupabaseConfigured() || typeof window === "undefined") return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    let cancelled = false;
+    const sessionId = remotePointer.sessionId;
+    const expiresAt = remotePointer.expiresAt;
+    remoteRevokedRef.current = false;
+
+    let storedLog: unknown = null;
+    try {
+      const raw = window.localStorage.getItem(remoteCommandLogStorageKey(sessionId));
+      storedLog = raw ? JSON.parse(raw) : null;
+    } catch {
+      storedLog = null;
+    }
+    remoteCommandLogRef.current = sanitizeRemoteCommandLog(storedLog);
+
+    void connectRemoteChannel(supabase, sessionId, (message) => {
+      if (message.type === "SESSION_REVOKED") {
+        remoteRevokedRef.current = true;
+        remoteChannelRef.current?.close();
+        remoteChannelRef.current = null;
+        if (remoteHeartbeatRef.current) { clearInterval(remoteHeartbeatRef.current); remoteHeartbeatRef.current = null; }
+        return;
+      }
+      void handleRemoteMessage(sessionId, expiresAt, message);
+    }).then((handle) => {
+      if (!handle) return;
+      if (cancelled) { handle.close(); return; }
+      remoteChannelRef.current = handle;
+      sendHostStatus();
+      remoteHeartbeatRef.current = setInterval(() => sendHostStatus(), HOST_STATUS_HEARTBEAT_MS);
+    });
+
+    return () => {
+      cancelled = true;
+      if (remoteHeartbeatRef.current) { clearInterval(remoteHeartbeatRef.current); remoteHeartbeatRef.current = null; }
+      remoteChannelRef.current?.close();
+      remoteChannelRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remotePointer?.sessionId]);
 
   // 倒數與逐一揭曉期間都要每隔一小段時間重新計算一次「現在該顯示到第幾位了」；
   // 這一輪完全播完之後就自動停止，不會無限跑下去。不是用一長串 setTimeout 各自
