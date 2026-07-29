@@ -220,6 +220,21 @@ test("mergeParticipantsFromCsv：確認後同一名單的既有人員會更新�
   assert.deepEqual(result.participants[0], { ...existing, name: "新姓名", department: "新部門", active: true });
 });
 
+test("mergeParticipantsFromCsv：確認後跨名單重複可依原版行為新增", () => {
+  const { state, rosterB } = buildBasicState();
+  const result = mergeParticipantsFromCsv(
+    state.participants,
+    [{ name: "跨組小明", employeeId: state.participants[0].employeeId, department: "活動組" }],
+    rosterB.id,
+    { updateExistingInRoster: true, allowCrossRosterDuplicates: true },
+  );
+  assert.equal(result.added, 1);
+  assert.equal(result.updated, 0);
+  assert.equal(result.skipped.length, 0);
+  assert.equal(result.participants.filter((participant) => participant.employeeId === "E001").length, 2);
+  assert.equal(result.participants.at(-1).rosterId, rosterB.id);
+});
+
 test("findDuplicateEmployeeId：忽略空字串、可排除自己", () => {
   const { state } = buildBasicState();
   assert.equal(findDuplicateEmployeeId(state.participants, ""), null);

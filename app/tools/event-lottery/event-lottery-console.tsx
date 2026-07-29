@@ -416,6 +416,8 @@ export function EventLotteryConsole() {
   const [csvRosterId, setCsvRosterId] = useState("");
   const [participantCsvEncoding, setParticipantCsvEncoding] = useState<"utf-8" | "big5">("utf-8");
   const [rosterCsvEncodings, setRosterCsvEncodings] = useState<Record<string, "utf-8" | "big5">>({});
+  const [participantCsvFile, setParticipantCsvFile] = useState<File | null>(null);
+  const [rosterCsvFiles, setRosterCsvFiles] = useState<Record<string, File | null>>({});
   const [csvText, setCsvText] = useState("");
   const csvFileInputRef = useRef<HTMLInputElement>(null);
   const rosterFileInputRefs = useRef(new Map<string, HTMLInputElement | null>());
@@ -431,7 +433,7 @@ export function EventLotteryConsole() {
     if (!employeeId) { showNotice("姓名與員工編號為必填欄位", "error"); return false; }
     if (!state.rosters.some((roster) => roster.id === rosterId)) { showNotice("請先建立至少一個名單群組", "error"); return false; }
     const duplicate = findDuplicateEmployeeId(state.participants, employeeId);
-    if (duplicate) { showNotice(`員工編號「${employeeId}」已用於「${duplicate.name}」，未加入`, "error"); return false; }
+    if (duplicate && !window.confirm(`員工編號「${employeeId}」已存在於「${duplicate.name}」的名單中，是否仍要新增？`)) return false;
     if (state.participants.length >= MAX_PARTICIPANTS) { showNotice(`最多只能有 ${MAX_PARTICIPANTS} 位參加者`, "error"); return false; }
     commit({ ...state, participants: [...state.participants, createParticipant({ name, employeeId, department: values.department, rosterId })] });
     showNotice(`已新增「${name}」`);
@@ -467,20 +469,23 @@ export function EventLotteryConsole() {
     if (!rosterId) { showNotice("請先選擇要匯入到哪個名單群組", "error"); return; }
     const { rows, warnings } = parseParticipantsCsv(text);
     if (rows.length === 0) { showNotice("這份 CSV 沒有可用的資料列", "error"); return; }
-    const duplicateRows = rows.filter((row) => Boolean(row.employeeId && findDuplicateEmployeeId(state.participants, row.employeeId)));
+    const duplicateRows = rows.filter((row) => Boolean(row.employeeId && state.participants.some((participant) => participant.employeeId === row.employeeId)));
     if (duplicateRows.length > 0) {
-      const sameRosterCount = duplicateRows.filter((row) => findDuplicateEmployeeId(state.participants, row.employeeId)?.rosterId === rosterId).length;
+      const sameRosterCount = duplicateRows.filter((row) => state.participants.some((participant) => participant.employeeId === row.employeeId && participant.rosterId === rosterId)).length;
       const otherRosterCount = duplicateRows.length - sameRosterCount;
       const details = [
         sameRosterCount > 0 ? `同一名單會更新 ${sameRosterCount} 筆姓名／部門並重新啟用` : "",
-        otherRosterCount > 0 ? `${otherRosterCount} 筆跨名單重複會略過` : "",
+        otherRosterCount > 0 ? `${otherRosterCount} 筆跨名單重複在確認後會新增` : "",
       ].filter(Boolean).join("；");
       if (!window.confirm(`發現 ${duplicateRows.length} 筆已存在的員工編號。\n${details}\n\n確定要繼續匯入嗎？`)) {
         showNotice("已取消 CSV 匯入");
         return;
       }
     }
-    const result = mergeParticipantsFromCsv(state.participants, rows, rosterId, { updateExistingInRoster: duplicateRows.length > 0 });
+    const result = mergeParticipantsFromCsv(state.participants, rows, rosterId, {
+      updateExistingInRoster: duplicateRows.length > 0,
+      allowCrossRosterDuplicates: duplicateRows.length > 0,
+    });
     commit({ ...state, participants: result.participants });
     const messages = [`已匯入 ${result.added} 位${result.updated > 0 ? `，更新 ${result.updated} 位` : ""}`];
     if (warnings.length > 0) messages.push(...warnings);
@@ -497,6 +502,13 @@ export function EventLotteryConsole() {
     }
   }
 
+  async function uploadParticipantCsv() {
+    if (!participantCsvFile) { showNotice("請先選擇 CSV 檔案", "error"); return; }
+    await handleCsvFile(participantCsvFile);
+    setParticipantCsvFile(null);
+    if (csvFileInputRef.current) csvFileInputRef.current.value = "";
+  }
+
   function clearRoster(id: string) {
     const hasHistory = state.participants.some((participant) => participant.rosterId === id && !canDeleteParticipant(state, participant.id));
     if (hasHistory) {
@@ -510,6 +522,15 @@ export function EventLotteryConsole() {
 
   async function handleRosterCsvFile(rosterId: string, file: File) {
     await handleCsvFile(file, rosterId, rosterCsvEncodings[rosterId] ?? "utf-8");
+  }
+
+  async function uploadRosterCsv(rosterId: string) {
+    const file = rosterCsvFiles[rosterId];
+    if (!file) { showNotice("請先選擇 CSV 檔案", "error"); return; }
+    await handleRosterCsvFile(rosterId, file);
+    setRosterCsvFiles((current) => ({ ...current, [rosterId]: null }));
+    const input = rosterFileInputRefs.current.get(rosterId);
+    if (input) input.value = "";
   }
 
   const rosterById = useMemo(() => new Map(state.rosters.map((roster) => [roster.id, roster])), [state.rosters]);
@@ -547,6 +568,7 @@ export function EventLotteryConsole() {
   const [prizeInsertAfter, setPrizeInsertAfter] = useState("");
   const [prizeCsvText, setPrizeCsvText] = useState("");
   const [prizeCsvEncoding, setPrizeCsvEncoding] = useState<"utf-8" | "big5">("utf-8");
+  const [prizeCsvFile, setPrizeCsvFile] = useState<File | null>(null);
   const [prizeCsvRosterIds, setPrizeCsvRosterIds] = useState<string[]>(() => {
     const defaults = createEmptyEventState().rosters;
     return defaults[0] ? [defaults[0].id] : [];
@@ -698,6 +720,13 @@ export function EventLotteryConsole() {
     }
   }
 
+  async function uploadPrizeCsv() {
+    if (!prizeCsvFile) { showNotice("請先選擇獎項 CSV 檔案", "error"); return; }
+    await handlePrizeCsvFile(prizeCsvFile);
+    setPrizeCsvFile(null);
+    if (prizeCsvFileInputRef.current) prizeCsvFileInputRef.current.value = "";
+  }
+
   function applyPrizeCsv(text: string) {
     const startOrder = state.prizes.length > 0 ? Math.max(...state.prizes.map((prize) => prize.order)) + 1 : 0;
     const { prizes, warnings } = parsePrizesCsv(text, state.rosters, startOrder);
@@ -822,8 +851,10 @@ export function EventLotteryConsole() {
                     <option value="utf-8">UTF-8</option>
                     <option value="big5">ANSI</option>
                   </select>
-                  <button className="button button-small button-secondary" type="button" onClick={() => rosterFileInputRefs.current.get(roster.id)?.click()}>上傳</button>
-                  <input ref={(element) => { rosterFileInputRefs.current.set(roster.id, element); }} className="file-input" type="file" accept="text/csv,.csv" aria-label={`上傳 ${roster.name} CSV`} onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleRosterCsvFile(roster.id, file); event.target.value = ""; }} />
+                  <button className="button button-small button-secondary" type="button" onClick={() => rosterFileInputRefs.current.get(roster.id)?.click()}>選擇 CSV</button>
+                  <input ref={(element) => { rosterFileInputRefs.current.set(roster.id, element); }} className="file-input" type="file" accept="text/csv,.csv" aria-label={`選擇 ${roster.name} CSV`} onChange={(event) => { const file = event.target.files?.[0] ?? null; setRosterCsvFiles((current) => ({ ...current, [roster.id]: file })); }} />
+                  <span className="panel-meta" title={rosterCsvFiles[roster.id]?.name}>{rosterCsvFiles[roster.id]?.name ?? "尚未選擇檔案"}</span>
+                  <button className="button button-small button-blue" type="button" onClick={() => void uploadRosterCsv(roster.id)} disabled={!rosterCsvFiles[roster.id]}>上傳</button>
                   <button className="button button-small button-danger" type="button" onClick={() => clearRoster(roster.id)}>{rosterConfirm.armedId === `clear:${roster.id}` ? "再按一次清空" : "清空"}</button>
                   <button className="button button-small button-danger" type="button" onClick={() => handleDeleteRoster(roster.id)}>{rosterConfirm.armedId === roster.id ? "再按一次刪除" : "刪除群組"}</button>
                 </div>
@@ -997,7 +1028,7 @@ export function EventLotteryConsole() {
 
           <div className="event-lottery-subsection">
             <h3>CSV 匯入</h3>
-            <p className="lottery-panel-note">欄位：部門,姓名,員工編號（可含標題列，也支援自訂欄位順序）。同一名單的重複員工編號會先確認後更新；跨名單重複會略過並列出清單。</p>
+            <p className="lottery-panel-note">欄位：部門,姓名,員工編號（可含標題列，也支援自訂欄位順序）。重複員工編號會先確認；同一名單會更新，跨名單則依確認結果新增。</p>
             <div className="event-lottery-inline-form">
               <select className="key-input" value={effectiveCsvRosterId} onChange={(event) => setCsvRosterId(event.target.value)} aria-label="CSV 匯入到哪個名單群組">
                 {state.rosters.map((roster) => <option key={roster.id} value={roster.id}>{roster.name}</option>)}
@@ -1007,7 +1038,9 @@ export function EventLotteryConsole() {
                 <option value="big5">ANSI</option>
               </select>
               <button className="button button-small button-secondary" type="button" onClick={() => csvFileInputRef.current?.click()} disabled={state.rosters.length === 0}>選擇 CSV 檔案</button>
-              <input ref={csvFileInputRef} className="file-input" type="file" accept="text/csv,.csv" aria-label="選擇參加者 CSV 檔案" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleCsvFile(file); event.target.value = ""; }} />
+              <input ref={csvFileInputRef} className="file-input" type="file" accept="text/csv,.csv" aria-label="選擇參加者 CSV 檔案" onChange={(event) => setParticipantCsvFile(event.target.files?.[0] ?? null)} />
+              <span className="panel-meta" title={participantCsvFile?.name}>{participantCsvFile?.name ?? "尚未選擇檔案"}</span>
+              <button className="button button-small button-blue" type="button" onClick={() => void uploadParticipantCsv()} disabled={!participantCsvFile || state.rosters.length === 0}>上傳</button>
               <button className="button button-small button-secondary" type="button" onClick={() => downloadCsvTemplate(PARTICIPANT_CSV_TEMPLATE, "活動抽獎-參加者範例.csv")}>下載範例 CSV</button>
             </div>
             <textarea className="participant-input" placeholder={"或直接貼上 CSV 內容\n部門,姓名,員工編號\n業務部,小明,E001"} value={csvText} onChange={(event) => setCsvText(event.target.value)} />
@@ -1083,8 +1116,10 @@ export function EventLotteryConsole() {
                 <option value="utf-8">UTF-8</option>
                 <option value="big5">ANSI</option>
               </select>
-              <button className="button button-small button-secondary" type="button" onClick={() => prizeCsvFileInputRef.current?.click()}>上傳獎項 CSV</button>
-              <input ref={prizeCsvFileInputRef} className="file-input" type="file" accept="text/csv,.csv" aria-label="選擇獎項 CSV 檔案" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handlePrizeCsvFile(file); event.target.value = ""; }} />
+              <button className="button button-small button-secondary" type="button" onClick={() => prizeCsvFileInputRef.current?.click()}>選擇獎項 CSV</button>
+              <input ref={prizeCsvFileInputRef} className="file-input" type="file" accept="text/csv,.csv" aria-label="選擇獎項 CSV 檔案" onChange={(event) => setPrizeCsvFile(event.target.files?.[0] ?? null)} />
+              <span className="panel-meta" title={prizeCsvFile?.name}>{prizeCsvFile?.name ?? "尚未選擇檔案"}</span>
+              <button className="button button-small button-blue" type="button" onClick={() => void uploadPrizeCsv()} disabled={!prizeCsvFile}>上傳獎項 CSV</button>
               <button className="button button-small button-secondary" type="button" onClick={() => downloadCsvTemplate(PRIZE_CSV_TEMPLATE, "活動抽獎-獎項範例.csv")}>下載範例 CSV</button>
             </div>
             <fieldset className="event-lottery-roster-checks">

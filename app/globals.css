@@ -1300,7 +1300,7 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
   justify-content: flex-start;
   gap: 0;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 20%, #182238 0%, #05070d 70%);
+  background: #0f172a;
   color: #f5f1e8;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
   text-align: center;
@@ -1308,17 +1308,17 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 }
 .event-lottery-stage:fullscreen { background: #05070d; }
 .event-lottery-stage-has-image { background-size: cover; background-position: center; }
-.event-lottery-stage-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,7,13,.35), rgba(5,7,13,.72)); pointer-events: none; }
+.event-lottery-stage-scrim { position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(15,23,42,.4) 0%, rgba(15,23,42,1) 100%); pointer-events: none; }
 .event-lottery-stage-particles { position: absolute; inset: 0; width: 100%; height: 100%; }
 .event-lottery-stage-fullscreen { position: absolute; top: 20px; right: 20px; z-index: 2; width: 40px; height: 40px; border: 1px solid rgba(245,241,232,.35); border-radius: 10px; background: rgba(5,7,13,.4); color: #f5f1e8; font-size: 16px; cursor: pointer; opacity: .5; transition: opacity .18s ease; }
 .event-lottery-stage-fullscreen:hover { opacity: 1; }
 
 .event-lottery-stage-header, .event-lottery-stage-main { position: relative; z-index: 1; }
 .event-lottery-stage-header { flex-shrink: 0; width: 100%; padding-top: 2vh; text-align: center; }
-.event-lottery-stage-header h1 { margin: 0; font-size: clamp(26px, 3vw, 48px); letter-spacing: -.02em; text-shadow: 0 0 20px #38bdf8, 0 0 40px #38bdf8; }
+.event-lottery-stage-header h1 { margin: 0; font-family: Orbitron, sans-serif; font-size: 3rem; text-transform: uppercase; letter-spacing: -.02em; text-shadow: 0 0 20px #38bdf8, 0 0 40px #38bdf8; }
 .event-lottery-stage-header h1.event-lottery-stage-title-pulsing { animation: event-lottery-title-pulse 2.4s ease-in-out infinite; }
 @keyframes event-lottery-title-pulse { 0%, 100% { text-shadow: 0 0 20px #38bdf8; } 50% { text-shadow: 0 0 30px #38bdf8, 0 0 50px #38bdf8; } }
-.event-lottery-stage-header h2 { margin: 5px 0; color: #fbbf24; font-size: clamp(24px, 3vw, 48px); letter-spacing: -.02em; text-shadow: 0 0 20px rgba(251,191,36,.8); }
+.event-lottery-stage-header h2 { margin: 5px 0; color: #fbbf24; font-size: 3rem; letter-spacing: -.02em; text-shadow: 0 0 20px rgba(251,191,36,.8); }
 .event-lottery-stage-main { flex: 1; min-height: 0; height: 100%; width: 95vw; display: flex; justify-content: center; align-items: flex-start; padding-bottom: 2vh; margin-top: 2vh; }
 .event-lottery-stage-idle, .event-lottery-stage-waiting { color: #fbbf24; font-size: clamp(24px, 3vw, 48px); text-shadow: 0 0 20px rgba(251,191,36,.8); }
 .event-lottery-stage-hint { margin: 4px 0 0; color: rgba(245,241,232,.4); font-size: clamp(12px, 1.2vw, 14px); letter-spacing: .02em; }
@@ -1328,14 +1328,14 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 .event-lottery-stage-gratitude small { color: rgba(245,241,232,.72); font-size: clamp(14px, 1.5vw, 20px); }
 
 .event-lottery-stage-prize, .event-lottery-stage-reveal { display: grid; place-items: center; gap: 20px; width: 100%; height: 100%; }
-.event-lottery-stage-prize-image { display: block; max-width: min(420px, 30vw); max-height: 25vh; margin: 10px auto; object-fit: contain; border-radius: 10px; box-shadow: 0 0 15px rgba(255,255,255,.2); }
+.event-lottery-stage-prize-image { display: block; max-width: 30vw; max-height: 25vh; margin: 10px auto; object-fit: contain; border-radius: 10px; box-shadow: 0 0 15px rgba(255,255,255,.2); }
 .event-lottery-stage-prize h2, .event-lottery-stage-reveal h2 { margin: 0; color: #fbbf24; font-size: clamp(24px, 3vw, 48px); letter-spacing: -.02em; text-shadow: 0 0 20px rgba(251,191,36,.8); }
 
 .event-lottery-stage-spin { display: inline-flex; align-items: center; gap: 14px; font-size: clamp(18px, 2.4vw, 26px); color: rgba(245,241,232,.85); }
-.event-lottery-stage-slot-machine { display: grid; gap: 14px; justify-items: center; width: min(82vw, 1100px); padding: clamp(18px, 2.5vw, 34px); border: 2px solid rgba(56,189,248,.28); border-radius: 22px; background: rgba(15,23,42,.74); box-shadow: 0 0 50px rgba(56,189,248,.24); backdrop-filter: blur(16px); }
-.event-lottery-stage-slot-window { display: grid; place-items: center; width: 100%; min-height: clamp(110px, 18vh, 220px); overflow: hidden; border-radius: 14px; background: rgba(0,0,0,.52); color: #38bdf8; font-size: clamp(44px, 8vw, 108px); font-weight: 900; text-shadow: 0 0 22px rgba(56,189,248,.85); white-space: nowrap; }
-.event-lottery-stage-slot-window span { animation: event-lottery-slot-pulse .1s linear infinite alternate; }
-@keyframes event-lottery-slot-pulse { from { transform: translateY(-8px); filter: blur(1px); opacity: .68; } to { transform: translateY(8px); filter: blur(3px); opacity: 1; } }
+.event-lottery-stage-slot-machine { width: 80vw; max-width: 1200px; margin: auto; background: rgba(15,23,42,.8); border: 2px solid rgba(255,255,255,.1); border-radius: 20px; padding: 2vw; box-shadow: 0 0 50px rgba(56,189,248,.4); backdrop-filter: blur(20px); }
+.event-lottery-stage-slot-window { height: 20vh; min-height: 150px; overflow: hidden; position: relative; background: rgba(0,0,0,.5); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.event-lottery-stage-slot-window span { font-size: 6vw; font-weight: 900; white-space: nowrap; color: #38bdf8; text-shadow: 0 0 22px rgba(56,189,248,.85); animation: event-lottery-roll-fast .1s linear infinite; filter: blur(3px); }
+@keyframes event-lottery-roll-fast { 0% { transform: translateY(-30vh); } 100% { transform: translateY(30vh); } }
 .event-lottery-stage-spin-ring { width: 26px; height: 26px; border-radius: 999px; border: 3px solid rgba(245,241,232,.25); border-top-color: #f5f1e8; animation: event-lottery-spin 0.9s linear infinite; }
 @media (prefers-reduced-motion: reduce) {
   .event-lottery-stage-spin-ring, .event-lottery-stage-header h1, .event-lottery-stage-slot-window span, .event-lottery-stage-rolling-card, .event-lottery-stage-winner-card { animation: none; transform: none; }
@@ -1346,13 +1346,13 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 .event-lottery-stage-winner-list { display: flex; flex-wrap: wrap; justify-content: center; align-content: flex-start; gap: 16px; width: 100%; height: 100%; overflow-y: auto; scrollbar-width: none; }
 .event-lottery-stage-winner-list::-webkit-scrollbar { display: none; }
 .event-lottery-stage-sequence-drawing { display: grid; place-items: center; min-height: 150px; }
-.event-lottery-stage-winner-card { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 20px 30px; border-radius: 15px; background: linear-gradient(135deg, rgba(255,255,255,.1), rgba(255,255,255,.02)); border: 1px solid rgba(245,241,232,.2); backdrop-filter: blur(10px); text-align: center; transform: scale(0); animation: event-lottery-winner-pop .5s cubic-bezier(.175,.885,.32,1.275) forwards; }
-.event-lottery-stage-rolling-card { display: grid; place-items: center; min-width: min(20vw, 260px); min-height: 92px; padding: 20px 30px; border-radius: 18px; color: #38bdf8; background: rgba(15,23,42,.72); border: 2px solid rgba(56,189,248,.5); box-shadow: 0 0 28px rgba(56,189,248,.35); font-size: clamp(26px, 4vw, 52px); font-weight: 900; filter: blur(1px); animation: event-lottery-card-roll .1s linear infinite alternate; }
+.event-lottery-stage-winner-card { display: flex; flex-direction: column; justify-content: center; border-radius: 15px; background: linear-gradient(135deg, rgba(255,255,255,.1), rgba(255,255,255,.02)); border: 1px solid rgba(245,241,232,.2); backdrop-filter: blur(10px); text-align: center; transform: scale(0); animation: event-lottery-winner-pop .5s cubic-bezier(.175,.885,.32,1.275) forwards; }
+.event-lottery-stage-rolling-card { display: flex; align-items: center; justify-content: center; font-size: 3vw; font-weight: 900; color: #38bdf8; filter: blur(2px); animation: event-lottery-roll-fast .1s linear infinite, event-lottery-winner-pop .3s forwards; }
 @keyframes event-lottery-card-roll { from { transform: translateY(-7px); opacity: .7; } to { transform: translateY(7px); opacity: 1; } }
 @keyframes event-lottery-winner-pop { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
-.event-lottery-stage-winner-name { color: #fbbf24; font-size: clamp(24px, 4vw, 44px); font-weight: 800; letter-spacing: -.02em; text-shadow: 0 0 10px rgba(251,191,36,.5); }
-.event-lottery-stage-winner-dept { color: #94a3b8; font-size: clamp(13px, 1.4vw, 16px); font-weight: 400; }
-.event-lottery-stage-winner-emp { color: #cbd5e1; font-size: clamp(13px, 1.4vw, 16px); font-weight: 700; }
+.event-lottery-stage-winner-name { color: #fbbf24; font-size: 2vw; font-weight: 800; letter-spacing: -.02em; text-shadow: 0 0 10px rgba(251,191,36,.5); }
+.event-lottery-stage-winner-dept { color: #94a3b8; font-size: 1vw; font-weight: 400; }
+.event-lottery-stage-winner-emp { color: #cbd5e1; font-size: .8vw; font-weight: 700; }
 .event-lottery-stage-winner-tag { justify-self: start; padding: 3px 10px; border-radius: 999px; background: rgba(183,42,34,.35); color: #ffd9d4; font-size: 12px; font-weight: 700; }
 .event-lottery-stage-winner-disqualified .event-lottery-stage-winner-name { text-decoration: line-through; opacity: .6; }
 .event-lottery-stage-winner-list.count-1 .event-lottery-stage-winner-card { width: 40vw; max-width: 800px; padding: 2vw; border-radius: 30px; max-height: 48vh; }
@@ -1379,7 +1379,7 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 .event-lottery-stage-winner-list.count-huge .event-lottery-stage-winner-dept { font-size: clamp(8px, .7vw, 13px); }
 .event-lottery-stage-winner-list.count-huge .event-lottery-stage-winner-name { font-size: clamp(12px, 1.4vw, 27px); margin: .2vw 0; }
 .event-lottery-stage-winner-list.count-huge .event-lottery-stage-winner-emp { font-size: clamp(7px, .6vw, 12px); }
-.event-lottery-stage-winner-list.count-massive { gap: 6px; }
+.event-lottery-stage-winner-list.count-massive { gap: .3vw; }
 .event-lottery-stage-winner-list.count-massive .event-lottery-stage-winner-card { flex: 1 1 calc(8% - .3vw); min-width: 6vw; max-width: 10vw; padding: .4vw; max-height: 10vh; border-radius: 6px; }
 .event-lottery-stage-winner-list.count-massive .event-lottery-stage-winner-dept { font-size: clamp(8px, .7vw, 13px); }
 .event-lottery-stage-winner-list.count-massive .event-lottery-stage-winner-name { font-size: clamp(11px, 1.3vw, 25px); margin: .1vw 0; }

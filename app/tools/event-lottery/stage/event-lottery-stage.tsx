@@ -442,7 +442,8 @@ export function EventLotteryStage() {
     const sequentialStillRolling = display.phase === "revealed"
       && sequentialRevealMode === "sequential"
       && visibleCount < sequentialRevealTotal;
-    if (!list || displayedWinnerIds.length < 10 || previewRolling || sequentialStillRolling || reducedMotion()) return;
+    if (!list || previewRolling || sequentialStillRolling || reducedMotion()) return;
+    list.scrollTop = 0;
 
     // 原版前台在得獎卡片出現後先停一下，再開始往返捲動；這也避免大量卡片
     // 在剛掛載、尚未完成高度計算時就啟動捲軸。
@@ -547,9 +548,12 @@ export function EventLotteryStage() {
   // 目前只出現第一張卡片，就先套用單人超大版型，否則第二張出現時畫面會跳動。
   const winnerLayoutCount = display.phase === "revealed"
     ? display.pendingReveal.winnerIds.length
+    : display.phase === "drawing"
+      ? display.pendingReveal.winnerIds.length
     : display.phase === "preview" ? display.winnerIds.length : revealedWinners.length;
   const winnerScale = winnerLayoutCount === 1 ? "count-1" : winnerLayoutCount <= 4 ? "count-few" : winnerLayoutCount <= 10 ? "count-medium" : winnerLayoutCount <= 20 ? "count-many" : winnerLayoutCount <= 40 ? "count-huge" : "count-massive";
   const sequentialStillRolling = display.phase === "revealed" && display.pendingReveal.revealMode === "sequential" && visibleCount < display.pendingReveal.winnerIds.length;
+  const presentationStillRolling = previewRolling || display.phase === "drawing" || sequentialStillRolling;
 
   return (
     <div
@@ -581,7 +585,7 @@ export function EventLotteryStage() {
             <h2>
               {display.phase === "prepared"
                 ? `即將抽出：${activePrizeDisplayName} 共 ${stageDrawCount} 名`
-                : display.phase === "drawing" || previewRolling
+                : presentationStillRolling
                   ? `【${activePrizeDisplayName}】 抽獎進行中...`
                   : `🎉 恭喜【${activePrizeDisplayName}】得獎者 🎉`}
             </h2>

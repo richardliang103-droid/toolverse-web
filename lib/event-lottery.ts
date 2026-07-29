@@ -464,28 +464,41 @@ export function parseParticipantsCsv(text: string): { rows: ParsedParticipantRow
   return { rows, warnings };
 }
 
-/** 匯入 CSV 解析出的參加者到指定名單群組；可選擇把同群組既有資料更新回原版行為，
- *  但跨群組重複仍略過並回報，不讓員工編號在不同名單悄悄重複。 */
+/** 匯入 CSV 解析出的參加者到指定名單群組；同群組既有資料可更新回原版行為，
+ *  跨群組重複則只有在呼叫端已經明確提示並確認後才允許新增。 */
 export function mergeParticipantsFromCsv(
   existing: EventParticipant[],
   rows: ParsedParticipantRow[],
   rosterId: string,
-  options: { updateExistingInRoster?: boolean } = {},
+  options: { updateExistingInRoster?: boolean; allowCrossRosterDuplicates?: boolean } = {},
 ): { participants: EventParticipant[]; added: number; updated: number; skipped: string[] } {
   const next = [...existing];
   const skipped: string[] = [];
   let added = 0;
   let updated = 0;
   for (const row of rows) {
-    const duplicate = row.employeeId ? findDuplicateEmployeeId(next, row.employeeId) : null;
-    if (duplicate) {
-      if (options.updateExistingInRoster && duplicate.rosterId === rosterId) {
-        const duplicateIndex = next.findIndex((participant) => participant.id === duplicate.id);
+    const sameRosterDuplicate = row.employeeId
+      ? next.find((participant) => participant.employeeId === row.employeeId && participant.rosterId === rosterId) ?? null
+      : null;
+    if (sameRosterDuplicate) {
+      if (options.updateExistingInRoster) {
+        const duplicateIndex = next.findIndex((participant) => participant.id === sameRosterDuplicate.id);
         if (duplicateIndex >= 0) {
-          next[duplicateIndex] = { ...duplicate, name: row.name, department: row.department, active: true };
+          next[duplicateIndex] = { ...sameRosterDuplicate, name: row.name, department: row.department, active: true };
           updated += 1;
           continue;
         }
+      }
+      skipped.push(`${row.name}（員工編號 ${row.employeeId} 與「${sameRosterDuplicate.name}」重複）`);
+      continue;
+    }
+    const duplicate = row.employeeId ? findDuplicateEmployeeId(next, row.employeeId) : null;
+    if (duplicate) {
+      if (options.allowCrossRosterDuplicates && duplicate.rosterId !== rosterId) {
+        next.push(createParticipant({ ...row, rosterId }));
+        added += 1;
+        if (next.length >= MAX_PARTICIPANTS) break;
+        continue;
       }
       skipped.push(`${row.name}（員工編號 ${row.employeeId} 與「${duplicate.name}」重複）`);
       continue;
