@@ -372,6 +372,7 @@ export function EventLotteryConsole() {
   const winnerConfirm = useArmedConfirm();
   const resetConfirm = useArmedConfirm();
   const clearAllConfirm = useArmedConfirm();
+  const backgroundConfirm = useArmedConfirm();
 
   // ---- 活動設定 ----
   const backupInputRef = useRef<HTMLInputElement>(null);
@@ -409,6 +410,10 @@ export function EventLotteryConsole() {
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "圖片處理失敗", "error");
     }
+  }
+
+  function handleResetBackground() {
+    backgroundConfirm.confirm("reset-background", () => commit({ ...state, backgroundImageDataUrl: null }));
   }
 
   // ---- 名單群組 ----
@@ -952,12 +957,15 @@ export function EventLotteryConsole() {
             <input id="animation-duration" className="number-input" type="number" min={1} max={60} step={1} value={Math.round(state.animationDurationMs / 1000)} onChange={(event) => commit({ ...state, animationDurationMs: Math.min(60000, Math.max(1000, (Math.round(Number(event.target.value)) || 3) * 1000)) })} />
             <span className="field-suffix">秒</span>
           </label>
-          <label className="check-row"><input type="checkbox" checked={state.soundEnabled} onChange={(event) => commit({ ...state, soundEnabled: event.target.checked })} />開啟音效</label>
+          <div className="event-lottery-sound-control">
+            <span>音效開關</span>
+            <label className="check-row"><input type="checkbox" checked={state.soundEnabled} onChange={(event) => commit({ ...state, soundEnabled: event.target.checked })} />開啟音效</label>
+          </div>
         </div>
         <div className="event-lottery-background-row">
           <span className="panel-meta">前台背景</span>
           <button className="button button-small button-secondary" type="button" onClick={() => backgroundInputRef.current?.click()}>{state.backgroundImageDataUrl ? "更換背景圖片" : "上傳背景圖片"}</button>
-          <button className="button button-small button-secondary" type="button" onClick={() => commit({ ...state, backgroundImageDataUrl: null })}>還原預設</button>
+          <button className="button button-small button-secondary" type="button" onClick={handleResetBackground}>{backgroundConfirm.armedId === "reset-background" ? "再按一次還原預設" : "還原預設"}</button>
           <input ref={backgroundInputRef} className="file-input" type="file" accept="image/*" aria-label="上傳舞台背景圖片" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleBackgroundImage(file); event.target.value = ""; }} />
         </div>
         <div className="event-lottery-quick-actions">
@@ -1227,11 +1235,21 @@ export function EventLotteryConsole() {
                       onDragOver={(event) => { event.preventDefault(); setDragOverPrizeId(prize.id); }}
                       onDragLeave={() => setDragOverPrizeId(null)}
                       onDrop={(event) => { event.preventDefault(); setDragOverPrizeId(null); const file = event.dataTransfer.files?.[0]; if (file) void handlePrizeImage(prize.id, file); }}
-                      title="可將圖片拖曳到這裡，或使用右側上傳圖片"
+                      onClick={() => prizeImageInputRefs.current.get(prize.id)?.click()}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          prizeImageInputRefs.current.get(prize.id)?.click();
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`上傳「${prize.name}」的圖片`}
+                      title="可將圖片拖曳到這裡，或點選圖片選擇檔案"
                     >
                       {prize.imageDataUrl
                         ? <img className="event-lottery-prize-thumb" src={prize.imageDataUrl} alt="" />
-                        : <span className="event-lottery-prize-thumb event-lottery-prize-thumb-empty" aria-hidden="true">🖼️<small>拖曳圖片</small></span>}
+                        : <span className="event-lottery-prize-thumb event-lottery-prize-thumb-empty" aria-hidden="true">🖼️<small>拖曳或點選圖片</small></span>}
                     </div>
                     <div className="event-lottery-prize-actions">
                       <button className="gantt-row-delete" type="button" aria-label="往上移" disabled={index === 0} onClick={() => movePrize(prize.id, -1)}>↑</button>
