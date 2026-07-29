@@ -3,7 +3,7 @@
 import confetti from "canvas-confetti";
 import gsap from "gsap";
 import { useEffect, useRef, useState } from "react";
-import { createEmptyEventState, pendingRevealCompleteAt, resolveStageAdvance, resolveStageDisplay, visibleWinnerCount, type LotteryEventState, type PendingReveal } from "@/lib/event-lottery";
+import { candidatePool, createEmptyEventState, pendingRevealCompleteAt, remainingSlots, resolveStageAdvance, resolveStageDisplay, visibleWinnerCount, type LotteryEventState, type PendingReveal } from "@/lib/event-lottery";
 import {
   buildHostStatus,
   commitAcceptedCommand,
@@ -31,6 +31,11 @@ const CELEBRATE_ALL_THRESHOLD = 30;
 
 function reducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** 參考前台不把 CSV 的「抽獎順序」前綴帶到投影畫面；後台仍保留原始獎項名稱。 */
+function cleanPrizeName(name: string) {
+  return name.replace(/^\d+[\.、\s]+/, "");
 }
 
 function fireConfetti(finale: boolean) {
@@ -76,16 +81,42 @@ function playChime(context: AudioContextLike) {
   }
 }
 
+/** 參考前台在轉盤期間播放 roll.mp3；這裡用短促的低音 tick 取代外部音檔，
+ *  保留持續滾動的聽覺回饋，同時不把未確認授權的素材打包進 Toolverse。 */
+function playRollingTick(context: AudioContextLike) {
+  try {
+    if (context.state === "suspended") void context.resume();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "triangle";
+    oscillator.frequency.setValueAtTime(180, context.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(120, context.currentTime + 0.06);
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.035, context.currentTime + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.08);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.1);
+  } catch {
+    /* 音效是裝飾效果，播放失敗不得中斷抽獎。 */
+  }
+}
+
 export function EventLotteryStage() {
   const [state, setState] = useState<LotteryEventState>(() => createEmptyEventState());
   const [hydrated, setHydrated] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [transientError, setTransientError] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [stageFocused, setStageFocused] = useState(false);
 
   const stageRef = useRef<HTMLDivElement>(null);
   const winnerListRef = useRef<HTMLDivElement>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const winnerAutoScrollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const winnerAutoScrollDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rollingSoundRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioContextRef = useRef<AudioContextLike | null>(null);
   // 這一輪抽選（用 drawId 識別）如果曾經被觀察到處於「抽選中」倒數階段，代表這個
   // 分頁是全程在場的——揭曉過程要播動畫、放彩帶、出聲音。如果分頁是在揭曉開始後
@@ -98,7 +129,13 @@ export function EventLotteryStage() {
   // 舞台這一刻該顯示什麼，純粹是「目前狀態 + 現在幾點」的函式；不管是剛收到
   // 廣播、重新整理，還是很久以後才打開分頁，算出來的結果都一樣。
   const display = resolveStageDisplay(state, new Date(nowTick));
+  const previewRolling = display.phase === "preview" && display.rolling;
+  const sequentialRevealMode = display.phase === "revealed" ? display.pendingReveal.revealMode : null;
+  const sequentialRevealTotal = display.phase === "revealed" ? display.pendingReveal.winnerIds.length : 0;
   const visibleCount = display.phase === "revealed" ? visibleWinnerCount(display.pendingReveal, new Date(nowTick)) : 0;
+  const displayedWinnerIds = display.phase === "revealed"
+    ? display.pendingReveal.winnerIds.slice(0, visibleCount)
+    : display.phase === "preview" && !previewRolling ? display.winnerIds : [];
 
   const post = useEventLotterySync((message) => {
     if (message.type === "DRAW_ERROR") {
@@ -118,12 +155,27 @@ export function EventLotteryStage() {
     setHydrated(true);
     return () => {
       if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      if (winnerAutoScrollRef.current) clearInterval(winnerAutoScrollRef.current);
+      if (winnerAutoScrollDelayRef.current) clearTimeout(winnerAutoScrollDelayRef.current);
+      if (rollingSoundRef.current) clearInterval(rollingSoundRef.current);
       // audioContextRef 是延遲建立的單例（見 getSharedAudioContext），卸載當下的
       // .current 才是要收掉的那個，不是 mount 當時的快照，故意在 cleanup 裡才讀取。
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      if (audioContextRef.current) void audioContextRef.current.close();
+      // cleanup 可能因 React StrictMode／HMR 被重入，先清掉 ref 並確認狀態，避免對
+      // 已關閉的 AudioContext 再呼叫 close() 造成未處理的 InvalidStateError。
+      const audioContext = audioContextRef.current;
+      audioContextRef.current = null;
+      if (audioContext && audioContext.state !== "closed") void audioContext.close().catch(() => undefined);
     };
   }, []);
+
+  function sendRemote(message: RemoteMessage) {
+    const channel = remoteChannelRef.current;
+    if (!channel) return;
+    void channel.send(message).catch(() => {
+      // Reconnect polling will recreate the private channel; a lost status/ACK must
+      // never become an unhandled promise rejection or affect the local draw.
+    });
+  }
 
   // ---- 手機遙控：舞台是唯一的 Remote Command Host ----
   // 手機遙控是 optional enhancement；Supabase 沒設定、連不上、session 過期或被
@@ -156,14 +208,11 @@ export function EventLotteryStage() {
   }, []);
 
   function sendHostStatus() {
-    const channel = remoteChannelRef.current;
-    if (!channel) return;
     const currentState = loadEventState();
-    void channel.send(buildHostStatus(currentState, currentState.stateRevision, new Date()));
+    sendRemote(buildHostStatus(currentState, currentState.stateRevision, new Date()));
   }
 
   async function handleRemoteMessage(sessionId: string, expiresAt: string, message: RemoteMessage) {
-    const channel = remoteChannelRef.current;
     if (message.type === "REMOTE_HELLO") {
       sendHostStatus();
       return;
@@ -177,18 +226,18 @@ export function EventLotteryStage() {
     const decision = resolveIncomingCommand(commandLog, session, message.commandId, message.expectedRevision, new Date());
 
     if (decision.kind === "session-invalid") {
-      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: decision.revision, reason: "session-invalid" });
+      sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: decision.revision, reason: "session-invalid" });
       return;
     }
     if (decision.kind === "duplicate") {
       // ACK 遺失後的重送：不再執行第二次抽選，只重新回報這個 commandId 當初的結果。
       remoteCommandLogRef.current = commandLog;
-      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: true, revision: decision.revision });
+      sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: true, revision: decision.revision });
       sendHostStatus();
       return;
     }
     if (decision.kind === "stale-revision") {
-      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: decision.revision, reason: "stale-revision" });
+      sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: decision.revision, reason: "stale-revision" });
       sendHostStatus();
       return;
     }
@@ -199,16 +248,18 @@ export function EventLotteryStage() {
     if (action.action === "none") {
       // 狀態可能在手機送出後先被本機操作改變；這不是成功的 no-op，也不能
       // 消耗 commandId，否則手機會收到 accepted 卻永遠無法重試。
-      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: currentState.stateRevision, reason: "locked" });
+      sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: currentState.stateRevision, reason: "locked" });
       sendHostStatus();
       return;
     }
-    const result = action.action === "prepare"
-      ? prepareStage(currentState, action.prizeId, post)
-      : startDraw(currentState, action.prizeId, action.count, post);
+    const result = action.action === "clear"
+      ? clearStageAction(currentState, post)
+      : action.action === "prepare"
+        ? prepareStage(currentState, action.prizeId, post)
+        : startDraw(currentState, action.prizeId, action.count, post);
 
     if (!result.ok) {
-      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: remoteCommandLogRef.current.revision, reason: result.reason });
+      sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: remoteCommandLogRef.current.revision, reason: result.reason });
       return;
     }
 
@@ -219,7 +270,7 @@ export function EventLotteryStage() {
     } catch {
       /* 儲存失敗不影響這次指令已經執行成功，只是下次重新整理後去重清單會重來 */
     }
-    void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: true, revision: remoteCommandLogRef.current.revision });
+    sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: true, revision: remoteCommandLogRef.current.revision });
     sendHostStatus();
   }
 
@@ -227,10 +278,14 @@ export function EventLotteryStage() {
     if (!remotePointer || !isSupabaseConfigured() || typeof window === "undefined") return;
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
+    const connectedSupabase = supabase;
     let cancelled = false;
     const sessionId = remotePointer.sessionId;
     const expiresAt = remotePointer.expiresAt;
     let releaseHostLock: (() => void) | null = null;
+    let connectionInFlight = false;
+    let connectionGeneration = 0;
+    let reconnectTimer: ReturnType<typeof setInterval> | null = null;
     remoteRevokedRef.current = false;
 
     let storedLog: unknown = null;
@@ -248,25 +303,46 @@ export function EventLotteryStage() {
       if (cancelled) { hostLock.release(); return; }
       releaseHostLock = hostLock.release;
 
-      const handle = await connectRemoteChannel(supabase, sessionId, (message) => {
-        if (message.type === "SESSION_REVOKED") {
-          remoteRevokedRef.current = true;
-          remoteChannelRef.current?.close();
+      async function connectHost() {
+        if (cancelled || remoteRevokedRef.current || connectionInFlight || remoteChannelRef.current) return;
+        connectionInFlight = true;
+        const generation = ++connectionGeneration;
+        const handle = await connectRemoteChannel(connectedSupabase, sessionId, (message) => {
+          if (message.type === "SESSION_REVOKED") {
+            remoteRevokedRef.current = true;
+            remoteChannelRef.current?.close();
+            remoteChannelRef.current = null;
+            if (remoteHeartbeatRef.current) { clearInterval(remoteHeartbeatRef.current); remoteHeartbeatRef.current = null; }
+            return;
+          }
+          void handleRemoteMessage(sessionId, expiresAt, message);
+        }, (status) => {
+          if (status !== "disconnected" || generation !== connectionGeneration) return;
           remoteChannelRef.current = null;
           if (remoteHeartbeatRef.current) { clearInterval(remoteHeartbeatRef.current); remoteHeartbeatRef.current = null; }
+        });
+        connectionInFlight = false;
+        if (!handle) return;
+        if (cancelled || remoteRevokedRef.current || generation !== connectionGeneration) {
+          handle.close();
           return;
         }
-        void handleRemoteMessage(sessionId, expiresAt, message);
-      });
-      if (!handle) { releaseHostLock?.(); releaseHostLock = null; return; }
-      if (cancelled) { handle.close(); releaseHostLock?.(); releaseHostLock = null; return; }
-      remoteChannelRef.current = handle;
-      sendHostStatus();
-      remoteHeartbeatRef.current = setInterval(() => sendHostStatus(), HOST_STATUS_HEARTBEAT_MS);
+        remoteChannelRef.current = handle;
+        sendHostStatus();
+        remoteHeartbeatRef.current = setInterval(() => sendHostStatus(), HOST_STATUS_HEARTBEAT_MS);
+      }
+
+      await connectHost();
+      // A Realtime channel can disappear without a page-level error (background tab,
+      // mobile network handoff, or a temporary service timeout). Re-establish the same
+      // private channel while retaining the same command log and session pointer.
+      reconnectTimer = setInterval(() => { void connectHost(); }, 5000);
     })();
 
     return () => {
       cancelled = true;
+      connectionGeneration += 1;
+      if (reconnectTimer) { clearInterval(reconnectTimer); reconnectTimer = null; }
       if (remoteHeartbeatRef.current) { clearInterval(remoteHeartbeatRef.current); remoteHeartbeatRef.current = null; }
       remoteChannelRef.current?.close();
       remoteChannelRef.current = null;
@@ -276,14 +352,16 @@ export function EventLotteryStage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remotePointer?.sessionId]);
 
-  // 倒數與逐一揭曉期間都要每隔一小段時間重新計算一次「現在該顯示到第幾位了」；
+  // 倒數、逐一揭曉與歷史名單預覽期間都要每隔一小段時間重新計算目前畫面；
   // 這一輪完全播完之後就自動停止，不會無限跑下去。不是用一長串 setTimeout 各自
   // 負責一位得獎者，而是每次都用「經過了多久」現算目前該顯示幾位——分頁被瀏覽器
   // 背景節流、暫停個幾十秒也沒關係，恢復後下一次重新計算會直接跳到正確進度。
   useEffect(() => {
     const pending = state.pendingReveal;
-    if (!pending) return;
-    const completeAt = pendingRevealCompleteAt(pending);
+    const noticeUntil = state.stageNotice ? Date.parse(state.stageNotice.until) : 0;
+    const previewRevealAt = state.stagePreview ? Date.parse(state.stagePreview.revealAt) : 0;
+    if (!pending && !noticeUntil && !previewRevealAt) return;
+    const completeAt = pending ? pendingRevealCompleteAt(pending) : noticeUntil || previewRevealAt;
     if (Date.now() >= completeAt) return;
     const interval = setInterval(() => {
       const now = Date.now();
@@ -291,15 +369,34 @@ export function EventLotteryStage() {
       if (now >= completeAt) clearInterval(interval);
     }, 200);
     return () => clearInterval(interval);
-    // 刻意只依賴 drawId／revealAt 兩個原始值，不用整個 pendingReveal 物件：其他跟
+    // 刻意只依賴 drawId／revealAt／noticeUntil 這些原始值，不用整個 state 物件：其他跟
     // 這一輪無關的狀態變更（例如收到 STATE_UPDATED 重新讀取）不該讓計時器重開。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.pendingReveal?.drawId, state.pendingReveal?.revealAt]);
+  }, [state.pendingReveal?.drawId, state.pendingReveal?.revealAt, state.stageNotice?.until]);
 
   useEffect(() => {
     if (display.phase === "drawing") liveDrawIdsRef.current.add(display.pendingReveal.drawId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [display.phase, state.pendingReveal?.drawId]);
+
+  // 參考前台在抽選期間會持續播放 roll 音效；以固定節奏合成短 tick，避免
+  // 每一個得獎者建立一個獨立音效物件，也讓背景分頁恢復時不必補播歷史音檔。
+  useEffect(() => {
+    if (rollingSoundRef.current) clearInterval(rollingSoundRef.current);
+    rollingSoundRef.current = null;
+    if (display.phase !== "drawing" && !previewRolling) return;
+    const soundEnabled = display.phase === "drawing" ? display.pendingReveal.soundEnabled : state.soundEnabled;
+    if (!soundEnabled) return;
+    rollingSoundRef.current = setInterval(() => {
+      const context = getSharedAudioContext(audioContextRef);
+      if (context) playRollingTick(context);
+    }, 150);
+    return () => {
+      if (rollingSoundRef.current) clearInterval(rollingSoundRef.current);
+      rollingSoundRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [display.phase, previewRolling, state.pendingReveal?.drawId, state.pendingReveal?.soundEnabled, state.stagePreview?.revealAt, state.soundEnabled]);
 
   // 慶祝效果（彩帶／音效）：只有全程在場的分頁才播放，且用「目前該顯示到第幾位」
   // 跟「上次已經慶祝到第幾位」的差距來補放，就算某一次 tick 一口氣跳過好幾位
@@ -346,6 +443,19 @@ export function EventLotteryStage() {
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
+  // 原始前台只在展示視窗取得焦點時讓標題 pulse；切到後台時停下，避免投影畫面
+  // 在主持人操作其他視窗時仍持續閃爍。
+  useEffect(() => {
+    function updateFocus() { setStageFocused(document.hasFocus()); }
+    updateFocus();
+    window.addEventListener("focus", updateFocus);
+    window.addEventListener("blur", updateFocus);
+    return () => {
+      window.removeEventListener("focus", updateFocus);
+      window.removeEventListener("blur", updateFocus);
+    };
+  }, []);
+
   useEffect(() => {
     if (visibleCount === 0 || !winnerListRef.current) return;
     const last = winnerListRef.current.lastElementChild;
@@ -353,6 +463,43 @@ export function EventLotteryStage() {
       gsap.fromTo(last, { opacity: 0, y: 26, scale: 0.75, rotate: -4 }, { opacity: 1, y: 0, scale: 1, rotate: 0, duration: 0.65, ease: "back.out(2.1)" });
     }
   }, [visibleCount]);
+
+  useEffect(() => {
+    if (winnerAutoScrollRef.current) clearInterval(winnerAutoScrollRef.current);
+    if (winnerAutoScrollDelayRef.current) clearTimeout(winnerAutoScrollDelayRef.current);
+    winnerAutoScrollRef.current = null;
+    winnerAutoScrollDelayRef.current = null;
+    const list = winnerListRef.current;
+    const sequentialStillRolling = display.phase === "revealed"
+      && sequentialRevealMode === "sequential"
+      && visibleCount < sequentialRevealTotal;
+    if (!list || previewRolling || sequentialStillRolling || reducedMotion()) return;
+    list.scrollTop = 0;
+
+    // 原版前台在得獎卡片出現後先停一下，再開始往返捲動；這也避免大量卡片
+    // 在剛掛載、尚未完成高度計算時就啟動捲軸。
+    winnerAutoScrollDelayRef.current = setTimeout(() => {
+      const currentList = winnerListRef.current;
+      if (!currentList || currentList.scrollHeight <= currentList.clientHeight) return;
+      let position = 0;
+      let direction = 1;
+      let pause = 100;
+      winnerAutoScrollRef.current = setInterval(() => {
+        if (pause > 0) { pause -= 1; return; }
+        const maxScroll = currentList.scrollHeight - currentList.clientHeight;
+        position += direction;
+        if (position >= maxScroll) { position = maxScroll; direction = -1; pause = 100; }
+        if (position <= 0) { position = 0; direction = 1; pause = 100; }
+        currentList.scrollTop = position;
+      }, 30);
+    }, sequentialRevealMode === "sequential" ? 500 : 1_000);
+    return () => {
+      if (winnerAutoScrollRef.current) clearInterval(winnerAutoScrollRef.current);
+      if (winnerAutoScrollDelayRef.current) clearTimeout(winnerAutoScrollDelayRef.current);
+      winnerAutoScrollRef.current = null;
+      winnerAutoScrollDelayRef.current = null;
+    };
+  }, [displayedWinnerIds.length, display.phase, previewRolling, sequentialRevealMode, sequentialRevealTotal, visibleCount]);
 
   async function toggleFullscreen() {
     try {
@@ -379,10 +526,16 @@ export function EventLotteryStage() {
   function handleAdvance() {
     const currentState = loadEventState();
     const action = resolveStageAdvance(currentState, new Date());
-    if (action.action === "none") return;
-    const result = action.action === "prepare"
-      ? prepareStage(currentState, action.prizeId, post)
-      : startDraw(currentState, action.prizeId, action.count, post);
+    if (action.action === "none") {
+      const allPrizesDone = currentState.prizes.length > 0 && currentState.prizes.every((prize) => remainingSlots(prize) === 0);
+      if (allPrizesDone && !currentState.activePrizeId) showTransientError("目前所有獎項皆已抽完！");
+      return;
+    }
+    const result = action.action === "clear"
+      ? clearStageAction(currentState, post)
+      : action.action === "prepare"
+        ? prepareStage(currentState, action.prizeId, post)
+        : startDraw(currentState, action.prizeId, action.count, post);
     if (result.ok) setState(result.state);
     else showTransientError(result.reason);
   }
@@ -414,10 +567,25 @@ export function EventLotteryStage() {
   if (!hydrated) return <div className="event-lottery-stage-loading" aria-hidden="true" />;
 
   const activePrize = display.phase === "idle" ? null : state.prizes.find((prize) => prize.id === display.prizeId) ?? null;
-  const revealedWinners = (display.phase === "revealed" ? display.pendingReveal.winnerIds.slice(0, visibleCount) : [])
+  const activePrizeDisplayName = activePrize ? cleanPrizeName(activePrize.name) : "";
+  const revealedWinners = displayedWinnerIds
     .map((id) => state.winners.find((winner) => winner.id === id))
     .filter((winner): winner is NonNullable<typeof winner> => Boolean(winner));
   const hasBackground = Boolean(state.backgroundImageDataUrl);
+  const rollingPool = activePrize ? candidatePool(state, activePrize.id) : [];
+  const rollingNames = rollingPool.length > 0 ? rollingPool.map((participant) => participant.name) : ["? ? ?", "- - -"];
+  const rollingName = rollingNames[Math.floor(nowTick / 50) % rollingNames.length] ?? "? ? ?";
+  const stageDrawCount = activePrize ? Math.min(state.stageDrawCount, remainingSlots(activePrize), rollingPool.length) : 0;
+  // 原版會在抽獎開始時就依「本輪總人數」決定版型；逐一揭曉時不能因為
+  // 目前只出現第一張卡片，就先套用單人超大版型，否則第二張出現時畫面會跳動。
+  const winnerLayoutCount = display.phase === "revealed"
+    ? display.pendingReveal.winnerIds.length
+    : display.phase === "drawing"
+      ? display.pendingReveal.winnerIds.length
+    : display.phase === "preview" ? display.winnerIds.length : revealedWinners.length;
+  const winnerScale = winnerLayoutCount === 1 ? "count-1" : winnerLayoutCount <= 4 ? "count-few" : winnerLayoutCount <= 10 ? "count-medium" : winnerLayoutCount <= 20 ? "count-many" : winnerLayoutCount <= 40 ? "count-huge" : "count-massive";
+  const sequentialStillRolling = display.phase === "revealed" && display.pendingReveal.revealMode === "sequential" && visibleCount < display.pendingReveal.winnerIds.length;
+  const presentationStillRolling = previewRolling || display.phase === "drawing" || sequentialStillRolling;
 
   return (
     <div
@@ -427,7 +595,7 @@ export function EventLotteryStage() {
       aria-label="活動抽獎舞台展示"
       onClick={handleAdvance}
     >
-      {!hasBackground && <StageParticles />}
+      <StageParticles />
       <div className="event-lottery-stage-scrim" aria-hidden="true" />
 
       <button
@@ -440,43 +608,48 @@ export function EventLotteryStage() {
       </button>
 
       <header className="event-lottery-stage-header">
-        <h1>{state.eventTitle}</h1>
+        <h1 className={stageFocused ? "event-lottery-stage-title-pulsing" : undefined}>{state.eventTitle}</h1>
+        {!transientError && display.phase === "idle" && <h2>準備迎接下一個幸運兒！</h2>}
+        {!transientError && display.phase === "notice" && <h2>{display.message}</h2>}
+        {!transientError && display.phase !== "idle" && display.phase !== "notice" && activePrize && (
+          <>
+            {activePrize.imageDataUrl && <img key={activePrize.id} className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
+            <h2>
+              {display.phase === "prepared"
+                ? `即將抽出：${activePrizeDisplayName} 共 ${stageDrawCount} 名`
+                : presentationStillRolling
+                  ? `【${activePrizeDisplayName}】 抽獎進行中...`
+                  : `🎉 恭喜【${activePrizeDisplayName}】得獎者 🎉`}
+            </h2>
+          </>
+        )}
       </header>
 
       <main className="event-lottery-stage-main">
         {transientError && <p className="event-lottery-stage-error">{transientError}</p>}
 
-        {!transientError && display.phase === "idle" && (
-          <>
-            <p className="event-lottery-stage-idle">等待控制台準備抽獎…</p>
-            <p className="event-lottery-stage-hint">按空白鍵、→ 或點擊畫面／用簡報筆開始抽獎</p>
-          </>
+        {!transientError && display.phase === "drawing" && activePrize && (
+          display.pendingReveal.revealMode === "sequential"
+            ? <div className={`event-lottery-stage-winner-list ${winnerScale}`} aria-live="polite"><div className="event-lottery-stage-winner-card event-lottery-stage-rolling-card"><span>{rollingName}</span></div></div>
+            : <div className="event-lottery-stage-slot-machine" aria-live="polite"><div className="event-lottery-stage-slot-window"><span>{rollingName}</span></div></div>
         )}
 
-        {!transientError && (display.phase === "prepared" || display.phase === "drawing") && activePrize && (
-          <div className="event-lottery-stage-prize">
-            {activePrize.imageDataUrl && <img className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
-            <h2>{activePrize.name}</h2>
-            {display.phase === "drawing"
-              ? <p className="event-lottery-stage-spin">抽選中…{display.pendingReveal.winnerIds.length > 1 ? `（${display.pendingReveal.winnerIds.length} 位）` : ""}<span className="event-lottery-stage-spin-ring" aria-hidden="true" /></p>
-              : <><p className="event-lottery-stage-waiting">即將開始抽選</p><p className="event-lottery-stage-hint">再按一次開始抽選</p></>}
-          </div>
+        {!transientError && previewRolling && activePrize && (
+          <div className="event-lottery-stage-slot-machine" aria-live="polite"><div className="event-lottery-stage-slot-window"><span>{rollingName}</span></div></div>
         )}
 
-        {!transientError && display.phase === "revealed" && activePrize && (
-          <div className="event-lottery-stage-reveal">
-            {activePrize.imageDataUrl && <img className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
-            <h2>{activePrize.name}</h2>
-            <div ref={winnerListRef} className="event-lottery-stage-winner-list">
-              {revealedWinners.map((winner) => (
-                <div className={`event-lottery-stage-winner-card${winner.disqualified ? " event-lottery-stage-winner-disqualified" : ""}`} key={winner.id}>
+        {!transientError && (display.phase === "revealed" || (display.phase === "preview" && !display.rolling)) && activePrize && (
+          <div className={`event-lottery-stage-reveal${display.phase === "preview" ? " event-lottery-stage-preview" : ""}`}>
+            <div ref={winnerListRef} className={`event-lottery-stage-winner-list ${winnerScale}`}>
+              {revealedWinners.map((winner, index) => (
+                <div className={`event-lottery-stage-winner-card${winner.disqualified ? " event-lottery-stage-winner-disqualified" : ""}`} style={{ animationDelay: `${Math.min(index * 0.08, 3)}s` }} key={winner.id}>
+                  <span className="event-lottery-stage-winner-dept">{winner.department || "---"}</span>
                   <span className="event-lottery-stage-winner-name">{winner.participantName}</span>
-                  {(winner.employeeId || winner.department) && (
-                    <span className="event-lottery-stage-winner-meta">{[winner.employeeId, winner.department].filter(Boolean).join(" · ")}</span>
-                  )}
+                  <span className="event-lottery-stage-winner-emp">{winner.employeeId || "---"}</span>
                   {winner.disqualified && <span className="event-lottery-stage-winner-tag">已失格</span>}
                 </div>
               ))}
+              {sequentialStillRolling && <div className="event-lottery-stage-winner-card event-lottery-stage-rolling-card"><span>{rollingName}</span></div>}
             </div>
           </div>
         )}

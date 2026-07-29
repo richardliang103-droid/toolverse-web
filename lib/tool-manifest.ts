@@ -660,7 +660,7 @@ export const toolManifests: readonly ToolManifest[] = [
     handoff: { canSend: false, canReceive: false, kinds: [] },
     suggestedNextTools: ["lottery", "random-groups"],
     privacy: "local-only",
-    privacyNote: "活動設定、名單、獎項與得獎紀錄只留在這台裝置的 localStorage，控制台與舞台分頁靠瀏覽器內建機制同步，不會傳到伺服器。",
+    privacyNote: "未啟用手機遙控時，活動設定、名單、獎項與得獎紀錄只留在這台裝置的 localStorage；若主動啟用手機遙控，只會傳送短期配對 session 與不含個資的狀態摘要。",
   },
 ];
 

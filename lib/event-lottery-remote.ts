@@ -1,7 +1,10 @@
-import { pendingRevealCompleteAt, resolveStageAdvance, resolveStageDisplay, type LotteryEventState } from "./event-lottery.ts";
+import { pendingRevealCompleteAt, resolveStageAdvance, resolveStageDisplay, stagePreviewCompleteAt, type LotteryEventState } from "./event-lottery.ts";
 import type { LotteryRemoteSession, RemoteHostPhase, RemoteMessage } from "./event-lottery-remote-types.ts";
 
 export const EVENT_LOTTERY_REMOTE_STORAGE_KEY = "toolverse:event-lottery:remote-session:v1";
+/** 控制台同一個瀏覽器分頁用 sessionStorage 暫存尚未配對的 token，讓重新整理後
+ * 仍能重建 QR；一旦手機送來 REMOTE_HELLO 就會立即清掉，不會進入長期備份。 */
+export const EVENT_LOTTERY_REMOTE_PAIRING_TOKEN_KEY = "toolverse:event-lottery:remote-pairing-token:v1";
 /** 手機遙控頁自己的 session 指標，跟電腦控制台的 EVENT_LOTTERY_REMOTE_STORAGE_KEY
  *  分開存放——手機重新整理後靠這個指標直接重新訂閱頻道，不需要 pairing token
  *  仍留在網址列（配對成功當下就會用 history.replaceState 清掉）。 */
@@ -155,7 +158,10 @@ export function buildHostStatus(state: LotteryEventState, revision: number, now 
   if (display.phase === "idle") phase = "idle";
   else if (display.phase === "prepared") phase = "prepared";
   else if (display.phase === "drawing") phase = "drawing";
-  else phase = now.getTime() < pendingRevealCompleteAt(display.pendingReveal) ? "revealing" : "finished";
+  else if (display.phase === "revealed") phase = now.getTime() < pendingRevealCompleteAt(display.pendingReveal) ? "revealing" : "finished";
+  else if (display.phase === "preview" && display.rolling) phase = "drawing";
+  else if (display.phase === "preview" && state.stagePreview && now.getTime() < stagePreviewCompleteAt(state.stagePreview)) phase = "revealing";
+  else phase = "finished";
 
   const activePrize = state.activePrizeId ? state.prizes.find((prize) => prize.id === state.activePrizeId) ?? null : null;
 
@@ -212,12 +218,15 @@ export function isHostStatusStale(lastHostStatusAt: number | null, now = Date.no
 export type RemoteButtonState =
   | { kind: "disabled"; reason: "offline" | "locked" }
   | { kind: "prepare" }
-  | { kind: "draw" };
+  | { kind: "draw" }
+  | { kind: "clear" };
 
 export function resolveRemoteButtonState(status: (RemoteMessage & { type: "HOST_STATUS" }) | null, isStale: boolean): RemoteButtonState {
   if (isStale || !status) return { kind: "disabled", reason: "offline" };
   if (status.locked || status.nextAction === "none") return { kind: "disabled", reason: "locked" };
-  return status.nextAction === "prepare" ? { kind: "prepare" } : { kind: "draw" };
+  if (status.nextAction === "prepare") return { kind: "prepare" };
+  if (status.nextAction === "clear") return { kind: "clear" };
+  return { kind: "draw" };
 }
 
 export type RemoteHostLock = {

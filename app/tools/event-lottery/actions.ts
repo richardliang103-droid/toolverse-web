@@ -4,6 +4,7 @@ import {
   advanceStateRevision,
   clearStage as clearStageState,
   drawEventWinners,
+  previewPrizeWinners,
   prepareStagePrize as prepareStagePrizeState,
   type LotteryEventState,
 } from "@/lib/event-lottery";
@@ -62,4 +63,15 @@ export function clearStageAction(state: LotteryEventState, post: Post): DrawActi
   if (!saveEventState(next)) return { ok: false, reason: "儲存失敗，可能是瀏覽器儲存空間不足，請刪減圖片或紀錄後再試" };
   post({ type: "CLEAR_STAGE" });
   return { ok: true, state: next };
+}
+
+export function previewPrizeWinnersAction(state: LotteryEventState, prizeId: string, post: Post): DrawActionResult {
+  try {
+    const next = advanceStateRevision(previewPrizeWinners(state, prizeId));
+    if (!saveEventState(next)) return { ok: false, reason: "儲存失敗，可能是瀏覽器儲存空間不足，請刪減圖片或紀錄後再試" };
+    post({ type: "PREPARE_PRIZE", prizeId });
+    return { ok: true, state: next };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : "無法顯示歷史得獎名單" };
+  }
 }

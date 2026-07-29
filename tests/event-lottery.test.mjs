@@ -14,6 +14,7 @@ import {
   drawEventWinners,
   EventLotteryError,
   eventBackupFileName,
+  formatLotteryTimestamp,
   exportEventBackup,
   findDuplicateEmployeeId,
   advanceStateRevision,
@@ -23,13 +24,17 @@ import {
   parseParticipantsCsv,
   parsePrizesCsv,
   pendingRevealCompleteAt,
+  PRESENTATION_SETTLE_MS,
   prepareStagePrize,
+  previewPrizeWinners,
   remainingSlots,
   resetEventDraws,
   resolveStageAdvance,
   resolveStageDisplay,
   sanitizeEventState,
   sequentialStepMs,
+  stagePreviewCompleteAt,
+  DEFAULT_SINGLE_SEQUENTIAL_MS,
   validateDraw,
   visibleWinnerCount,
   winnersToCsv,
@@ -63,7 +68,7 @@ test("normalize 修復錯誤資料：損壞欄位換成安全預設值，不會�
     animationDurationMs: "nope",
     soundEnabled: "yes",
   });
-  assert.equal(state.eventTitle, "活動抽獎");
+  assert.equal(state.eventTitle, "🎊 歡樂公司尾牙 🎊");
   assert.equal(state.rosters.length, 0);
   // 沒有任何名單群組時，參加者找不到有效 rosterId，應該被安全捨棄而不是讓整份資料壞掉。
   assert.equal(state.participants.length, 0);
@@ -71,7 +76,7 @@ test("normalize 修復錯誤資料：損壞欄位換成安全預設值，不會�
   assert.equal(state.prizes[0].totalCount, 1);
   assert.equal(state.winners.length, 0);
   assert.equal(state.revealMode, "sequential");
-  assert.equal(state.animationDurationMs, 3200);
+  assert.equal(state.animationDurationMs, 3000);
   assert.equal(state.soundEnabled, true);
   assert.equal(state.stageDrawCount, 1, "舊 localStorage／舊備份缺少 stageDrawCount 時安全回退為 1");
   assert.equal(state.stateRevision, 0, "舊 localStorage／舊備份缺少 stateRevision 時安全回退為 0");
@@ -173,6 +178,24 @@ test("CSV 解析：沒有標題列時依固定欄位順序解讀，缺姓名的�
   assert.match(warnings[0], /缺少姓名/);
 });
 
+test("CSV 解析：缺少員工編號的列不會匯入，並回報警告", () => {
+  const { rows, warnings } = parseParticipantsCsv("姓名,員工編號,部門\n小明,,業務\n小美,E002,業務\n");
+  assert.deepEqual(rows, [{ name: "小美", employeeId: "E002", department: "業務" }]);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /缺少員工編號/);
+});
+
+test("CSV 解析：相容參考專案使用的 emp_id／dept／prize／qty 欄位名稱", () => {
+  const participants = parseParticipantsCsv("dept,emp_id,name\n業務,E001,小明\n");
+  assert.deepEqual(participants.rows, [{ name: "小明", employeeId: "E001", department: "業務" }]);
+
+  const { prizes } = parsePrizesCsv("order,prize,qty,allow_all\n1,頭獎,2,true\n", [], 0);
+  assert.equal(prizes.length, 1);
+  assert.equal(prizes[0].name, "頭獎");
+  assert.equal(prizes[0].totalCount, 2);
+  assert.equal(prizes[0].allowRepeatWinners, true);
+});
+
 test("mergeParticipantsFromCsv：員工編號重複時略過並回報，不會靜默重複加入", () => {
   const { state, rosterA } = buildBasicState();
   const { rows } = parseParticipantsCsv("姓名,員工編號,部門\n小新,E001,業務\n小剛,E010,業務\n");
@@ -181,6 +204,36 @@ test("mergeParticipantsFromCsv：員工編號重複時略過並回報，不會�
   assert.equal(result.skipped.length, 1);
   assert.match(result.skipped[0], /E001/);
   assert.equal(result.participants.length, state.participants.length + 1);
+});
+
+test("mergeParticipantsFromCsv：確認後同一名單的既有人員會更新資料並重新啟用", () => {
+  const { state, rosterA } = buildBasicState();
+  const existing = { ...state.participants[0], name: "舊姓名", department: "舊部門", active: false };
+  const result = mergeParticipantsFromCsv(
+    { ...state, participants: [existing] }.participants,
+    [{ name: "新姓名", employeeId: existing.employeeId, department: "新部門" }],
+    rosterA.id,
+    { updateExistingInRoster: true },
+  );
+  assert.equal(result.added, 0);
+  assert.equal(result.updated, 1);
+  assert.equal(result.skipped.length, 0);
+  assert.deepEqual(result.participants[0], { ...existing, name: "新姓名", department: "新部門", active: true });
+});
+
+test("mergeParticipantsFromCsv：確認後跨名單重複可依原版行為新增", () => {
+  const { state, rosterB } = buildBasicState();
+  const result = mergeParticipantsFromCsv(
+    state.participants,
+    [{ name: "跨組小明", employeeId: state.participants[0].employeeId, department: "活動組" }],
+    rosterB.id,
+    { updateExistingInRoster: true, allowCrossRosterDuplicates: true },
+  );
+  assert.equal(result.added, 1);
+  assert.equal(result.updated, 0);
+  assert.equal(result.skipped.length, 0);
+  assert.equal(result.participants.filter((participant) => participant.employeeId === "E001").length, 2);
+  assert.equal(result.participants.at(-1).rosterId, rosterB.id);
 });
 
 test("findDuplicateEmployeeId：忽略空字串、可排除自己", () => {
@@ -202,6 +255,25 @@ test("CSV 解析：獎項 CSV 支援標題列、允許再參加與適用名單�
   assert.deepEqual(prizes[0].eligibleRosterIds, [rosterA.id]);
   assert.equal(prizes[1].allowRepeatWinners, true);
   assert.deepEqual(prizes[1].eligibleRosterIds, [rosterA.id, rosterB.id]);
+});
+
+test("CSV 解析：保留原版抽獎順序欄位", () => {
+  const { rosterA, rosterB } = buildBasicState();
+  const csv = `抽獎順序,獎項,數量\n2,二獎,1\n1,頭獎,1\n`;
+  const { prizes, warnings } = parsePrizesCsv(csv, [rosterA, rosterB], 0);
+  assert.equal(warnings.length, 0);
+  assert.equal(prizes[0].order, 1);
+  assert.equal(prizes[1].order, 0);
+});
+
+test("CSV 解析：獎項數量無效的列不會默默變成 1", () => {
+  const { rosterA } = buildBasicState();
+  const { prizes, warnings } = parsePrizesCsv("獎項,數量\n頭獎,\n二獎,abc\n三獎,2\n", [rosterA], 0);
+  assert.equal(prizes.length, 1);
+  assert.equal(prizes[0].name, "三獎");
+  assert.equal(prizes[0].totalCount, 2);
+  assert.equal(warnings.length, 2);
+  assert.match(warnings[0], /數量無效/);
 });
 
 test("candidatePool：只從指定名單群組抽取，且排除停用人員", () => {
@@ -341,6 +413,37 @@ test("prepareStagePrize／clearStage／resetEventDraws：舞台與抽獎進度�
   assert.equal(resetState.participants.length, state.participants.length, "重置只清空抽獎進度，參加者要保留");
 });
 
+test("previewPrizeWinners：重新顯示歷史名單不會新增得獎紀錄或扣除名額", () => {
+  const { state, prize } = buildBasicState();
+  const { nextState } = drawEventWinners(state, prize.id, 1);
+  const shownAt = new Date("2026-01-01T00:00:00.000Z");
+  const preview = previewPrizeWinners(nextState, prize.id, shownAt);
+  assert.equal(preview.stagePreview?.prizeId, prize.id);
+  assert.equal(preview.stagePreview?.winnerIds.length, 1);
+  assert.equal(preview.stagePreview?.revealAt, new Date(shownAt.getTime() + state.animationDurationMs).toISOString());
+  assert.equal(preview.winners.length, nextState.winners.length);
+  assert.equal(preview.prizes[0].drawnCount, nextState.prizes[0].drawnCount);
+  assert.equal(resolveStageDisplay(preview, shownAt).phase, "preview");
+  assert.equal(resolveStageDisplay(preview, shownAt).rolling, true);
+});
+
+test("previewPrizeWinners：歷史名單預覽會先滾動，動畫完成並停留後才允許下一步", () => {
+  const { state, prize } = buildBasicState();
+  const oneShotPrize = { ...prize, totalCount: 1 };
+  const current = { ...state, prizes: [oneShotPrize] };
+  const drawnAt = new Date("2026-01-01T00:00:00.000Z");
+  const { nextState } = drawEventWinners(current, prize.id, 1, drawnAt);
+  const shownAt = new Date("2026-01-01T00:01:00.000Z");
+  const preview = previewPrizeWinners(nextState, prize.id, shownAt);
+  const revealAt = new Date(preview.stagePreview.revealAt);
+
+  assert.equal(resolveStageAdvance(preview, shownAt).action, "none");
+  assert.equal(resolveStageDisplay(preview, new Date(revealAt.getTime() - 1)).rolling, true);
+  assert.equal(resolveStageDisplay(preview, revealAt).rolling, false);
+  assert.equal(resolveStageAdvance(preview, revealAt).action, "none");
+  assert.deepEqual(resolveStageAdvance(preview, new Date(stagePreviewCompleteAt(preview.stagePreview))), { action: "clear" });
+});
+
 test("resolveStageDisplay：揭曉時間到之前是 drawing，到了之後是 revealed（純粹算時間，不靠計時器）", () => {
   const { state, prize } = buildBasicState();
   const bigPrize = { ...prize, totalCount: 3, order: 0 };
@@ -386,14 +489,22 @@ test("resolveStageDisplay：pendingReveal 跟 activePrizeId 對不上時忽略�
 
 test("sequentialStepMs：人數少時用預設間隔，人數多到會讓整輪超過一分鐘時自動壓縮", () => {
   assert.equal(sequentialStepMs(1), 0);
-  assert.equal(sequentialStepMs(2), 1400);
-  assert.equal(sequentialStepMs(10), 1400);
+  assert.equal(sequentialStepMs(2), 1000);
+  assert.equal(sequentialStepMs(10), 1000);
   const compressed = sequentialStepMs(500);
-  assert.ok(compressed < 1400);
+  assert.ok(compressed < 1000);
   assert.ok(compressed * 499 <= 60_000 + 1e-6, "500 人逐一揭曉的總時間不能超過一分鐘");
 });
 
-test("pendingRevealCompleteAt：逐一揭曉要等最後一位顯示完才算播完；一次揭曉等同 revealAt", () => {
+test("drawEventWinners：逐次抽出單一得獎者會保留原版 3 秒滾動時間", () => {
+  const prize = createPrize({ name: "頭獎", totalCount: 1 });
+  const state = { ...createEmptyEventState(), prizes: [prize], participants: [createParticipant({ name: "王小明", employeeId: "E001" })] };
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const { nextState } = drawEventWinners(state, prize.id, 1, now);
+  assert.equal(Date.parse(nextState.pendingReveal.revealAt), now.getTime() + DEFAULT_SINGLE_SEQUENTIAL_MS);
+});
+
+test("pendingRevealCompleteAt：逐一／一次揭曉都保留原版最後展示緩衝", () => {
   const { state, prize } = buildBasicState();
   const bigPrize = { ...prize, totalCount: 3, order: 0 };
   const sequentialState = { ...state, prizes: [bigPrize], revealMode: "sequential" };
@@ -401,11 +512,11 @@ test("pendingRevealCompleteAt：逐一揭曉要等最後一位顯示完才算播
   const revealAtMs = Date.parse(nextState.pendingReveal.revealAt);
   const completeAt = pendingRevealCompleteAt(nextState.pendingReveal);
   assert.ok(completeAt > revealAtMs, "逐一揭曉三位，播完時間要晚於揭曉開始時間");
-  assert.equal(completeAt, revealAtMs + 2 * nextState.pendingReveal.stepMs);
+  assert.equal(completeAt, revealAtMs + 2 * nextState.pendingReveal.stepMs + PRESENTATION_SETTLE_MS);
 
   const simultaneousState = { ...state, prizes: [bigPrize], revealMode: "simultaneous" };
   const { nextState: simultaneousNext } = drawEventWinners(simultaneousState, prize.id, 3, new Date("2026-01-01T00:00:00.000Z"));
-  assert.equal(pendingRevealCompleteAt(simultaneousNext.pendingReveal), Date.parse(simultaneousNext.pendingReveal.revealAt));
+  assert.equal(pendingRevealCompleteAt(simultaneousNext.pendingReveal), Date.parse(simultaneousNext.pendingReveal.revealAt) + PRESENTATION_SETTLE_MS);
 });
 
 test("visibleWinnerCount：逐一揭曉時純粹用經過的時間現算目前該顯示到第幾位", () => {
@@ -523,39 +634,45 @@ test("resolveStageAdvance：sequential 逐一揭曉到達完整完成時間後�
   assert.deepEqual(resolveStageAdvance(nextState, new Date(completeAt)), { action: "prepare", prizeId: prizeB.id });
 });
 
-test("resolveStageAdvance：simultaneous 一次揭曉在 revealAt 之後就能立刻前進（不必額外等待）", () => {
+test("resolveStageAdvance：simultaneous 一次揭曉會等原版展示緩衝後才前進", () => {
   const { state, prize } = buildBasicState();
   const prizeA = { ...prize, id: "prize-a", order: 0, totalCount: 3, drawnCount: 0 };
   const prizeB = { ...prize, id: "prize-b", order: 1, totalCount: 1, drawnCount: 0 };
   const current = { ...state, prizes: [prizeA, prizeB], revealMode: "simultaneous" };
   const { nextState } = drawEventWinners(current, prizeA.id, 3, new Date("2026-01-01T00:00:00.000Z"));
   const revealAtMs = Date.parse(nextState.pendingReveal.revealAt);
-  assert.equal(pendingRevealCompleteAt(nextState.pendingReveal), revealAtMs, "一次揭曉的完整完成時間等同 revealAt");
-  assert.deepEqual(resolveStageAdvance(nextState, new Date(revealAtMs)), { action: "prepare", prizeId: prizeB.id });
+  const completeAt = pendingRevealCompleteAt(nextState.pendingReveal);
+  assert.equal(completeAt, revealAtMs + PRESENTATION_SETTLE_MS);
+  assert.deepEqual(resolveStageAdvance(nextState, new Date(revealAtMs)), { action: "none" });
+  assert.deepEqual(resolveStageAdvance(nextState, new Date(completeAt)), { action: "prepare", prizeId: prizeB.id });
 });
 
-test("resolveStageAdvance：目前獎項已抽完後，準備下一個還有名額的獎項；全部抽完就回傳 none", () => {
+test("resolveStageAdvance：目前獎項已抽完後，準備下一個還有名額的獎項；最後一輪完成後回到首頁", () => {
   const { state, prize } = buildBasicState();
   const prizeA = { ...prize, id: "prize-a", order: 0, totalCount: 1, drawnCount: 0 };
   const prizeB = { ...prize, id: "prize-b", order: 1, totalCount: 1, drawnCount: 0 };
   const current = { ...state, prizes: [prizeA, prizeB] };
   const { nextState } = drawEventWinners(current, prizeA.id, 1, new Date("2026-01-01T00:00:00.000Z"));
-  const afterReveal = new Date(Date.parse(nextState.pendingReveal.revealAt));
+  const afterReveal = new Date(pendingRevealCompleteAt(nextState.pendingReveal));
   assert.deepEqual(resolveStageAdvance(nextState, afterReveal), { action: "prepare", prizeId: prizeB.id });
 
   const { nextState: allDone } = drawEventWinners(nextState, prizeB.id, 1, new Date("2026-01-01T00:00:10.000Z"));
-  const afterSecondReveal = new Date(Date.parse(allDone.pendingReveal.revealAt));
-  assert.deepEqual(resolveStageAdvance(allDone, afterSecondReveal), { action: "none" });
+  const afterSecondReveal = new Date(pendingRevealCompleteAt(allDone.pendingReveal));
+  assert.deepEqual(resolveStageAdvance(allDone, afterSecondReveal), { action: "clear" });
+  assert.deepEqual(resolveStageAdvance({ ...allDone, activePrizeId: null, pendingReveal: null }, afterSecondReveal), { action: "none" });
 });
 
-test("disqualifyWinner 不會把人從 pendingReveal 移除，舞台仍會顯示（並標示已失格）", () => {
+test("disqualifyWinner：前台先顯示感謝訊息，再回到該獎項的重抽準備畫面", () => {
   const { state, prize } = buildBasicState();
   const bigPrize = { ...prize, totalCount: 3 };
   const current = { ...state, prizes: [bigPrize] };
   const { winners, nextState } = drawEventWinners(current, prize.id, 1);
   const disqualified = disqualifyWinner(nextState, winners[0].id);
-  assert.ok(disqualified.pendingReveal, "失格不應該清掉這一輪的揭曉狀態");
-  assert.deepEqual(disqualified.pendingReveal.winnerIds, nextState.pendingReveal.winnerIds);
+  assert.equal(disqualified.pendingReveal, null);
+  assert.equal(disqualified.stagePreview, null);
+  assert.match(disqualified.stageNotice?.message ?? "", /無私奉獻/);
+  assert.equal(resolveStageDisplay(disqualified).phase, "notice");
+  assert.equal(resolveStageDisplay(disqualified, new Date(Date.parse(disqualified.stageNotice.until) + 1)).phase, "prepared");
   assert.equal(disqualified.winners.find((winner) => winner.id === winners[0].id).disqualified, true);
 });
 
@@ -588,8 +705,14 @@ test("空白活動不崩潰：所有查詢函式對空狀態都安全", () => {
   const empty = createEmptyEventState();
   assert.deepEqual(candidatePool(empty, "anything"), []);
   assert.equal(validateDraw(empty, "anything", 1).ok, false);
-  assert.equal(winnersToCsv(empty), "﻿抽出時間,獎項,姓名,員工編號,部門,狀態");
+  assert.equal(winnersToCsv(empty), "﻿抽取時間,獎項,部門,姓名,員工編號,狀態");
   assert.equal(canDeletePrize(empty, "anything"), true);
+});
+
+test("formatLotteryTimestamp：沿用原版補零的在地時間格式", () => {
+  const date = new Date("2026-01-02T03:04:05.000Z");
+  const pad = (value) => String(value).padStart(2, "0");
+  assert.equal(formatLotteryTimestamp(date), `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`);
 });
 
 test("winnersToCsv：欄位含逗號時正確跳脫", () => {
@@ -624,7 +747,9 @@ test("JSON 備份匯入：不信任檔案內容，格式或版本錯誤要拒絕
 
 test("eventBackupFileName：檔名清掉不安全字元", () => {
   const state = { ...createEmptyEventState(), eventTitle: "2026/尾牙:活動" };
-  const name = eventBackupFileName(state, new Date("2026-01-15T00:00:00Z"));
+  const date = new Date("2026-01-15T00:00:00Z");
+  const pad = (value) => String(value).padStart(2, "0");
+  const name = eventBackupFileName(state, date);
   assert.doesNotMatch(name, /[\\/:*?"<>|]/);
-  assert.match(name, /2026-01-15\.json$/);
+  assert.equal(name, `Lottery_Backup_${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}.json`);
 });

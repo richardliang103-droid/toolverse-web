@@ -83,6 +83,7 @@ export function EventLotteryRemote() {
   const [pressing, setPressing] = useState(false);
 
   const channelRef = useRef<RemoteChannelHandle | null>(null);
+  const connectInFlightRef = useRef(false);
   const pendingCommandRef = useRef<PendingRemoteCommand | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [clientId] = useState(() => crypto.randomUUID());
@@ -118,19 +119,56 @@ export function EventLotteryRemote() {
   async function connect(nextPointer: StoredRemoteSessionPointer) {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
+    if (connectInFlightRef.current) return;
+    connectInFlightRef.current = true;
     channelRef.current?.close();
     channelRef.current = null;
     setHostStatus(null);
     setLastHostStatusAt(null);
-    const handle = await connectRemoteChannel(supabase, nextPointer.sessionId, handleMessage);
-    if (!handle) {
-      setPairingError("暫時連不上電腦舞台，請確認網路後重新整理這個頁面");
-      return;
+    try {
+      const handle = await connectRemoteChannel(supabase, nextPointer.sessionId, handleMessage, (status) => {
+        if (status === "disconnected") {
+          channelRef.current = null;
+          setLastHostStatusAt(null);
+          setCommandError("連線中斷，正在重新連線…");
+        } else if (status === "connected") {
+          setCommandError("");
+        }
+      });
+      if (!handle) {
+        setPairingError("暫時連不上電腦舞台，正在等待重新連線");
+        return;
+      }
+      channelRef.current = handle;
+      setPairingError("");
+      // 重新連線後先送 REMOTE_HELLO，等待 HOST_STATUS 之後才開放按鈕。
+      try {
+        await handle.send({ type: "REMOTE_HELLO", clientId });
+      } catch {
+        handle.close();
+        channelRef.current = null;
+        setLastHostStatusAt(null);
+        setCommandError("連線中斷，正在重新連線…");
+      }
+    } finally {
+      connectInFlightRef.current = false;
     }
-    channelRef.current = handle;
-    // 重新連線後先送 REMOTE_HELLO，等待 HOST_STATUS 之後才開放按鈕。
-    void handle.send({ type: "REMOTE_HELLO", clientId });
   }
+
+  // Realtime 連線本身不是可靠訊息佇列；手機切到背景、行動網路切換或短暫斷網
+  // 後，舊 channel 可能仍留在 CLOSED 狀態。只要心跳逾時，就重新建立同一個
+  // channel，並保留 pending command 讓原本的 commandId 繼續重送，不能要求使用者
+  // 重新掃 QR 或產生新的命令。
+  useEffect(() => {
+    if (!pointer || revoked || disconnected || !supabaseConfigured) return;
+    const interval = setInterval(() => {
+      if (isHostStatusStale(lastHostStatusAt, Date.now()) && !connectInFlightRef.current) void connect(pointer);
+    }, 5000);
+    return () => clearInterval(interval);
+    // connect intentionally uses refs for the current channel; pointer/status are the
+    // only values that determine whether the retry loop should exist.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pointer, revoked, disconnected, supabaseConfigured, lastHostStatusAt]);
 
   // 手機端唯一允許呼叫 signInAnonymously() 的地方：網址列帶著有效的 session id
   // 與 pairing token（掃 QR Code 進來）時才會執行。重新整理時若本機已經有先前
@@ -194,7 +232,10 @@ export function EventLotteryRemote() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => () => { if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current); }, []);
+  useEffect(() => () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    connectInFlightRef.current = false;
+  }, []);
 
   // 指令逾時重送：2 秒未收到 ACK 且未達 3 次重送上限就用同一個 commandId 重送，
   // 不會為了重試同一次按下而產生新的 commandId；用完重送次數仍沒有 ACK 就顯示
@@ -212,7 +253,9 @@ export function EventLotteryRemote() {
       }
       if (shouldResendCommand(pending, now)) {
         pendingCommandRef.current = markCommandResent(pending, now);
-        void channelRef.current?.send({ type: "ADVANCE_COMMAND", commandId: pending.commandId, expectedRevision: pending.expectedRevision, sentAt: new Date(now).toISOString() });
+        void channelRef.current?.send({ type: "ADVANCE_COMMAND", commandId: pending.commandId, expectedRevision: pending.expectedRevision, sentAt: new Date(now).toISOString() }).catch(() => {
+          setCommandError("連線中斷，正在重新連線…");
+        });
       }
     }, 300);
     return () => clearInterval(interval);
@@ -230,7 +273,9 @@ export function EventLotteryRemote() {
     pendingCommandRef.current = createPendingCommand(commandId, expectedRevision, now);
     setCommandInFlight(true);
     setCommandError("");
-    void channelRef.current.send({ type: "ADVANCE_COMMAND", commandId, expectedRevision, sentAt: new Date(now).toISOString() });
+    void channelRef.current.send({ type: "ADVANCE_COMMAND", commandId, expectedRevision, sentAt: new Date(now).toISOString() }).catch(() => {
+      setCommandError("連線中斷，正在重新連線…");
+    });
     try { navigator.vibrate?.(40); } catch { /* 震動失敗不影響流程 */ }
   }
 
@@ -242,7 +287,7 @@ export function EventLotteryRemote() {
   function handlePointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
     if (effectiveDisabled) return;
     event.preventDefault();
-    if (buttonState.kind === "prepare") { sendAdvanceCommand(); return; }
+    if (buttonState.kind === "prepare" || buttonState.kind === "clear") { sendAdvanceCommand(); return; }
     if (buttonState.kind !== "draw") return;
     setPressing(true);
     longPressTimerRef.current = setTimeout(() => {
@@ -314,6 +359,8 @@ export function EventLotteryRemote() {
 
   const buttonLabel = buttonState.kind === "prepare"
     ? "顯示下一個獎項"
+    : buttonState.kind === "clear"
+      ? "回到首頁"
     : buttonState.kind === "draw"
       ? "長按開始抽獎"
       : buttonState.reason === "offline" ? "電腦舞台未連線" : "請稍候…";

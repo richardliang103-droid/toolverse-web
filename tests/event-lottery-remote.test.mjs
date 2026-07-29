@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createEmptyEventState, createParticipant, createPrize, createRoster, prepareStagePrize } from "../lib/event-lottery.ts";
+import { createEmptyEventState, createParticipant, createPrize, createRoster, drawEventWinners, prepareStagePrize, previewPrizeWinners, stagePreviewCompleteAt } from "../lib/event-lottery.ts";
 import {
   buildHostStatus,
   commitAcceptedCommand,
@@ -184,6 +184,31 @@ test("buildHostStatus：prepared 狀態下 nextAction 為 draw，drawCount 等�
   assert.equal(status.revision, 3);
 });
 
+test("buildHostStatus：歷史名單預覽動畫未完成前，手機遙控保持鎖定；完成後才可清除或前進", () => {
+  const roster = createRoster("內場");
+  const prize = createPrize({ name: "特獎", totalCount: 1, order: 0 });
+  const participant = createParticipant({ name: "小明", rosterId: roster.id });
+  const drawnAt = new Date("2026-01-01T00:00:00.000Z");
+  const shownAt = new Date("2026-01-01T00:01:00.000Z");
+  const initial = { ...createEmptyEventState(), rosters: [roster], participants: [participant], prizes: [prize], animationDurationMs: 3_000 };
+  const { nextState } = drawEventWinners(initial, prize.id, 1, drawnAt);
+  const preview = previewPrizeWinners(nextState, prize.id, shownAt);
+  const rolling = buildHostStatus(preview, 4, shownAt);
+  assert.equal(rolling.phase, "drawing");
+  assert.equal(rolling.nextAction, "none");
+  assert.equal(rolling.locked, true);
+
+  const atReveal = buildHostStatus(preview, 4, new Date(Date.parse(preview.stagePreview.revealAt)));
+  assert.equal(atReveal.phase, "revealing");
+  assert.equal(atReveal.nextAction, "none");
+  assert.equal(atReveal.locked, true);
+
+  const finished = buildHostStatus(preview, 4, new Date(stagePreviewCompleteAt(preview.stagePreview)));
+  assert.equal(finished.phase, "finished");
+  assert.equal(finished.nextAction, "clear");
+  assert.equal(finished.locked, false);
+});
+
 test("isHostStatusStale：從未收過或超過 8 秒沒收到都視為逾時", () => {
   assert.equal(isHostStatusStale(null), true);
   const now = 1_000_000;
@@ -191,7 +216,7 @@ test("isHostStatusStale：從未收過或超過 8 秒沒收到都視為逾時", 
   assert.equal(isHostStatusStale(now - 7999, now), false);
 });
 
-test("resolveRemoteButtonState：offline／locked／prepare／draw 四種狀態", () => {
+test("resolveRemoteButtonState：offline／locked／prepare／draw／clear 五種狀態", () => {
   assert.deepEqual(resolveRemoteButtonState(null, true), { kind: "disabled", reason: "offline" });
   const lockedStatus = { type: "HOST_STATUS", revision: 0, phase: "drawing", nextAction: "none", eventTitle: "x", prizeName: "特獎", drawCount: 1, locked: true, sentAt: new Date().toISOString() };
   assert.deepEqual(resolveRemoteButtonState(lockedStatus, false), { kind: "disabled", reason: "locked" });
@@ -199,6 +224,8 @@ test("resolveRemoteButtonState：offline／locked／prepare／draw 四種狀態"
   assert.deepEqual(resolveRemoteButtonState(prepareStatus, false), { kind: "prepare" });
   const drawStatus = { ...lockedStatus, nextAction: "draw", locked: false };
   assert.deepEqual(resolveRemoteButtonState(drawStatus, false), { kind: "draw" });
+  const clearStatus = { ...lockedStatus, nextAction: "clear", locked: false };
+  assert.deepEqual(resolveRemoteButtonState(clearStatus, false), { kind: "clear" });
 });
 
 test("PendingRemoteCommand：2 秒未 ACK 且未達重送上限時應重送，達上限後視為失敗", () => {
