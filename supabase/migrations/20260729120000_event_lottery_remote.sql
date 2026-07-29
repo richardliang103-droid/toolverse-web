@@ -176,7 +176,7 @@ grant execute on function public.is_lottery_remote_session_member(text) to authe
 -- 只有 session 的 host 或已配對的手機（authenticated，含匿名登入），且 session
 -- 尚未過期、尚未撤銷，才能加入或送出 broadcast 訊息。第一版不使用 Presence。
 -- ---------------------------------------------------------------------------
-alter table realtime.messages enable row level security;
+-- alter table realtime.messages enable row level security;
 
 drop policy if exists "lottery session members can receive broadcast" on realtime.messages;
 create policy "lottery session members can receive broadcast"
