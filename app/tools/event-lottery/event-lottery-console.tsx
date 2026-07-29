@@ -29,6 +29,7 @@ import {
   pendingRevealCompleteAt,
   remainingSlots,
   resetEventDraws,
+  stagePreviewCompleteAt,
   totalParticipantCount,
   winnersToCsv,
   type EventParticipant,
@@ -304,10 +305,10 @@ export function EventLotteryConsole() {
   useEffect(() => {
     const pending = state.pendingReveal;
     const noticeUntil = state.stageNotice ? Date.parse(state.stageNotice.until) : 0;
-    const previewRevealAt = state.stagePreview ? Date.parse(state.stagePreview.revealAt) : 0;
+    const previewCompleteAt = state.stagePreview ? stagePreviewCompleteAt(state.stagePreview) : 0;
     if ((!pending || ackedDrawIds.has(pending.drawId))
       && (!noticeUntil || Date.now() >= noticeUntil)
-      && (!previewRevealAt || Date.now() >= previewRevealAt)) return;
+      && (!previewCompleteAt || Date.now() >= previewCompleteAt)) return;
     const interval = setInterval(() => setNowTick(Date.now()), 250);
     return () => clearInterval(interval);
     // 刻意只依賴 drawId／revealAt／previewRevealAt 這些原始值，不用整個物件：其他跟
@@ -320,7 +321,7 @@ export function EventLotteryConsole() {
   const pendingReveal = state.pendingReveal;
   const pendingAcked = pendingReveal !== null && ackedDrawIds.has(pendingReveal.drawId);
   const noticeLocked = state.stageNotice !== null && nowTick < Date.parse(state.stageNotice.until);
-  const previewLocked = state.stagePreview !== null && nowTick < Date.parse(state.stagePreview.revealAt);
+  const previewLocked = state.stagePreview !== null && nowTick < stagePreviewCompleteAt(state.stagePreview);
   const drawLocked = noticeLocked || previewLocked || (pendingReveal !== null && !pendingAcked && nowTick < pendingRevealCompleteAt(pendingReveal) + DRAW_LOCK_FALLBACK_MARGIN_MS);
 
   const rosterConfirm = useArmedConfirm();
@@ -466,9 +467,22 @@ export function EventLotteryConsole() {
     if (!rosterId) { showNotice("請先選擇要匯入到哪個名單群組", "error"); return; }
     const { rows, warnings } = parseParticipantsCsv(text);
     if (rows.length === 0) { showNotice("這份 CSV 沒有可用的資料列", "error"); return; }
-    const result = mergeParticipantsFromCsv(state.participants, rows, rosterId);
+    const duplicateRows = rows.filter((row) => Boolean(row.employeeId && findDuplicateEmployeeId(state.participants, row.employeeId)));
+    if (duplicateRows.length > 0) {
+      const sameRosterCount = duplicateRows.filter((row) => findDuplicateEmployeeId(state.participants, row.employeeId)?.rosterId === rosterId).length;
+      const otherRosterCount = duplicateRows.length - sameRosterCount;
+      const details = [
+        sameRosterCount > 0 ? `同一名單會更新 ${sameRosterCount} 筆姓名／部門並重新啟用` : "",
+        otherRosterCount > 0 ? `${otherRosterCount} 筆跨名單重複會略過` : "",
+      ].filter(Boolean).join("；");
+      if (!window.confirm(`發現 ${duplicateRows.length} 筆已存在的員工編號。\n${details}\n\n確定要繼續匯入嗎？`)) {
+        showNotice("已取消 CSV 匯入");
+        return;
+      }
+    }
+    const result = mergeParticipantsFromCsv(state.participants, rows, rosterId, { updateExistingInRoster: duplicateRows.length > 0 });
     commit({ ...state, participants: result.participants });
-    const messages = [`已匯入 ${result.added} 位`];
+    const messages = [`已匯入 ${result.added} 位${result.updated > 0 ? `，更新 ${result.updated} 位` : ""}`];
     if (warnings.length > 0) messages.push(...warnings);
     if (result.skipped.length > 0) messages.push(`略過 ${result.skipped.length} 位重複員工編號：${result.skipped.slice(0, 5).join("、")}${result.skipped.length > 5 ? "…" : ""}`);
     showNotice(messages.join("；"), result.skipped.length > 0 || warnings.length > 0 ? "error" : "info");

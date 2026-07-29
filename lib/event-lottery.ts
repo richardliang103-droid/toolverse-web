@@ -448,27 +448,45 @@ export function parseParticipantsCsv(text: string): { rows: ParsedParticipantRow
       if (row.some((cell) => cell.trim() !== "")) warnings.push(`第 ${index + 1} 列缺少姓名，已略過`);
       return;
     }
+    const employeeId = employeeIdIndex >= 0 ? clampString(row[employeeIdIndex], MAX_NAME_LENGTH) : "";
+    // 原專案把員工編號視為必要欄位；沒有編號的列不能可靠地去重、顯示或追蹤
+    // 失格後的資格恢復，因此不要把它悄悄匯入成一筆空編號資料。
+    if (!employeeId) {
+      warnings.push(`第 ${index + 1} 列缺少員工編號，已略過`);
+      return;
+    }
     rows.push({
       name,
-      employeeId: employeeIdIndex >= 0 ? clampString(row[employeeIdIndex], MAX_NAME_LENGTH) : "",
+      employeeId,
       department: departmentIndex >= 0 ? clampString(row[departmentIndex], MAX_NAME_LENGTH) : "",
     });
   });
   return { rows, warnings };
 }
 
-/** 匯入 CSV 解析出的參加者到指定名單群組；員工編號重複時略過並回報，不會靜默重複加入。 */
+/** 匯入 CSV 解析出的參加者到指定名單群組；可選擇把同群組既有資料更新回原版行為，
+ *  但跨群組重複仍略過並回報，不讓員工編號在不同名單悄悄重複。 */
 export function mergeParticipantsFromCsv(
   existing: EventParticipant[],
   rows: ParsedParticipantRow[],
   rosterId: string,
-): { participants: EventParticipant[]; added: number; skipped: string[] } {
+  options: { updateExistingInRoster?: boolean } = {},
+): { participants: EventParticipant[]; added: number; updated: number; skipped: string[] } {
   const next = [...existing];
   const skipped: string[] = [];
   let added = 0;
+  let updated = 0;
   for (const row of rows) {
     const duplicate = row.employeeId ? findDuplicateEmployeeId(next, row.employeeId) : null;
     if (duplicate) {
+      if (options.updateExistingInRoster && duplicate.rosterId === rosterId) {
+        const duplicateIndex = next.findIndex((participant) => participant.id === duplicate.id);
+        if (duplicateIndex >= 0) {
+          next[duplicateIndex] = { ...duplicate, name: row.name, department: row.department, active: true };
+          updated += 1;
+          continue;
+        }
+      }
       skipped.push(`${row.name}（員工編號 ${row.employeeId} 與「${duplicate.name}」重複）`);
       continue;
     }
@@ -476,7 +494,7 @@ export function mergeParticipantsFromCsv(
     added += 1;
     if (next.length >= MAX_PARTICIPANTS) break;
   }
-  return { participants: next, added, skipped };
+  return { participants: next, added, updated, skipped };
 }
 
 const PRIZE_HEADER_KEYWORDS = ["名稱", "獎項", "name", "prize", "總數量", "數量", "qty", "quantity", "count", "抽獎順序", "顯示順序", "順序", "order", "允許已得獎者再次參加", "allow_all", "allow_repeat", "適用名單"];
@@ -517,7 +535,12 @@ export function parsePrizesCsv(text: string, rosters: Roster[], startOrder: numb
       if (row.some((cell) => cell.trim() !== "")) warnings.push(`第 ${index + 1} 列缺少名稱，已略過`);
       return;
     }
-    const totalCount = clampInt(row[countIndex], 1, 100_000, 1);
+    const parsedCount = Number.parseInt(row[countIndex]?.trim() ?? "", 10);
+    if (!Number.isInteger(parsedCount) || parsedCount < 1) {
+      warnings.push(`第 ${index + 1} 列數量無效，已略過`);
+      return;
+    }
+    const totalCount = clampInt(parsedCount, 1, 100_000, 1);
     const eligibleRosterIds = rostersIndex >= 0 && row[rostersIndex]
       ? row[rostersIndex].split(/[、,]/).map((label) => label.trim()).filter(Boolean).map((label) => rosterByName.get(label)).filter((id): id is string => Boolean(id))
       : [];
@@ -578,6 +601,8 @@ export type DrawOutcome = { winners: WinnerRecord[]; nextState: LotteryEventStat
 
 export const MAX_SEQUENTIAL_TOTAL_MS = 60_000;
 export const DEFAULT_SEQUENTIAL_STEP_MS = 1_000;
+/** 原版在最後一張卡片／一次揭曉出現後，還保留約一秒才回到 WINNERS 可操作狀態。 */
+export const PRESENTATION_SETTLE_MS = 1_000;
 /** 原版前台單人逐次揭曉會保留較完整的 3 秒滾動時間；多人則每人約 1 秒。 */
 export const DEFAULT_SINGLE_SEQUENTIAL_MS = 3_000;
 
@@ -591,11 +616,16 @@ export function sequentialStepMs(winnerCount: number): number {
   return Math.min(DEFAULT_SEQUENTIAL_STEP_MS, MAX_SEQUENTIAL_TOTAL_MS / (winnerCount - 1));
 }
 
-/** 這一輪揭曉動畫完全播完的時間點（毫秒 epoch）；一次揭曉等同 revealAt。 */
+/** 這一輪揭曉動畫與原版最後的展示緩衝都完成的時間點（毫秒 epoch）。 */
 export function pendingRevealCompleteAt(pendingReveal: PendingReveal): number {
   const revealAtMs = Date.parse(pendingReveal.revealAt);
-  if (pendingReveal.revealMode !== "sequential" || pendingReveal.winnerIds.length <= 1) return revealAtMs;
-  return revealAtMs + (pendingReveal.winnerIds.length - 1) * pendingReveal.stepMs;
+  if (pendingReveal.revealMode !== "sequential" || pendingReveal.winnerIds.length <= 1) return revealAtMs + PRESENTATION_SETTLE_MS;
+  return revealAtMs + (pendingReveal.winnerIds.length - 1) * pendingReveal.stepMs + PRESENTATION_SETTLE_MS;
+}
+
+/** 歷史名單預覽沿用原版一次揭曉的最後展示緩衝。 */
+export function stagePreviewCompleteAt(stagePreview: StagePreview): number {
+  return Date.parse(stagePreview.revealAt) + PRESENTATION_SETTLE_MS;
 }
 
 /**
@@ -829,6 +859,7 @@ export function resolveStageAdvance(state: LotteryEventState, now = new Date()):
   // 顯示歷史得獎名單也要等前台動畫播完，避免按鍵／手機遙控在卡片尚未揭曉
   // 時就清掉這個預覽或切到下一個獎項。
   if (display.phase === "preview" && display.rolling) return { action: "none" };
+  if (display.phase === "preview" && state.stagePreview && now.getTime() < stagePreviewCompleteAt(state.stagePreview)) return { action: "none" };
 
   const nextPreparablePrize = [...state.prizes].sort((a, b) => a.order - b.order).find((prize) => remainingSlots(prize) > 0);
 

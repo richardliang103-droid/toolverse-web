@@ -1,4 +1,4 @@
-import { pendingRevealCompleteAt, resolveStageAdvance, resolveStageDisplay, type LotteryEventState } from "./event-lottery.ts";
+import { pendingRevealCompleteAt, resolveStageAdvance, resolveStageDisplay, stagePreviewCompleteAt, type LotteryEventState } from "./event-lottery.ts";
 import type { LotteryRemoteSession, RemoteHostPhase, RemoteMessage } from "./event-lottery-remote-types.ts";
 
 export const EVENT_LOTTERY_REMOTE_STORAGE_KEY = "toolverse:event-lottery:remote-session:v1";
@@ -157,6 +157,7 @@ export function buildHostStatus(state: LotteryEventState, revision: number, now 
   else if (display.phase === "drawing") phase = "drawing";
   else if (display.phase === "revealed") phase = now.getTime() < pendingRevealCompleteAt(display.pendingReveal) ? "revealing" : "finished";
   else if (display.phase === "preview" && display.rolling) phase = "drawing";
+  else if (display.phase === "preview" && state.stagePreview && now.getTime() < stagePreviewCompleteAt(state.stagePreview)) phase = "revealing";
   else phase = "finished";
 
   const activePrize = state.activePrizeId ? state.prizes.find((prize) => prize.id === state.activePrizeId) ?? null : null;

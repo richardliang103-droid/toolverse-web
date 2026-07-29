@@ -457,7 +457,7 @@ export function EventLotteryStage() {
         if (position <= 0) { position = 0; direction = 1; pause = 100; }
         currentList.scrollTop = position;
       }, 30);
-    }, 1_000);
+    }, sequentialRevealMode === "sequential" ? 500 : 1_000);
     return () => {
       if (winnerAutoScrollRef.current) clearInterval(winnerAutoScrollRef.current);
       if (winnerAutoScrollDelayRef.current) clearTimeout(winnerAutoScrollDelayRef.current);

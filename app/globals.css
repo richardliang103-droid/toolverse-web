@@ -1314,9 +1314,9 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 .event-lottery-stage-fullscreen:hover { opacity: 1; }
 
 .event-lottery-stage-header, .event-lottery-stage-main { position: relative; z-index: 1; }
-.event-lottery-stage-header h1 { margin: 0; font-size: clamp(26px, 3vw, 48px); letter-spacing: -.02em; opacity: .88; text-shadow: 0 0 20px #38bdf8, 0 0 40px #38bdf8; }
+.event-lottery-stage-header h1 { margin: 0; font-size: clamp(26px, 3vw, 48px); letter-spacing: -.02em; text-shadow: 0 0 20px #38bdf8, 0 0 40px #38bdf8; }
 .event-lottery-stage-header h1.event-lottery-stage-title-pulsing { animation: event-lottery-title-pulse 2.4s ease-in-out infinite; }
-@keyframes event-lottery-title-pulse { 0%, 100% { opacity: .72; text-shadow: 0 0 0 transparent; } 50% { opacity: 1; text-shadow: 0 0 24px rgba(56,189,248,.48); } }
+@keyframes event-lottery-title-pulse { 0%, 100% { text-shadow: 0 0 20px #38bdf8; } 50% { text-shadow: 0 0 30px #38bdf8, 0 0 50px #38bdf8; } }
 .event-lottery-stage-main { display: grid; place-items: center; gap: 18px; width: min(1200px, calc(100% - 64px)); min-height: 68vh; }
 .event-lottery-stage-idle, .event-lottery-stage-waiting { color: #fbbf24; font-size: clamp(24px, 3vw, 48px); text-shadow: 0 0 20px rgba(251,191,36,.8); }
 .event-lottery-stage-hint { margin: 4px 0 0; color: rgba(245,241,232,.4); font-size: clamp(12px, 1.2vw, 14px); letter-spacing: .02em; }

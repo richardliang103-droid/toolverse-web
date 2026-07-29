@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createEmptyEventState, createParticipant, createPrize, createRoster, drawEventWinners, prepareStagePrize, previewPrizeWinners } from "../lib/event-lottery.ts";
+import { createEmptyEventState, createParticipant, createPrize, createRoster, drawEventWinners, prepareStagePrize, previewPrizeWinners, stagePreviewCompleteAt } from "../lib/event-lottery.ts";
 import {
   buildHostStatus,
   commitAcceptedCommand,
@@ -198,7 +198,12 @@ test("buildHostStatus：歷史名單預覽動畫未完成前，手機遙控保�
   assert.equal(rolling.nextAction, "none");
   assert.equal(rolling.locked, true);
 
-  const finished = buildHostStatus(preview, 4, new Date(Date.parse(preview.stagePreview.revealAt)));
+  const atReveal = buildHostStatus(preview, 4, new Date(Date.parse(preview.stagePreview.revealAt)));
+  assert.equal(atReveal.phase, "revealing");
+  assert.equal(atReveal.nextAction, "none");
+  assert.equal(atReveal.locked, true);
+
+  const finished = buildHostStatus(preview, 4, new Date(stagePreviewCompleteAt(preview.stagePreview)));
   assert.equal(finished.phase, "finished");
   assert.equal(finished.nextAction, "clear");
   assert.equal(finished.locked, false);
