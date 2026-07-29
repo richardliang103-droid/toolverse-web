@@ -570,43 +570,37 @@ export function EventLotteryStage() {
 
       <header className="event-lottery-stage-header">
         <h1 className={stageFocused ? "event-lottery-stage-title-pulsing" : undefined}>{state.eventTitle}</h1>
+        {!transientError && display.phase === "idle" && <h2>準備迎接下一個幸運兒！</h2>}
+        {!transientError && display.phase === "notice" && <h2>{display.message}</h2>}
+        {!transientError && display.phase !== "idle" && display.phase !== "notice" && activePrize && (
+          <>
+            {activePrize.imageDataUrl && <img className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
+            <h2>
+              {display.phase === "prepared"
+                ? `即將抽出：${activePrizeDisplayName} 共 ${stageDrawCount} 名`
+                : display.phase === "drawing" || previewRolling
+                  ? `【${activePrizeDisplayName}】 抽獎進行中...`
+                  : `🎉 恭喜【${activePrizeDisplayName}】得獎者 🎉`}
+            </h2>
+          </>
+        )}
       </header>
 
       <main className="event-lottery-stage-main">
         {transientError && <p className="event-lottery-stage-error">{transientError}</p>}
 
-        {!transientError && display.phase === "idle" && (
-          <>
-            <p className="event-lottery-stage-idle">準備迎接下一個幸運兒！</p>
-            <p className="event-lottery-stage-hint">按空白鍵、→ 或點擊畫面／用簡報筆開始抽獎</p>
-          </>
+        {!transientError && display.phase === "drawing" && activePrize && (
+          display.pendingReveal.revealMode === "sequential"
+            ? <div className={`event-lottery-stage-winner-list ${winnerScale}`} aria-live="polite"><div className="event-lottery-stage-winner-card event-lottery-stage-rolling-card"><span>{rollingName}</span></div></div>
+            : <div className="event-lottery-stage-slot-machine" aria-live="polite"><div className="event-lottery-stage-slot-window"><span>{rollingName}</span></div></div>
         )}
 
-        {!transientError && display.phase === "notice" && (
-          <div className="event-lottery-stage-gratitude" aria-live="assertive">
-            <p>{display.message}</p>
-            <small>即將準備重抽 1 人</small>
-          </div>
-        )}
-
-        {!transientError && (display.phase === "prepared" || display.phase === "drawing" || previewRolling) && activePrize && (
-          <div className="event-lottery-stage-prize">
-            {activePrize.imageDataUrl && <img className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
-            <h2>{display.phase === "prepared" ? `即將抽出：${activePrizeDisplayName} 共 ${stageDrawCount} 名` : `【${activePrizeDisplayName}】 抽獎進行中...`}</h2>
-            {display.phase === "drawing"
-              ? display.pendingReveal.revealMode === "sequential"
-                ? <div className="event-lottery-stage-sequence-drawing" aria-live="polite"><div className="event-lottery-stage-rolling-card"><span>{rollingName}</span></div></div>
-                : <div className="event-lottery-stage-slot-machine" aria-live="polite"><div className="event-lottery-stage-slot-window"><span>{rollingName}</span></div><p className="event-lottery-stage-spin">抽獎進行中…{display.pendingReveal.winnerIds.length > 1 ? `（${display.pendingReveal.winnerIds.length} 位）` : ""}<span className="event-lottery-stage-spin-ring" aria-hidden="true" /></p></div>
-              : previewRolling
-                ? <div className="event-lottery-stage-slot-machine" aria-live="polite"><div className="event-lottery-stage-slot-window"><span>{rollingName}</span></div><p className="event-lottery-stage-spin">抽獎進行中…<span className="event-lottery-stage-spin-ring" aria-hidden="true" /></p></div>
-                : <p className="event-lottery-stage-hint">再按一次開始抽獎</p>}
-          </div>
+        {!transientError && previewRolling && activePrize && (
+          <div className="event-lottery-stage-slot-machine" aria-live="polite"><div className="event-lottery-stage-slot-window"><span>{rollingName}</span></div></div>
         )}
 
         {!transientError && (display.phase === "revealed" || (display.phase === "preview" && !display.rolling)) && activePrize && (
           <div className={`event-lottery-stage-reveal${display.phase === "preview" ? " event-lottery-stage-preview" : ""}`}>
-            {activePrize.imageDataUrl && <img className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
-            <h2>{sequentialStillRolling ? `【${activePrizeDisplayName}】 抽獎進行中...` : `🎉 恭喜【${activePrizeDisplayName}】得獎者 🎉`}</h2>
             <div ref={winnerListRef} className={`event-lottery-stage-winner-list ${winnerScale}`}>
               {revealedWinners.map((winner, index) => (
                 <div className={`event-lottery-stage-winner-card${winner.disqualified ? " event-lottery-stage-winner-disqualified" : ""}`} style={{ animationDelay: `${Math.min(index * 0.08, 3)}s` }} key={winner.id}>
@@ -616,7 +610,7 @@ export function EventLotteryStage() {
                   {winner.disqualified && <span className="event-lottery-stage-winner-tag">已失格</span>}
                 </div>
               ))}
-              {sequentialStillRolling && <div className="event-lottery-stage-rolling-card"><span>{rollingName}</span></div>}
+              {sequentialStillRolling && <div className="event-lottery-stage-winner-card event-lottery-stage-rolling-card"><span>{rollingName}</span></div>}
             </div>
           </div>
         )}
