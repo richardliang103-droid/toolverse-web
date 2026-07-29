@@ -1249,7 +1249,7 @@ export function EventLotteryConsole() {
                     >
                       {prize.imageDataUrl
                         ? <img className="event-lottery-prize-thumb" src={prize.imageDataUrl} alt="" />
-                        : <span className="event-lottery-prize-thumb event-lottery-prize-thumb-empty" aria-hidden="true">🖼️<small>拖曳或點選圖片</small></span>}
+                        : <span className="event-lottery-prize-thumb event-lottery-prize-thumb-empty" aria-hidden="true">🖼️<small>拖曳或<br />點選圖片</small></span>}
                     </div>
                     <div className="event-lottery-prize-actions">
                       <button className="gantt-row-delete" type="button" aria-label="往上移" disabled={index === 0} onClick={() => movePrize(prize.id, -1)}>↑</button>
