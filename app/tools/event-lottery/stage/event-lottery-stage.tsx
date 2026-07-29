@@ -168,6 +168,15 @@ export function EventLotteryStage() {
     };
   }, []);
 
+  function sendRemote(message: RemoteMessage) {
+    const channel = remoteChannelRef.current;
+    if (!channel) return;
+    void channel.send(message).catch(() => {
+      // Reconnect polling will recreate the private channel; a lost status/ACK must
+      // never become an unhandled promise rejection or affect the local draw.
+    });
+  }
+
   // ---- 手機遙控：舞台是唯一的 Remote Command Host ----
   // 手機遙控是 optional enhancement；Supabase 沒設定、連不上、session 過期或被
   // 撤銷，都只會讓這個區塊悄悄不生效，不影響上面鍵盤／滑鼠／簡報筆的本機操作。
@@ -199,14 +208,11 @@ export function EventLotteryStage() {
   }, []);
 
   function sendHostStatus() {
-    const channel = remoteChannelRef.current;
-    if (!channel) return;
     const currentState = loadEventState();
-    void channel.send(buildHostStatus(currentState, currentState.stateRevision, new Date()));
+    sendRemote(buildHostStatus(currentState, currentState.stateRevision, new Date()));
   }
 
   async function handleRemoteMessage(sessionId: string, expiresAt: string, message: RemoteMessage) {
-    const channel = remoteChannelRef.current;
     if (message.type === "REMOTE_HELLO") {
       sendHostStatus();
       return;
@@ -220,18 +226,18 @@ export function EventLotteryStage() {
     const decision = resolveIncomingCommand(commandLog, session, message.commandId, message.expectedRevision, new Date());
 
     if (decision.kind === "session-invalid") {
-      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: decision.revision, reason: "session-invalid" });
+      sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: decision.revision, reason: "session-invalid" });
       return;
     }
     if (decision.kind === "duplicate") {
       // ACK 遺失後的重送：不再執行第二次抽選，只重新回報這個 commandId 當初的結果。
       remoteCommandLogRef.current = commandLog;
-      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: true, revision: decision.revision });
+      sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: true, revision: decision.revision });
       sendHostStatus();
       return;
     }
     if (decision.kind === "stale-revision") {
-      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: decision.revision, reason: "stale-revision" });
+      sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: decision.revision, reason: "stale-revision" });
       sendHostStatus();
       return;
     }
@@ -242,7 +248,7 @@ export function EventLotteryStage() {
     if (action.action === "none") {
       // 狀態可能在手機送出後先被本機操作改變；這不是成功的 no-op，也不能
       // 消耗 commandId，否則手機會收到 accepted 卻永遠無法重試。
-      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: currentState.stateRevision, reason: "locked" });
+      sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: currentState.stateRevision, reason: "locked" });
       sendHostStatus();
       return;
     }
@@ -253,7 +259,7 @@ export function EventLotteryStage() {
         : startDraw(currentState, action.prizeId, action.count, post);
 
     if (!result.ok) {
-      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: remoteCommandLogRef.current.revision, reason: result.reason });
+      sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: remoteCommandLogRef.current.revision, reason: result.reason });
       return;
     }
 
@@ -264,7 +270,7 @@ export function EventLotteryStage() {
     } catch {
       /* 儲存失敗不影響這次指令已經執行成功，只是下次重新整理後去重清單會重來 */
     }
-    void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: true, revision: remoteCommandLogRef.current.revision });
+    sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: true, revision: remoteCommandLogRef.current.revision });
     sendHostStatus();
   }
 
@@ -272,10 +278,14 @@ export function EventLotteryStage() {
     if (!remotePointer || !isSupabaseConfigured() || typeof window === "undefined") return;
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
+    const connectedSupabase = supabase;
     let cancelled = false;
     const sessionId = remotePointer.sessionId;
     const expiresAt = remotePointer.expiresAt;
     let releaseHostLock: (() => void) | null = null;
+    let connectionInFlight = false;
+    let connectionGeneration = 0;
+    let reconnectTimer: ReturnType<typeof setInterval> | null = null;
     remoteRevokedRef.current = false;
 
     let storedLog: unknown = null;
@@ -293,25 +303,46 @@ export function EventLotteryStage() {
       if (cancelled) { hostLock.release(); return; }
       releaseHostLock = hostLock.release;
 
-      const handle = await connectRemoteChannel(supabase, sessionId, (message) => {
-        if (message.type === "SESSION_REVOKED") {
-          remoteRevokedRef.current = true;
-          remoteChannelRef.current?.close();
+      async function connectHost() {
+        if (cancelled || remoteRevokedRef.current || connectionInFlight || remoteChannelRef.current) return;
+        connectionInFlight = true;
+        const generation = ++connectionGeneration;
+        const handle = await connectRemoteChannel(connectedSupabase, sessionId, (message) => {
+          if (message.type === "SESSION_REVOKED") {
+            remoteRevokedRef.current = true;
+            remoteChannelRef.current?.close();
+            remoteChannelRef.current = null;
+            if (remoteHeartbeatRef.current) { clearInterval(remoteHeartbeatRef.current); remoteHeartbeatRef.current = null; }
+            return;
+          }
+          void handleRemoteMessage(sessionId, expiresAt, message);
+        }, (status) => {
+          if (status !== "disconnected" || generation !== connectionGeneration) return;
           remoteChannelRef.current = null;
           if (remoteHeartbeatRef.current) { clearInterval(remoteHeartbeatRef.current); remoteHeartbeatRef.current = null; }
+        });
+        connectionInFlight = false;
+        if (!handle) return;
+        if (cancelled || remoteRevokedRef.current || generation !== connectionGeneration) {
+          handle.close();
           return;
         }
-        void handleRemoteMessage(sessionId, expiresAt, message);
-      });
-      if (!handle) { releaseHostLock?.(); releaseHostLock = null; return; }
-      if (cancelled) { handle.close(); releaseHostLock?.(); releaseHostLock = null; return; }
-      remoteChannelRef.current = handle;
-      sendHostStatus();
-      remoteHeartbeatRef.current = setInterval(() => sendHostStatus(), HOST_STATUS_HEARTBEAT_MS);
+        remoteChannelRef.current = handle;
+        sendHostStatus();
+        remoteHeartbeatRef.current = setInterval(() => sendHostStatus(), HOST_STATUS_HEARTBEAT_MS);
+      }
+
+      await connectHost();
+      // A Realtime channel can disappear without a page-level error (background tab,
+      // mobile network handoff, or a temporary service timeout). Re-establish the same
+      // private channel while retaining the same command log and session pointer.
+      reconnectTimer = setInterval(() => { void connectHost(); }, 5000);
     })();
 
     return () => {
       cancelled = true;
+      connectionGeneration += 1;
+      if (reconnectTimer) { clearInterval(reconnectTimer); reconnectTimer = null; }
       if (remoteHeartbeatRef.current) { clearInterval(remoteHeartbeatRef.current); remoteHeartbeatRef.current = null; }
       remoteChannelRef.current?.close();
       remoteChannelRef.current = null;
@@ -542,7 +573,8 @@ export function EventLotteryStage() {
     .filter((winner): winner is NonNullable<typeof winner> => Boolean(winner));
   const hasBackground = Boolean(state.backgroundImageDataUrl);
   const rollingPool = activePrize ? candidatePool(state, activePrize.id) : [];
-  const rollingName = rollingPool.length > 0 ? rollingPool[Math.floor(nowTick / 50) % rollingPool.length]?.name ?? "???" : "???";
+  const rollingNames = rollingPool.length > 0 ? rollingPool.map((participant) => participant.name) : ["? ? ?", "- - -"];
+  const rollingName = rollingNames[Math.floor(nowTick / 50) % rollingNames.length] ?? "? ? ?";
   const stageDrawCount = activePrize ? Math.min(state.stageDrawCount, remainingSlots(activePrize), rollingPool.length) : 0;
   // 原版會在抽獎開始時就依「本輪總人數」決定版型；逐一揭曉時不能因為
   // 目前只出現第一張卡片，就先套用單人超大版型，否則第二張出現時畫面會跳動。

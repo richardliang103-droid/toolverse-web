@@ -19,6 +19,7 @@ import {
   MAX_DRAW_COUNT_PER_ROUND,
   MAX_IMAGE_DATA_URL_LENGTH,
   MAX_NAME_LENGTH,
+  MAX_TITLE_LENGTH,
   MAX_PARTICIPANTS,
   MAX_PRIZES,
   MAX_ROSTERS,
@@ -202,7 +203,7 @@ export function EventLotteryConsole() {
   }
 
   function handleUpdateEventTitle() {
-    const title = eventTitleDraft.trim().slice(0, MAX_NAME_LENGTH) || "🎊 歡樂公司尾牙 🎊";
+    const title = eventTitleDraft.trim().slice(0, MAX_TITLE_LENGTH) || "🎊 歡樂公司尾牙 🎊";
     setEventTitleDraft(title);
     commit({ ...state, eventTitle: title });
   }
@@ -957,7 +958,7 @@ export function EventLotteryConsole() {
         <div className="panel-header"><h2>活動設定</h2><span className="panel-meta">共 {totalParticipantCount(state.participants)} 人 · 可抽 {availableParticipants.length} 人</span></div>
         <label className="event-lottery-field" htmlFor="event-title">前台大標題
           <div className="event-lottery-title-editor">
-            <input id="event-title" className="key-input" type="text" value={eventTitleDraft} maxLength={MAX_NAME_LENGTH} onChange={(event) => setEventTitleDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") handleUpdateEventTitle(); }} />
+            <input id="event-title" className="key-input" type="text" value={eventTitleDraft} maxLength={MAX_TITLE_LENGTH} onChange={(event) => setEventTitleDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") handleUpdateEventTitle(); }} />
             <button className="button button-small button-blue" type="button" onClick={handleUpdateEventTitle}>更新</button>
           </div>
         </label>
@@ -1400,21 +1401,21 @@ export function EventLotteryConsole() {
               <button className="button button-small button-secondary" type="button" onClick={() => setShowHelp(false)} aria-label="關閉操作說明">×</button>
             </div>
             <h3>一、事前準備 (資料匯入)</h3>
-            <p>1. <strong>匯入人員名單</strong>：從左側「名單群組」為 A/B/C 名單選擇 CSV 編碼並上傳。上傳前請確認檔案編碼（UTF-8 或 ANSI），<strong>避免產生亂碼</strong>。</p>
-            <p>2. <strong>設定獎項與圖片</strong>：從右側「獎項設定與清單」手動新增獎項，或批次匯入 CSV 檔。您可以直接在獎項表格中點選名稱進行<strong>快速修改</strong>，也可以從資料夾將圖片直接<strong>拖曳</strong>進入表格的「圖片 (可拖曳)」欄位。</p>
-            <p>3. <strong>獎項排序</strong>：在獎項清單中，按住獎項左側的「☰」符號上下拖曳，即可調整抽獎順序；系統會自動儲存，也可以在新增時指定接在第幾項後。</p>
+            <p>1. <strong>匯入人員名單</strong>：從左側「名單與報表」上傳 CSV 檔（預設提供 A/B/C 三組名單）。上傳前請確認檔案編碼（UTF-8 或 ANSI），<strong>避免產生亂碼</strong>。</p>
+            <p>2. <strong>設定獎項與圖片</strong>：從右側「獎項設定與清單」手動新增獎項，或批次匯入 CSV 檔。您可以直接在獎項表格中點選名稱進行<strong>快速修改</strong>，也可以從資料夾將圖片直接<strong>拖曳</strong>進入表格的「圖片(可拖曳)」欄位。</p>
+            <p>3. <strong>獎項排序</strong>：在獎項清單中，按住獎項左側的「☰」符號上下拖曳，即可調整抽獎順序；系統會自動存檔，也可以在新增時指定接在第幾項後。</p>
             <h3>二、抽獎設定與同步</h3>
             <p>1. <strong>選擇抽獎模式</strong>：在上方控制列選擇「逐次抽出」（動畫一張一張翻出）或「一次抽出」（依據設定的<strong>抽獎動畫時間</strong>滾動後一次全開）。有音效需求也可在此開啟。</p>
-            <p>2. <strong>準備畫面</strong>：在「抽獎控制」選擇獎項並點擊<strong>同步顯示於前台</strong>，前台會切換至該獎項的「即將抽出」預備畫面；上方的黃底提示也會即時更新目前的預定進度。若要臨時改抽後續某個獎項，可直接在控制台選擇。</p>
-            <p>3. <strong>前台快捷操控</strong>：可以直接在擁有前台大螢幕的電腦上按下<strong>空白鍵／Enter／PageDown／鍵盤方向鍵右鍵</strong>來觸發開獎，也支援滑鼠、投影筆與手機遙控。前台支援<strong>智慧順序記憶</strong>，即使中途從後台跳著開獎，也會自動找到下一個尚未開出的獎項。</p>
+            <p>2. <strong>準備畫面</strong>：確認控制視窗有選到前台的視窗，會看到最上方前台大標題在閃爍，代表已可進行抽獎，系統即會按照匯入獎項名單順序抽出。若有要臨時改抽後續某個獎項，可在「抽獎控制」選擇獎項並點擊<strong>同步顯示於前台</strong>；若前台螢幕有開啟，此時會切換至該獎項的「即將抽出」預備畫面，上方的黃底提示也會即時更新目前的預定進度。</p>
+            <p>3. <strong>前台快捷操控</strong>：可以直接在擁有前台大螢幕的電腦上按下<strong>空白鍵 / PageDown / 鍵盤方向鍵右鍵</strong>來觸發開獎（也支援 Enter、滑鼠、投影筆與手機遙控）。前台支援<strong>智慧順序記憶</strong>，即使中途從後台跳著開獎，也會自動找到下一個尚未開出的獎項。</p>
             <h3>三、突發狀況與歷史紀錄</h3>
-            <p>1. <strong>取消資格與重抽</strong>：若有人不在現場或要捐出來重抽，請在「歷史中獎紀錄」點選<strong>顯示/關閉 取消重抽按鈕</strong>後，點擊該名旁邊的<strong>取消重抽</strong>。前台會顯示「感謝無私奉獻」3 秒，保留歷史紀錄並歸還一個獎項名額，之後回到該獎項的重抽準備畫面。</p>
+            <p>1. <strong>取消資格與重抽</strong>：若有人不在現場或要捐出來重抽，請在「歷史中獎紀錄」點選<strong>顯示/關閉 取消重抽按鈕</strong>後，點擊該名旁邊的<strong>取消重抽</strong>。前台會顯示「感謝無私奉獻」3 秒，保留失格歷史紀錄並歸還一個獎項名額，隨後自動切換至重抽 1 人的畫面！</p>
             <p>2. <strong>重新顯示名單</strong>：若不小心切到了其他畫面，可隨時在右側獎項表格點擊<strong>👁️</strong>（顯示名單）按鈕，前台將立即調閱並切回該獎項的歷史中獎名單。</p>
-            <p>3. <strong>極端大量名單展示</strong>：系統會依得獎人數智慧縮放卡片；當一次抽出的人數較多時，前台會在短暫停留後自動啟動平滑來回捲動（Auto-Scroll），確保所有名單都能被看見。</p>
+            <p>3. <strong>極端大量名單展示</strong>：系統自帶智慧縮排，可將大量中獎卡片集中於同一畫面。當您一次抽出超過預設排版數量時，前台螢幕會在 1 秒後<strong>自動啟動平滑來回捲動 (Auto-Scroll)</strong>，確保所有的名單能自動播放被看見。</p>
             <h3>四、系統備份與還原</h3>
-            <p>1. <strong>📦 匯出備份</strong>：按右上角的按鈕，系統會將一切資料打包為單一的 JSON 檔案下載。<strong>備份範圍包含</strong>：手動輸入的大標題、抽獎模式與自訂動畫秒數、所有人員名單、獎項與對應圖片、抽獎歷史結果、取消資格紀錄，以及自訂前台背景。一鍵帶走，支援跨電腦轉移。</p>
-            <p>2. <strong>📥 匯入備份</strong>：選擇先前產生的備份檔，系統便會復原到該份記錄的完整進度，包含已抽走的名額與歷史紀錄，適合活動當天更換硬體設備時接續活動。</p>
-            <p>3. <strong>🛑 重置系統資料</strong>：點擊後會把所有活動資料一次清除並回到預設值（警告：此操作不可逆，建議於彩排結束或新活動開始前使用）。</p>
+            <p>1. <strong>📦 匯出備份</strong>：按右上角的按鈕，系統會將一切資料打包為單一的 <code>.json</code> 檔案下載。<strong>備份範圍包含</strong>：手動輸入的大標題、抽獎模式與自訂動畫秒數、所有人員名單、所有設定好的獎項與其對應的圖片、抽獎歷史結果、取消資格紀錄，甚至是自訂的前台背景底圖。一鍵帶走，支援跨電腦轉移。</p>
+            <p>2. <strong>📥 匯入備份</strong>：點選匯入並選擇上述產生的備份檔，系統便會瞬間復原到該份記錄的完整進度，包含那些已經被抽走的名額與紀錄，適合活動當天更換硬體設備時無縫接軌。</p>
+            <p>3. <strong>🛑 重置系統資料</strong>：點擊後會把上述「所有」的系統資料一次大洗白，包含所有狀態回到預設值。（警告：此操作不可逆，建議於彩排結束或來年新活動前操作）。</p>
           </section>
         </div>
       )}
