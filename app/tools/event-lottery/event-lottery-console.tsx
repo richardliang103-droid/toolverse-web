@@ -40,6 +40,7 @@ import { downloadBlob } from "@/lib/download";
 import {
   buildPairingUrl,
   EVENT_LOTTERY_REMOTE_STORAGE_KEY,
+  EVENT_LOTTERY_REMOTE_PAIRING_TOKEN_KEY,
   generatePairingToken,
   isRemoteSessionUsable,
   sanitizeStoredRemoteSessionPointer,
@@ -244,7 +245,11 @@ export function EventLotteryConsole() {
     const handle = await connectRemoteChannel(supabase, sessionId, (message) => {
       // 控制台只被動觀察配對狀態（手機連上時會送 REMOTE_HELLO），實際指令一律由
       // 舞台處理，避免控制台與舞台同時處理同一個手機命令。
-      if (message.type === "REMOTE_HELLO") setRemotePairedAt(Date.now());
+      if (message.type === "REMOTE_HELLO") {
+        setRemotePairedAt(Date.now());
+        try { window.sessionStorage.removeItem(EVENT_LOTTERY_REMOTE_PAIRING_TOKEN_KEY); } catch { /* sessionStorage 不可用不影響配對 */ }
+        setRemoteQrDataUrl("");
+      }
     });
     remoteChannelRef.current = handle;
   }
@@ -258,6 +263,14 @@ export function EventLotteryConsole() {
       if (pointer && isRemoteSessionUsable({ expiresAt: pointer.expiresAt, revokedAt: null })) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setRemoteSession(pointer);
+        let pairingToken: string | null = null;
+        try { pairingToken = window.sessionStorage.getItem(EVENT_LOTTERY_REMOTE_PAIRING_TOKEN_KEY); } catch { /* sessionStorage 不可用仍要繼續訂閱既有 session */ }
+        if (pairingToken && /^[0-9a-f]{64}$/i.test(pairingToken)) {
+          void import("qrcode").then(({ default: QRCode }) => QRCode.toDataURL(
+            buildPairingUrl(window.location.origin, pointer.sessionId, pairingToken),
+            { errorCorrectionLevel: "M", margin: 2, width: 320 },
+          )).then((dataUrl) => { if (!cancelled) setRemoteQrDataUrl(dataUrl); }).catch(() => undefined);
+        }
         void subscribeRemoteChannel(pointer.sessionId).then(() => { if (cancelled) remoteChannelRef.current?.close(); });
       } else if (raw) {
         window.localStorage.removeItem(EVENT_LOTTERY_REMOTE_STORAGE_KEY);
@@ -286,6 +299,7 @@ export function EventLotteryConsole() {
       if (!row) throw new Error("建立遙控 session 失敗");
       const pointer: StoredRemoteSessionPointer = { sessionId: row.id, topic: row.topic, expiresAt: row.expires_at };
       window.localStorage.setItem(EVENT_LOTTERY_REMOTE_STORAGE_KEY, JSON.stringify(pointer));
+      try { window.sessionStorage.setItem(EVENT_LOTTERY_REMOTE_PAIRING_TOKEN_KEY, token); } catch { /* 沒有 sessionStorage 仍可在目前畫面顯示 QR */ }
       setRemoteSession(pointer);
       setRemotePairedAt(null);
 
@@ -318,6 +332,7 @@ export function EventLotteryConsole() {
       remoteChannelRef.current?.close();
       remoteChannelRef.current = null;
       window.localStorage.removeItem(EVENT_LOTTERY_REMOTE_STORAGE_KEY);
+      try { window.sessionStorage.removeItem(EVENT_LOTTERY_REMOTE_PAIRING_TOKEN_KEY); } catch { /* ignore */ }
       setRemoteSession(null);
       setRemoteQrDataUrl("");
       setRemotePairedAt(null);
@@ -1142,7 +1157,8 @@ export function EventLotteryConsole() {
               <label className="number-field" htmlFor="prize-insert-after">接在此順序後（選填）
                 <input id="prize-insert-after" className="number-input" type="number" min={1} value={prizeInsertAfter} onChange={(event) => setPrizeInsertAfter(event.target.value)} />
               </label>
-              <button className="button button-small button-secondary" type="button" onClick={() => newPrizeImageInputRef.current?.click()}>{prizeImageDataUrl ? "更換獎品圖片" : "上傳獎品圖片"}</button>
+              <span className="event-lottery-upload-label">上傳獎品圖片:</span>
+              <button id="new-prize-image" className="button button-small button-secondary" type="button" onClick={() => newPrizeImageInputRef.current?.click()}>{prizeImageDataUrl ? "更換獎品圖片" : "上傳獎品圖片"}</button>
               <input ref={newPrizeImageInputRef} className="file-input" type="file" accept="image/*" aria-label="上傳新獎項的獎品圖片" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleNewPrizeImage(file); event.target.value = ""; }} />
               <label className="check-row"><input type="checkbox" checked={prizeAllowRepeat} onChange={(event) => setPrizeAllowRepeat(event.target.checked)} />全員重抽</label>
               <button className="button button-small button-blue" type="button" onClick={handleAddPrize}>手動新增獎項</button>
@@ -1159,7 +1175,7 @@ export function EventLotteryConsole() {
           </div>
 
           <div className="event-lottery-subsection">
-            <h3>CSV 批次匯入</h3>
+            <h3>批次匯入:</h3>
             <p className="lottery-panel-note">欄位：抽獎順序,獎項,數量；支援 UTF-8／ANSI。CSV 會套用下方勾選的對象名單。</p>
             <div className="event-lottery-inline-form">
               <select className="key-input" value={prizeCsvEncoding} onChange={(event) => setPrizeCsvEncoding(event.target.value === "big5" ? "big5" : "utf-8")} aria-label="獎項 CSV 編碼">
@@ -1169,7 +1185,8 @@ export function EventLotteryConsole() {
               <button className="button button-small button-secondary" type="button" onClick={() => prizeCsvFileInputRef.current?.click()}>選擇獎項 CSV</button>
               <input ref={prizeCsvFileInputRef} className="file-input" type="file" accept="text/csv,.csv" aria-label="選擇獎項 CSV 檔案" onChange={(event) => setPrizeCsvFile(event.target.files?.[0] ?? null)} />
               <span className="panel-meta" title={prizeCsvFile?.name}>{prizeCsvFile?.name ?? "尚未選擇檔案"}</span>
-              <button className="button button-small button-blue" type="button" onClick={() => void uploadPrizeCsv()} disabled={!prizeCsvFile}>上傳獎項 CSV</button>
+              <span className="event-lottery-upload-label">上傳獎項清單CSV:</span>
+              <button id="prize-csv-upload-button" className="button button-small button-blue" type="button" onClick={() => void uploadPrizeCsv()} disabled={!prizeCsvFile}>上傳獎項 CSV</button>
               <button className="button button-small button-secondary" type="button" onClick={() => downloadCsvTemplate(PRIZE_CSV_TEMPLATE, "獎品項目清單範例.csv")}>📥 下載獎品項目清單範例</button>
             </div>
             <fieldset className="event-lottery-roster-checks">
@@ -1192,10 +1209,10 @@ export function EventLotteryConsole() {
                   <span />
                   <span>#</span>
                   <span>獎項名稱</span>
-                  <span>已抽／總數</span>
+                  <span>已抽/總數</span>
                   <span>對象名單</span>
-                  <span>旗標</span>
-                  <span>圖片（可拖曳）</span>
+                  <span>允許全員重抽</span>
+                  <span>圖片 (可拖曳)</span>
                   <span>操作</span>
                 </div>
                 <ul className="event-lottery-prize-list">
@@ -1215,10 +1232,11 @@ export function EventLotteryConsole() {
                       <input key={`${prize.id}:${prize.name}`} className="key-input" type="text" defaultValue={prize.name} maxLength={MAX_NAME_LENGTH} onBlur={(event) => handleUpdatePrize(prize.id, { name: event.target.value.trim().slice(0, MAX_NAME_LENGTH) || prize.name })} aria-label={`獎項名稱：${prize.name}`} />
                     </div>
                     <div className="event-lottery-prize-qty">
-                      <label className="number-field">總數量
+                      <span className="event-lottery-prize-count"><strong>{prize.drawnCount}</strong><span aria-hidden="true">/</span>{prize.totalCount}</span>
+                      <label className="number-field event-lottery-prize-edit-count">總數量
                         <input className="number-input" type="number" min={prize.drawnCount || 1} value={prize.totalCount} onChange={(event) => handleUpdatePrize(prize.id, { totalCount: Math.max(prize.drawnCount || 1, Math.round(Number(event.target.value)) || prize.totalCount) })} />
                       </label>
-                      <span className="panel-meta">已抽 {prize.drawnCount} · 剩餘 {remainingSlots(prize)}</span>
+                      <span className="panel-meta">剩餘 {remainingSlots(prize)}</span>
                     </div>
                     <div className="event-lottery-prize-target" title="可參加的名單群組">
                       {prize.eligibleRosterIds.length === 0
@@ -1254,7 +1272,7 @@ export function EventLotteryConsole() {
                     <div className="event-lottery-prize-actions">
                       <button className="gantt-row-delete" type="button" aria-label="往上移" disabled={index === 0} onClick={() => movePrize(prize.id, -1)}>↑</button>
                       <button className="gantt-row-delete" type="button" aria-label="往下移" disabled={index === orderedPrizes.length - 1} onClick={() => movePrize(prize.id, 1)}>↓</button>
-                      <button className="button button-small button-secondary" type="button" onClick={() => handleShowPrizeWinners(prize.id)} disabled={!state.winners.some((winner) => winner.prizeId === prize.id)}>👁️ 顯示名單</button>
+                      <button className="button button-small button-secondary" type="button" title="顯示前台名單" aria-label={`顯示「${prize.name}」的前台名單`} onClick={() => handleShowPrizeWinners(prize.id)} disabled={!state.winners.some((winner) => winner.prizeId === prize.id)}>👁️</button>
                       <button className="button button-small button-secondary" type="button" onClick={() => openPrizeEditor(prize)}>編輯</button>
                       <button className="button button-small button-secondary" type="button" onClick={() => prizeImageInputRefs.current.get(prize.id)?.click()}>{prize.imageDataUrl ? "更換圖片" : "上傳圖片"}</button>
                       <input ref={(element) => { prizeImageInputRefs.current.set(prize.id, element); }} className="file-input" type="file" accept="image/*" aria-label={`上傳「${prize.name}」的圖片`} onChange={(event) => { const file = event.target.files?.[0]; if (file) void handlePrizeImage(prize.id, file); event.target.value = ""; }} />
@@ -1381,22 +1399,22 @@ export function EventLotteryConsole() {
               <h2 id="event-lottery-help-title">📖 抽獎系統操作說明</h2>
               <button className="button button-small button-secondary" type="button" onClick={() => setShowHelp(false)} aria-label="關閉操作說明">×</button>
             </div>
-            <h3>一、事前準備（資料匯入）</h3>
-            <p>1. <strong>匯入人員名單</strong>：從左側「人員名單」為 A／B／C 名單選擇 CSV 編碼並上傳。上傳前請確認 UTF-8 或 ANSI，<strong>避免產生亂碼</strong>。</p>
-            <p>2. <strong>設定獎項與圖片</strong>：從右側「獎項管理」手動新增獎項，或批次匯入 CSV。您可以直接在獎項清單中快速修改名稱，也可以從資料夾將圖片直接<strong>拖曳</strong>進入圖片區。</p>
-            <p>3. <strong>獎項排序</strong>：在獎項清單中按住左側的「☰」符號上下拖曳，即可調整抽獎順序；系統會自動儲存，也可以在新增時指定接在第幾項後。</p>
+            <h3>一、事前準備 (資料匯入)</h3>
+            <p>1. <strong>匯入人員名單</strong>：從左側「名單群組」為 A/B/C 名單選擇 CSV 編碼並上傳。上傳前請確認檔案編碼（UTF-8 或 ANSI），<strong>避免產生亂碼</strong>。</p>
+            <p>2. <strong>設定獎項與圖片</strong>：從右側「獎項設定與清單」手動新增獎項，或批次匯入 CSV 檔。您可以直接在獎項表格中點選名稱進行<strong>快速修改</strong>，也可以從資料夾將圖片直接<strong>拖曳</strong>進入表格的「圖片 (可拖曳)」欄位。</p>
+            <p>3. <strong>獎項排序</strong>：在獎項清單中，按住獎項左側的「☰」符號上下拖曳，即可調整抽獎順序；系統會自動儲存，也可以在新增時指定接在第幾項後。</p>
             <h3>二、抽獎設定與同步</h3>
-            <p>1. <strong>選擇抽獎模式</strong>：在上方活動設定選擇「逐次抽出」（動畫一張一張翻出）或「一次抽出」（依據設定的<strong>抽獎動畫時間</strong>滾動後一次全開）。有音效需求也可在此開啟。</p>
-            <p>2. <strong>準備畫面</strong>：先在「抽獎控制」選擇獎項並按<strong>同步顯示於前台</strong>，舞台會切換至該獎項的「即將抽出」預備畫面；上方的黃底提示也會即時更新目前的預定進度。若要臨時跳著抽後續獎項，也可以直接在這裡選擇。</p>
-            <p>3. <strong>前台快捷操控</strong>：可以直接在前台大螢幕上按下<strong>空白鍵／Enter／PageDown／鍵盤方向鍵右鍵</strong>來觸發開獎，也支援滑鼠、投影筆與手機遙控。前台會自動尋找下一個尚未抽完的獎項。</p>
+            <p>1. <strong>選擇抽獎模式</strong>：在上方控制列選擇「逐次抽出」（動畫一張一張翻出）或「一次抽出」（依據設定的<strong>抽獎動畫時間</strong>滾動後一次全開）。有音效需求也可在此開啟。</p>
+            <p>2. <strong>準備畫面</strong>：在「抽獎控制」選擇獎項並點擊<strong>同步顯示於前台</strong>，前台會切換至該獎項的「即將抽出」預備畫面；上方的黃底提示也會即時更新目前的預定進度。若要臨時改抽後續某個獎項，可直接在控制台選擇。</p>
+            <p>3. <strong>前台快捷操控</strong>：可以直接在擁有前台大螢幕的電腦上按下<strong>空白鍵／Enter／PageDown／鍵盤方向鍵右鍵</strong>來觸發開獎，也支援滑鼠、投影筆與手機遙控。前台支援<strong>智慧順序記憶</strong>，即使中途從後台跳著開獎，也會自動找到下一個尚未開出的獎項。</p>
             <h3>三、突發狀況與歷史紀錄</h3>
-            <p>1. <strong>取消資格與重抽</strong>：在「歷史中獎紀錄」按<strong>顯示／關閉 取消重抽按鈕</strong>後，點擊該名旁邊的<strong>取消重抽</strong>。前台會顯示「感謝無私奉獻」3 秒，保留歷史紀錄並歸還一個獎項名額，之後回到該獎項的重抽準備畫面。</p>
-            <p>2. <strong>重新顯示名單</strong>：若不小心切到了其他畫面，可在獎項清單點擊<strong>👁️ 顯示名單</strong>，前台將立即調閱並切回該獎項的歷史中獎名單。</p>
-            <p>3. <strong>大量名單展示</strong>：系統會依得獎人數智慧縮放卡片；當一次抽出的人數較多時，前台會在短暫停留後自動啟動平滑來回捲動，確保所有名單都能被看見。</p>
+            <p>1. <strong>取消資格與重抽</strong>：若有人不在現場或要捐出來重抽，請在「歷史中獎紀錄」點選<strong>顯示/關閉 取消重抽按鈕</strong>後，點擊該名旁邊的<strong>取消重抽</strong>。前台會顯示「感謝無私奉獻」3 秒，保留歷史紀錄並歸還一個獎項名額，之後回到該獎項的重抽準備畫面。</p>
+            <p>2. <strong>重新顯示名單</strong>：若不小心切到了其他畫面，可隨時在右側獎項表格點擊<strong>👁️</strong>（顯示名單）按鈕，前台將立即調閱並切回該獎項的歷史中獎名單。</p>
+            <p>3. <strong>極端大量名單展示</strong>：系統會依得獎人數智慧縮放卡片；當一次抽出的人數較多時，前台會在短暫停留後自動啟動平滑來回捲動（Auto-Scroll），確保所有名單都能被看見。</p>
             <h3>四、系統備份與還原</h3>
-            <p>1. <strong>📦 匯出活動備份</strong>：按右上角按鈕，系統會將一切資料打包為單一 JSON 檔案下載。備份範圍包含手動輸入的大標題、抽獎模式與自訂動畫秒數、所有人員名單、獎項與圖片、抽獎歷史、取消資格紀錄，以及自訂前台背景。一鍵帶走，支援跨電腦轉移。</p>
-            <p>2. <strong>📥 匯入活動備份</strong>：選擇先前產生的備份檔，系統便會復原該份記錄的完整進度，包含已抽走的名額與歷史紀錄，適合活動當天更換硬體設備時接續活動。</p>
-            <p>3. <strong>🛑 重置系統資料</strong>：點擊後會把所有活動資料一次清除並回到預設值。這項操作會清除名單、獎項、歷史與背景，建議於彩排結束或新活動開始前使用。</p>
+            <p>1. <strong>📦 匯出備份</strong>：按右上角的按鈕，系統會將一切資料打包為單一的 JSON 檔案下載。<strong>備份範圍包含</strong>：手動輸入的大標題、抽獎模式與自訂動畫秒數、所有人員名單、獎項與對應圖片、抽獎歷史結果、取消資格紀錄，以及自訂前台背景。一鍵帶走，支援跨電腦轉移。</p>
+            <p>2. <strong>📥 匯入備份</strong>：選擇先前產生的備份檔，系統便會復原到該份記錄的完整進度，包含已抽走的名額與歷史紀錄，適合活動當天更換硬體設備時接續活動。</p>
+            <p>3. <strong>🛑 重置系統資料</strong>：點擊後會把所有活動資料一次清除並回到預設值（警告：此操作不可逆，建議於彩排結束或新活動開始前使用）。</p>
           </section>
         </div>
       )}

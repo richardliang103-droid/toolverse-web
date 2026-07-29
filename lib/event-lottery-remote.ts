@@ -2,6 +2,9 @@ import { pendingRevealCompleteAt, resolveStageAdvance, resolveStageDisplay, stag
 import type { LotteryRemoteSession, RemoteHostPhase, RemoteMessage } from "./event-lottery-remote-types.ts";
 
 export const EVENT_LOTTERY_REMOTE_STORAGE_KEY = "toolverse:event-lottery:remote-session:v1";
+/** 控制台同一個瀏覽器分頁用 sessionStorage 暫存尚未配對的 token，讓重新整理後
+ * 仍能重建 QR；一旦手機送來 REMOTE_HELLO 就會立即清掉，不會進入長期備份。 */
+export const EVENT_LOTTERY_REMOTE_PAIRING_TOKEN_KEY = "toolverse:event-lottery:remote-pairing-token:v1";
 /** 手機遙控頁自己的 session 指標，跟電腦控制台的 EVENT_LOTTERY_REMOTE_STORAGE_KEY
  *  分開存放——手機重新整理後靠這個指標直接重新訂閱頻道，不需要 pairing token
  *  仍留在網址列（配對成功當下就會用 history.replaceState 清掉）。 */
