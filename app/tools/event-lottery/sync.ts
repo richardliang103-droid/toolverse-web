@@ -21,6 +21,9 @@ export type EventLotterySyncMessage =
   | { type: "PREPARE_PRIZE"; prizeId: string }
   | { type: "START_DRAW"; prizeId: string }
   | { type: "DRAW_RESULT"; prizeId: string }
+  /** 舞台把這一輪（drawId）全部揭曉完畢後回報；控制台收到才確定解鎖下一輪，
+   *  不是單純猜測動畫應該播完了。 */
+  | { type: "DRAW_FINISHED"; drawId: string }
   | { type: "DRAW_ERROR"; message: string }
   | { type: "CLEAR_STAGE" }
   | { type: "DISQUALIFY_WINNER"; winnerId: string }

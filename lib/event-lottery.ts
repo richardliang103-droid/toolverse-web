@@ -536,6 +536,21 @@ export function pendingRevealCompleteAt(pendingReveal: PendingReveal): number {
 }
 
 /**
+ * 逐一揭曉時，目前這一刻應該顯示前幾位得獎者——純粹用「經過了多久」現算，
+ * 不依賴一長串 setTimeout 逐一觸發。這樣分頁被瀏覽器背景節流（例如舞台視窗被
+ * 切到背景、或投影電腦進入省電模式）時，恢復後下一次重新計算就會直接跳到正確
+ * 進度，不會有得獎者因為某個 timer 沒被準時觸發而永遠沒顯示出來。
+ */
+export function visibleWinnerCount(pendingReveal: PendingReveal, now = new Date()): number {
+  const total = pendingReveal.winnerIds.length;
+  if (pendingReveal.revealMode === "simultaneous" || total <= 1) return total;
+  const elapsed = now.getTime() - Date.parse(pendingReveal.revealAt);
+  if (elapsed < 0) return 0;
+  if (pendingReveal.stepMs <= 0) return total;
+  return Math.min(total, Math.floor(elapsed / pendingReveal.stepMs) + 1);
+}
+
+/**
  * 安全抽選：候選人池建立後，用 lib/lottery.ts 的 Web Crypto Fisher–Yates 洗牌抽出，
  * 不使用 Math.random()。得獎紀錄與獎項已抽數量會立刻寫入回傳的 state（歷史資料
  * 必須馬上落地，不可延後）；舞台什麼時候「看起來」揭曉，交給 pendingReveal.revealAt

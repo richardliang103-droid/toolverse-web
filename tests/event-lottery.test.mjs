@@ -28,6 +28,7 @@ import {
   sanitizeEventState,
   sequentialStepMs,
   validateDraw,
+  visibleWinnerCount,
   winnersToCsv,
 } from "../lib/event-lottery.ts";
 
@@ -384,6 +385,47 @@ test("pendingRevealCompleteAt：逐一揭曉要等最後一位顯示完才算播
   const simultaneousState = { ...state, prizes: [bigPrize], revealMode: "simultaneous" };
   const { nextState: simultaneousNext } = drawEventWinners(simultaneousState, prize.id, 3, new Date("2026-01-01T00:00:00.000Z"));
   assert.equal(pendingRevealCompleteAt(simultaneousNext.pendingReveal), Date.parse(simultaneousNext.pendingReveal.revealAt));
+});
+
+test("visibleWinnerCount：逐一揭曉時純粹用經過的時間現算目前該顯示到第幾位", () => {
+  const { state, prize } = buildBasicState();
+  const bigPrize = { ...prize, totalCount: 3, order: 0 };
+  const sequentialState = { ...state, prizes: [bigPrize], revealMode: "sequential" };
+  const { nextState } = drawEventWinners(sequentialState, prize.id, 3, new Date("2026-01-01T00:00:00.000Z"));
+  const pending = nextState.pendingReveal;
+  const revealAtMs = Date.parse(pending.revealAt);
+
+  assert.equal(visibleWinnerCount(pending, new Date(revealAtMs - 1)), 0, "揭曉時間到之前一位都還不該顯示");
+  assert.equal(visibleWinnerCount(pending, new Date(revealAtMs)), 1, "揭曉時間一到，第一位立刻顯示");
+  assert.equal(visibleWinnerCount(pending, new Date(revealAtMs + pending.stepMs)), 2);
+  assert.equal(visibleWinnerCount(pending, new Date(revealAtMs + pending.stepMs * 2)), 3);
+  assert.equal(visibleWinnerCount(pending, new Date(revealAtMs + pending.stepMs * 999)), 3, "不會超過總人數");
+});
+
+test("visibleWinnerCount 回歸測試：分頁被瀏覽器背景節流、計時器整批延遲，重新計算時直接跳到正確進度（不會因為漏掉某個 timer 就少顯示）", () => {
+  const { state, prize } = buildBasicState();
+  const bigPrize = { ...prize, totalCount: 3, order: 0 };
+  const sequentialState = { ...state, prizes: [bigPrize], revealMode: "sequential" };
+  const { nextState } = drawEventWinners(sequentialState, prize.id, 3, new Date("2026-01-01T00:00:00.000Z"));
+  const pending = nextState.pendingReveal;
+  // 模擬分頁被節流：第一次 tick 停在「還在揭曉中」，接著一大段時間完全沒有任何
+  // tick 執行（例如背景分頁被暫停 30 秒），恢復後下一次 tick 距離 revealAt 已經
+  // 遠遠超過三位的間隔——不管中間漏了幾次 tick，直接算出來的答案都要是滿的 3 位。
+  const muchLater = new Date(Date.parse(pending.revealAt) + pending.stepMs * 50);
+  assert.equal(visibleWinnerCount(pending, muchLater), 3);
+});
+
+test("visibleWinnerCount：一次揭曉或只有一位時，一律直接顯示全部，不分階段", () => {
+  const { state, prize } = buildBasicState();
+  const bigPrize = { ...prize, totalCount: 3, order: 0 };
+  const simultaneousState = { ...state, prizes: [bigPrize], revealMode: "simultaneous" };
+  const { nextState } = drawEventWinners(simultaneousState, prize.id, 3, new Date("2026-01-01T00:00:00.000Z"));
+  const pending = nextState.pendingReveal;
+  assert.equal(visibleWinnerCount(pending, new Date(Date.parse(pending.revealAt))), 3);
+
+  const singleState = { ...state, prizes: [bigPrize], revealMode: "sequential" };
+  const { nextState: singleNext } = drawEventWinners(singleState, prize.id, 1, new Date("2026-01-01T00:00:00.000Z"));
+  assert.equal(visibleWinnerCount(singleNext.pendingReveal, new Date(Date.parse(singleNext.pendingReveal.revealAt))), 1);
 });
 
 test("disqualifyWinner 不會把人從 pendingReveal 移除，舞台仍會顯示（並標示已失格）", () => {

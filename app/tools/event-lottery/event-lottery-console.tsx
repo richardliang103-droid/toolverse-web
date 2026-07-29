@@ -51,6 +51,10 @@ const TABS: Array<{ id: TabId; label: string }> = [
 
 type Notice = { text: string; tone: "info" | "error" };
 
+/** 舞台沒有回報 DRAW_FINISHED（例如舞台分頁根本沒開）時，控制台最多等理論播完
+ *  時間之後再加這麼多毫秒就自動解鎖，避免永久鎖死。 */
+const DRAW_LOCK_FALLBACK_MARGIN_MS = 8000;
+
 /** 圖片上傳一律先縮圖再存進 localStorage：避免單張圖片就把容量塞爆。 */
 async function resizeImageToDataUrl(file: File, maxEdge = 900, quality = 0.85): Promise<string> {
   if (!file.type.startsWith("image/")) throw new Error("請選擇圖片檔案");
@@ -104,8 +108,17 @@ export function EventLotteryConsole() {
   const [tab, setTab] = useState<TabId>("rosters");
   const [notice, setNotice] = useState<Notice | null>(null);
 
+  // 舞台把某一輪（drawId）完全揭曉完畢後會回報 DRAW_FINISHED；控制台以此為準解鎖
+  // 下一輪，而不是單純猜測動畫應該播完的時間到了（背景分頁的計時器可能被瀏覽器
+  // 節流，導致舞台實際播完的時間比預期晚）。
+  const [ackedDrawIds, setAckedDrawIds] = useState<ReadonlySet<string>>(() => new Set());
+
   const post = useEventLotterySync((message) => {
     if (message.type === "DRAW_ERROR") return; // 舞台端的暫時性提示，控制台不需要重新讀取狀態
+    if (message.type === "DRAW_FINISHED") {
+      setAckedDrawIds((current) => (current.has(message.drawId) ? current : new Set(current).add(message.drawId)));
+      return;
+    }
     setState(loadEventState());
   });
 
@@ -132,15 +145,23 @@ export function EventLotteryConsole() {
   }
 
   // 抽選揭曉時間到了之前，畫面需要每隔一小段時間重新算一次「現在是否該解鎖」；
-  // 沒有進行中的揭曉時完全不跑計時器。
+  // 沒有進行中的揭曉、或這一輪已經被舞台回報播完時，完全不跑計時器。
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
-    if (!state.pendingReveal) return;
+    const pending = state.pendingReveal;
+    if (!pending || ackedDrawIds.has(pending.drawId)) return;
     const interval = setInterval(() => setNowTick(Date.now()), 250);
     return () => clearInterval(interval);
-  }, [state.pendingReveal]);
+    // 刻意只依賴 drawId／revealAt 兩個原始值，不用整個 pendingReveal 物件：其他跟
+    // 這一輪無關的變更（重新讀取狀態等）不該讓這個計時器重新啟動。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.pendingReveal?.drawId, state.pendingReveal?.revealAt, ackedDrawIds]);
 
-  const drawLocked = state.pendingReveal !== null && nowTick < pendingRevealCompleteAt(state.pendingReveal);
+  // 解鎖優先看舞台的 DRAW_FINISHED 回報；如果舞台分頁根本沒開、或訊息漏接，
+  // 用「理論播完時間 + 安全緩衝」當備援，避免控制台永遠鎖死。
+  const pendingReveal = state.pendingReveal;
+  const pendingAcked = pendingReveal !== null && ackedDrawIds.has(pendingReveal.drawId);
+  const drawLocked = pendingReveal !== null && !pendingAcked && nowTick < pendingRevealCompleteAt(pendingReveal) + DRAW_LOCK_FALLBACK_MARGIN_MS;
 
   const rosterConfirm = useArmedConfirm();
   const participantConfirm = useArmedConfirm();
