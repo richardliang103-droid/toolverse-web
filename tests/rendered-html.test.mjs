@@ -55,12 +55,20 @@ test("server-renders all tool routes", async () => {
     ["/tools/image-converter", /輸出格式/],
     ["/tools/audio-trimmer", /把音訊檔拖到這裡|合併音檔/],
     ["/tools/calendar", /回到本月/],
+    ["/tools/event-lottery", /活動抽獎控制台/],
   ];
   for (const [pathname, pattern] of routes) {
     const response = await render(pathname);
     assert.equal(response.status, 200, `${pathname} 應回 200`);
     assert.match(await response.text(), pattern, `${pathname} 缺少預期內容`);
   }
+});
+
+test("server-renders the event lottery stage page", async () => {
+  const response = await render("/tools/event-lottery/stage");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /noindex/);
 });
 
 test("server-renders the workspace page without touching browser storage", async () => {
