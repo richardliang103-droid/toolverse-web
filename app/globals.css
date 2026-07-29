@@ -457,6 +457,17 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .gantt-hint { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; }
 .gantt-workspace .export-toolbar { margin-top: 2px; }
 .gantt-workspace .mermaid-code { margin-top: 0; }
+.equity-warnings { display: grid; gap: 6px; margin: 0 0 14px; padding: 10px 14px; border: 1px solid #e0a9a4; border-radius: 10px; background: #fdecea; color: #b72a22; font-size: 13px; list-style: none; }
+.equity-subheading { margin: 18px 0 8px; font-size: 13px; font-weight: 740; color: var(--muted); }
+.equity-quickpaste { margin-bottom: 14px; }
+.equity-canvas { max-height: 640px; overflow-y: auto; border-radius: 12px; }
+.equity-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 14px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 12px; }
+.equity-legend li { display: inline-flex; align-items: center; gap: 7px; }
+.equity-swatch { width: 14px; height: 14px; border-radius: 4px; border: 1.25px solid var(--ink); }
+.equity-swatch-person { background: #e4ecf3; border-radius: 999px; }
+.equity-swatch-domestic { background: #ebf1e2; }
+.equity-swatch-offshore { background: #f9e9ec; border-style: dashed; }
+.equity-swatch-subject { background: #ece7f5; border-width: 2px; }
 /* 編輯抽屜是原生 <dialog>：::backdrop 取代原本自刻的遮罩 div。
    margin 要自己指定——Tailwind preflight 把所有元素的 margin 歸零，
    連同瀏覽器給 dialog 的置中一起蓋掉；這裡要的是靠右滿高。 */
