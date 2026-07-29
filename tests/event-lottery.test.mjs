@@ -16,6 +16,7 @@ import {
   eventBackupFileName,
   exportEventBackup,
   findDuplicateEmployeeId,
+  advanceStateRevision,
   MAX_DRAW_COUNT_PER_ROUND,
   mergeParticipantsFromCsv,
   parseEventBackup,
@@ -73,6 +74,15 @@ test("normalize 修復錯誤資料：損壞欄位換成安全預設值，不會�
   assert.equal(state.animationDurationMs, 3200);
   assert.equal(state.soundEnabled, true);
   assert.equal(state.stageDrawCount, 1, "舊 localStorage／舊備份缺少 stageDrawCount 時安全回退為 1");
+  assert.equal(state.stateRevision, 0, "舊 localStorage／舊備份缺少 stateRevision 時安全回退為 0");
+});
+
+test("advanceStateRevision：每次狀態變更都產生遞增版本與新的 updatedAt", () => {
+  const before = createEmptyEventState(new Date("2026-01-01T00:00:00.000Z"));
+  const after = advanceStateRevision(before, new Date("2026-01-01T00:00:01.000Z"));
+  assert.equal(after.stateRevision, 1);
+  assert.equal(after.updatedAt, "2026-01-01T00:00:01.000Z");
+  assert.equal(before.stateRevision, 0, "版本更新不可改寫原本的 state");
 });
 
 test("sanitizeEventState：stageDrawCount 依 1 到 MAX_DRAW_COUNT_PER_ROUND 夾住", () => {

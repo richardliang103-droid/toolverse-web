@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  advanceStateRevision,
   clearStage as clearStageState,
   drawEventWinners,
   prepareStagePrize as prepareStagePrizeState,
@@ -19,7 +20,7 @@ export type DrawActionResult = { ok: true; state: LotteryEventState } | { ok: fa
 type Post = (message: EventLotterySyncMessage) => void;
 
 export function prepareStage(state: LotteryEventState, prizeId: string, post: Post): DrawActionResult {
-  const next = prepareStagePrizeState(state, prizeId);
+  const next = advanceStateRevision(prepareStagePrizeState(state, prizeId));
   if (!saveEventState(next)) return { ok: false, reason: "儲存失敗，可能是瀏覽器儲存空間不足，請刪減圖片或紀錄後再試" };
   post({ type: "PREPARE_PRIZE", prizeId });
   return { ok: true, state: next };
@@ -41,22 +42,23 @@ export function startDraw(state: LotteryEventState, prizeId: string, count: numb
     post({ type: "DRAW_ERROR", message: reason });
     return { ok: false, reason };
   }
-  if (!saveEventState(outcome.nextState)) {
+  const nextState = advanceStateRevision(outcome.nextState);
+  if (!saveEventState(nextState)) {
     const reason = "儲存失敗，可能是瀏覽器儲存空間不足，這輪抽獎未送出，請刪減圖片或紀錄後再試";
     post({ type: "DRAW_ERROR", message: reason });
     return { ok: false, reason };
   }
   post({ type: "START_DRAW", prizeId });
-  const pendingReveal = outcome.nextState.pendingReveal;
+  const pendingReveal = nextState.pendingReveal;
   if (pendingReveal) {
     const delay = Math.max(0, Date.parse(pendingReveal.revealAt) - Date.now());
     window.setTimeout(() => post({ type: "DRAW_RESULT", prizeId }), delay);
   }
-  return { ok: true, state: outcome.nextState };
+  return { ok: true, state: nextState };
 }
 
 export function clearStageAction(state: LotteryEventState, post: Post): DrawActionResult {
-  const next = clearStageState(state);
+  const next = advanceStateRevision(clearStageState(state));
   if (!saveEventState(next)) return { ok: false, reason: "儲存失敗，可能是瀏覽器儲存空間不足，請刪減圖片或紀錄後再試" };
   post({ type: "CLEAR_STAGE" });
   return { ok: true, state: next };

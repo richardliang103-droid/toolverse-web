@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  advanceStateRevision,
   candidatePool,
   canDeleteParticipant,
   canDeletePrize,
@@ -153,11 +154,17 @@ export function EventLotteryConsole() {
   /** 儲存失敗（例如 localStorage 容量不足）時整個操作要中止：不更新畫面、不廣播，
    *  避免其他分頁被通知了一個其實沒有真的落地的變更。 */
   function commit(next: LotteryEventState, message: EventLotterySyncMessage = { type: "STATE_UPDATED" }) {
-    if (!saveEventState(next)) {
+    // 以 storage 中最新版本為基準，避免另一個分頁剛完成變更時把 revision 倒退。
+    const latest = loadEventState();
+    const versioned = advanceStateRevision({
+      ...next,
+      stateRevision: Math.max(next.stateRevision, latest.stateRevision),
+    });
+    if (!saveEventState(versioned)) {
       showNotice("儲存失敗，可能是瀏覽器儲存空間不足，這次變更未套用，請刪減圖片或紀錄後再試", "error");
       return;
     }
-    setState(next);
+    setState(versioned);
     post(message);
   }
 
@@ -244,25 +251,26 @@ export function EventLotteryConsole() {
     if (!remoteSession) return;
     setRemoteBusy(true);
     try {
-      await remoteChannelRef.current?.send({ type: "SESSION_REVOKED" });
-    } catch {
-      /* 撤銷通知是錦上添花，傳送失敗不影響底下的實際撤銷 */
-    }
-    try {
-      if (supabase) {
-        const { error } = await supabase.rpc("revoke_lottery_remote_session", { session_id: remoteSession.sessionId });
-        if (error) throw error;
+      if (!supabase) throw new Error("尚未設定手機遙控服務");
+      const { error } = await supabase.rpc("revoke_lottery_remote_session", { session_id: remoteSession.sessionId });
+      if (error) throw error;
+      try {
+        await remoteChannelRef.current?.send({ type: "SESSION_REVOKED" });
+      } catch {
+        /* DB 已完成撤銷；即時通知只是加速讓手機離線，失敗不影響權限撤銷。 */
       }
       showRemoteNotice("已撤銷手機遙控");
-    } catch (error) {
-      showRemoteNotice(error instanceof Error ? error.message : "撤銷失敗，請稍後再試", "error");
-    } finally {
       remoteChannelRef.current?.close();
       remoteChannelRef.current = null;
       window.localStorage.removeItem(EVENT_LOTTERY_REMOTE_STORAGE_KEY);
       setRemoteSession(null);
       setRemoteQrDataUrl("");
       setRemotePairedAt(null);
+    } catch (error) {
+      // RPC 失敗時保留 session 指標與控制項，讓使用者可以重試；不能讓
+      // 資料庫仍有效的 session 失去撤銷入口。
+      showRemoteNotice(error instanceof Error ? error.message : "撤銷失敗，請稍後再試", "error");
+    } finally {
       setRemoteBusy(false);
     }
   }

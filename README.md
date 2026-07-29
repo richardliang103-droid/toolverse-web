@@ -82,7 +82,7 @@ npm test
 
 3. **Dashboard 手動設定（migration 不含這些）**：
    - Authentication → Sign In / Providers：開啟 **Anonymous Sign-Ins**。這是手機遙控唯一使用的登入方式，只有電腦按下「啟用手機遙控」或手機開啟有效配對連結這兩種情況才會呼叫 `signInAnonymously()`，一般瀏覽控制台或舞台不會建立任何帳號。
-   - Realtime：確認專案的 Realtime Authorization（private channel）功能已開啟；migration 已經幫 `realtime.messages` 加上限定 session 成員的 SELECT／INSERT policy，但私有頻道功能本身要在 Dashboard 或專案設定確認為啟用狀態。
+   - Realtime：開啟 Realtime Authorization（private channel）功能，並**關閉「Allow public access」**；migration 已經幫 `realtime.messages` 加上限定 session 成員的 SELECT／INSERT policy。若保留 public access，頻道仍可能被未授權的公開連線加入。
 
 4. 在 Vercel 專案設定新增環境變數（Production／Preview／Development 都要）：
 
@@ -96,12 +96,12 @@ npm test
 ### Realtime 權限摘要（RLS）
 
 - `public.lottery_remote_sessions` 開啟 RLS 且不建立任何 policy：anon／authenticated 都不能直接讀寫這張表，所有存取一律經過三個 `SECURITY DEFINER` RPC（`create_lottery_remote_session`、`claim_lottery_remote_session`、`revoke_lottery_remote_session`），RPC 內部逐一檢查權限、token 雜湊、有效期限，且回傳值刻意不含 pairing token 雜湊本身。
-- `realtime.messages` 只允許同時符合下列條件的 `authenticated` 使用者 SELECT／INSERT broadcast：`auth.uid()` 等於該 session 的 `host_user_id` 或 `remote_user_id`，且 session 未過期、`revoked_at is null`、頻道 topic 對得上 `lottery:<session-id>`。第一版沒有加入 Presence，只用 `REMOTE_HELLO`／`HOST_STATUS`／`ADVANCE_COMMAND`／`COMMAND_ACK`／`SESSION_REVOKED` 這幾種訊息，降低狀態來源與 RLS 複雜度。
+- `realtime.messages` 只允許同時符合下列條件的 `authenticated` 使用者 SELECT／INSERT broadcast：`auth.uid()` 等於該 session 的 `host_user_id` 或 `remote_user_id`，且 session 未過期、`revoked_at is null`、頻道 topic 對得上 `lottery:<session-id>`。policy 透過 `SECURITY DEFINER` 的 `is_lottery_remote_session_member()` 檢查成員關係，不開放 session table 直接讀取。第一版沒有加入 Presence，只用 `REMOTE_HELLO`／`HOST_STATUS`／`ADVANCE_COMMAND`／`COMMAND_ACK`／`SESSION_REVOKED` 這幾種訊息，降低狀態來源與 RLS 複雜度。
 
 ### 重複命令與斷線恢復
 
 - 每個手機指令帶一個 `crypto.randomUUID()` 產生的 `commandId`；舞台端把最近處理過的 100 筆 commandId 存在該 session 專屬的 localStorage，重複的 commandId 不會被執行第二次，只會重新回報目前狀態。
-- 舞台端額外維護一個遞增的 `revision`；手機送出指令時要附上牠上次拿到的 `expectedRevision`，對不上就會被拒絕並附上最新 revision，逼手機用新的 `HOST_STATUS` 重新對齊，避免用舊畫面誤觸已經不成立的動作。
+- 活動狀態額外維護一個遞增的 `stateRevision`；手機送指令時要附上它上次拿到的 `expectedRevision`，對不上就會被拒絕並附上最新 revision，逼手機用新的 `HOST_STATUS` 重新對齊。這個版本會涵蓋控制台、鍵盤、滑鼠、簡報筆與手機遙控的所有狀態變更，避免用舊畫面誤觸已經不成立的動作。
 - 手機 2 秒沒收到 ACK 會用同一個 commandId 重送，最多 3 次；用完仍沒有 ACK 就顯示明確的失敗訊息，不會產生新的 commandId 重試同一次按下。
 - 舞台每 3 秒發送一次 `HOST_STATUS` 心跳；手機超過 8 秒沒收到就停用按鈕並顯示「電腦舞台未連線」。
 - 手機重新整理、切到背景再回來、或暫時斷網後重連，都會靠本機保留的 session 指標＋既有的匿名登入重新訂閱頻道，並且會先送 `REMOTE_HELLO` 等到收到 `HOST_STATUS` 才開放按鈕。

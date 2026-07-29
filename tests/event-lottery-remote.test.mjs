@@ -6,6 +6,7 @@ import {
   commitAcceptedCommand,
   createPendingCommand,
   createRemoteCommandLog,
+  acquireRemoteHostLock,
   generatePairingToken,
   hasExhaustedRetries,
   isHostStatusStale,
@@ -140,6 +141,18 @@ test("commitAcceptedCommand：revision 遞增，commandId 記錄進最近清單"
   log = commitAcceptedCommand(log, "cmd-2");
   assert.equal(log.revision, 2);
   assert.deepEqual(log.processedCommandIds, ["cmd-1", "cmd-2"]);
+});
+
+test("commitAcceptedCommand：可把活動 stateRevision 寫入 command log", () => {
+  const log = commitAcceptedCommand(createRemoteCommandLog(), "cmd-1", 17);
+  assert.equal(log.revision, 17);
+  assert.deepEqual(log.processedCommandIds, ["cmd-1"]);
+});
+
+test("acquireRemoteHostLock：不支援 Web Locks 的環境安全停用遠端 host", async () => {
+  const lock = await acquireRemoteHostLock("session-1");
+  assert.equal(lock.acquired, false);
+  lock.release();
 });
 
 test("buildHostStatus：idle 狀態摘要不含任何參加者或得獎者個資，只有非敏感欄位", () => {

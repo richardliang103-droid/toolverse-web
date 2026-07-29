@@ -10,6 +10,7 @@ import {
   createRemoteCommandLog,
   EVENT_LOTTERY_REMOTE_STORAGE_KEY,
   HOST_STATUS_HEARTBEAT_MS,
+  acquireRemoteHostLock,
   remoteCommandLogStorageKey,
   resolveIncomingCommand,
   sanitizeRemoteCommandLog,
@@ -157,7 +158,8 @@ export function EventLotteryStage() {
   function sendHostStatus() {
     const channel = remoteChannelRef.current;
     if (!channel) return;
-    void channel.send(buildHostStatus(loadEventState(), remoteCommandLogRef.current.revision, new Date()));
+    const currentState = loadEventState();
+    void channel.send(buildHostStatus(currentState, currentState.stateRevision, new Date()));
   }
 
   async function handleRemoteMessage(sessionId: string, expiresAt: string, message: RemoteMessage) {
@@ -168,8 +170,11 @@ export function EventLotteryStage() {
     }
     if (message.type !== "ADVANCE_COMMAND") return;
 
+    const currentState = loadEventState();
+    // revision 以活動狀態為準，包含控制台／鍵盤／滑鼠等本機操作，不只計算手機命令。
+    const commandLog = { ...remoteCommandLogRef.current, revision: currentState.stateRevision };
     const session = { expiresAt, revokedAt: remoteRevokedRef.current ? new Date().toISOString() : null };
-    const decision = resolveIncomingCommand(remoteCommandLogRef.current, session, message.commandId, message.expectedRevision, new Date());
+    const decision = resolveIncomingCommand(commandLog, session, message.commandId, message.expectedRevision, new Date());
 
     if (decision.kind === "session-invalid") {
       void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: decision.revision, reason: "session-invalid" });
@@ -177,6 +182,7 @@ export function EventLotteryStage() {
     }
     if (decision.kind === "duplicate") {
       // ACK 遺失後的重送：不再執行第二次抽選，只重新回報這個 commandId 當初的結果。
+      remoteCommandLogRef.current = commandLog;
       void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: true, revision: decision.revision });
       sendHostStatus();
       return;
@@ -189,13 +195,17 @@ export function EventLotteryStage() {
 
     // accepted：跟簡報筆／鍵盤／滑鼠共用同一套 resolveStageAdvance／prepareStage／
     // startDraw，不另寫第二套抽獎邏輯，也不信任手機端宣稱要做什麼動作。
-    const currentState = loadEventState();
     const action = resolveStageAdvance(currentState, new Date());
-    const result = action.action === "none"
-      ? { ok: true as const, state: currentState }
-      : action.action === "prepare"
-        ? prepareStage(currentState, action.prizeId, post)
-        : startDraw(currentState, action.prizeId, action.count, post);
+    if (action.action === "none") {
+      // 狀態可能在手機送出後先被本機操作改變；這不是成功的 no-op，也不能
+      // 消耗 commandId，否則手機會收到 accepted 卻永遠無法重試。
+      void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: currentState.stateRevision, reason: "locked" });
+      sendHostStatus();
+      return;
+    }
+    const result = action.action === "prepare"
+      ? prepareStage(currentState, action.prizeId, post)
+      : startDraw(currentState, action.prizeId, action.count, post);
 
     if (!result.ok) {
       void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: remoteCommandLogRef.current.revision, reason: result.reason });
@@ -203,7 +213,7 @@ export function EventLotteryStage() {
     }
 
     setState(result.state);
-    remoteCommandLogRef.current = commitAcceptedCommand(remoteCommandLogRef.current, message.commandId);
+    remoteCommandLogRef.current = commitAcceptedCommand(commandLog, message.commandId, result.state.stateRevision);
     try {
       window.localStorage.setItem(remoteCommandLogStorageKey(sessionId), JSON.stringify(remoteCommandLogRef.current));
     } catch {
@@ -220,6 +230,7 @@ export function EventLotteryStage() {
     let cancelled = false;
     const sessionId = remotePointer.sessionId;
     const expiresAt = remotePointer.expiresAt;
+    let releaseHostLock: (() => void) | null = null;
     remoteRevokedRef.current = false;
 
     let storedLog: unknown = null;
@@ -231,28 +242,36 @@ export function EventLotteryStage() {
     }
     remoteCommandLogRef.current = sanitizeRemoteCommandLog(storedLog);
 
-    void connectRemoteChannel(supabase, sessionId, (message) => {
-      if (message.type === "SESSION_REVOKED") {
-        remoteRevokedRef.current = true;
-        remoteChannelRef.current?.close();
-        remoteChannelRef.current = null;
-        if (remoteHeartbeatRef.current) { clearInterval(remoteHeartbeatRef.current); remoteHeartbeatRef.current = null; }
-        return;
-      }
-      void handleRemoteMessage(sessionId, expiresAt, message);
-    }).then((handle) => {
-      if (!handle) return;
-      if (cancelled) { handle.close(); return; }
+    void (async () => {
+      const hostLock = await acquireRemoteHostLock(sessionId);
+      if (!hostLock.acquired) return;
+      if (cancelled) { hostLock.release(); return; }
+      releaseHostLock = hostLock.release;
+
+      const handle = await connectRemoteChannel(supabase, sessionId, (message) => {
+        if (message.type === "SESSION_REVOKED") {
+          remoteRevokedRef.current = true;
+          remoteChannelRef.current?.close();
+          remoteChannelRef.current = null;
+          if (remoteHeartbeatRef.current) { clearInterval(remoteHeartbeatRef.current); remoteHeartbeatRef.current = null; }
+          return;
+        }
+        void handleRemoteMessage(sessionId, expiresAt, message);
+      });
+      if (!handle) { releaseHostLock?.(); releaseHostLock = null; return; }
+      if (cancelled) { handle.close(); releaseHostLock?.(); releaseHostLock = null; return; }
       remoteChannelRef.current = handle;
       sendHostStatus();
       remoteHeartbeatRef.current = setInterval(() => sendHostStatus(), HOST_STATUS_HEARTBEAT_MS);
-    });
+    })();
 
     return () => {
       cancelled = true;
       if (remoteHeartbeatRef.current) { clearInterval(remoteHeartbeatRef.current); remoteHeartbeatRef.current = null; }
       remoteChannelRef.current?.close();
       remoteChannelRef.current = null;
+      releaseHostLock?.();
+      releaseHostLock = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remotePointer?.sessionId]);

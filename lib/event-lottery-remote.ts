@@ -15,6 +15,7 @@ export const COMMAND_MAX_RESENDS = 3;
 export const HOST_STATUS_HEARTBEAT_MS = 3000;
 export const HOST_STATUS_STALE_AFTER_MS = 8000;
 export const REMOTE_LONG_PRESS_MS = 800;
+const REMOTE_HOST_LOCK_PREFIX = "toolverse:event-lottery:remote-host:v1:";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -125,7 +126,7 @@ export type IncomingCommandDecision =
  * - stale-revision：expectedRevision 跟目前不一致（手機拿到的是舊狀態），拒絕
  *   執行，回傳最新 revision 讓手機重新取得 HOST_STATUS。
  * - accepted：呼叫端這時候才可以真的呼叫底層抽獎邏輯，成功後呼叫
- *   commitAcceptedCommand() 記錄這個 commandId 並把 revision +1。
+ *   commitAcceptedCommand() 記錄這個 commandId 並寫入最新的活動 stateRevision。
  */
 export function resolveIncomingCommand(
   log: RemoteCommandLog,
@@ -140,9 +141,9 @@ export function resolveIncomingCommand(
   return { kind: "accepted", revision: log.revision };
 }
 
-export function commitAcceptedCommand(log: RemoteCommandLog, commandId: string): RemoteCommandLog {
+export function commitAcceptedCommand(log: RemoteCommandLog, commandId: string, revision = log.revision + 1): RemoteCommandLog {
   const processedCommandIds = [...log.processedCommandIds, commandId].slice(-MAX_PROCESSED_COMMAND_IDS);
-  return { revision: log.revision + 1, processedCommandIds };
+  return { revision, processedCommandIds };
 }
 
 /** 舞台每次心跳／狀態變化都送出的 HOST_STATUS；只含非敏感摘要欄位。 */
@@ -217,4 +218,41 @@ export function resolveRemoteButtonState(status: (RemoteMessage & { type: "HOST_
   if (isStale || !status) return { kind: "disabled", reason: "offline" };
   if (status.locked || status.nextAction === "none") return { kind: "disabled", reason: "locked" };
   return status.nextAction === "prepare" ? { kind: "prepare" } : { kind: "draw" };
+}
+
+export type RemoteHostLock = {
+  acquired: boolean;
+  release: () => void;
+};
+
+/**
+ * 舞台頁可以被使用者誤開多次；只有拿到 Web Locks 的那一頁能成為手機命令
+ * 的 host。沒有 Web Locks 支援時寧可停用手機遙控，也不要讓兩個舞台同時
+ * 處理同一個 commandId。
+ */
+export async function acquireRemoteHostLock(sessionId: string): Promise<RemoteHostLock> {
+  if (typeof navigator === "undefined" || !("locks" in navigator)) {
+    return { acquired: false, release: () => undefined };
+  }
+
+  const lockName = `${REMOTE_HOST_LOCK_PREFIX}${sessionId}`;
+  let releaseLock: () => void = () => undefined;
+  let resolveAcquired: (value: boolean) => void = () => undefined;
+  let settled = false;
+  const acquired = new Promise<boolean>((resolve) => { resolveAcquired = resolve; });
+  const hold = new Promise<void>((resolve) => { releaseLock = resolve; });
+
+  void navigator.locks.request(lockName, { ifAvailable: true }, async (lock) => {
+    if (!lock) {
+      if (!settled) { settled = true; resolveAcquired(false); }
+      return;
+    }
+    if (!settled) { settled = true; resolveAcquired(true); }
+    await hold;
+  }).catch(() => {
+    if (!settled) { settled = true; resolveAcquired(false); }
+  });
+
+  if (!(await acquired)) return { acquired: false, release: () => undefined };
+  return { acquired: true, release: releaseLock };
 }

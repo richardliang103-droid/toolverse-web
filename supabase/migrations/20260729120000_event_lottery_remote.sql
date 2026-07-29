@@ -148,6 +148,29 @@ grant execute on function public.create_lottery_remote_session(text) to authenti
 grant execute on function public.claim_lottery_remote_session(uuid, text) to authenticated;
 grant execute on function public.revoke_lottery_remote_session(uuid) to authenticated;
 
+-- Realtime 的 RLS policy 需要判斷 session 成員，但 session table 刻意不給
+-- authenticated 直接 SELECT。用 SECURITY DEFINER helper 讓 policy 能安全讀取
+-- 成員關係，同時不開放 pairing_token_hash 或任何 session row 給瀏覽器查詢。
+create or replace function public.is_lottery_remote_session_member(requested_topic text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, extensions
+as $$
+  select exists (
+    select 1
+    from public.lottery_remote_sessions s
+    where s.topic = requested_topic
+      and s.revoked_at is null
+      and s.expires_at > now()
+      and (s.host_user_id = auth.uid() or s.remote_user_id = auth.uid())
+  );
+$$;
+
+revoke all on function public.is_lottery_remote_session_member(text) from public;
+grant execute on function public.is_lottery_remote_session_member(text) to authenticated;
+
 -- ---------------------------------------------------------------------------
 -- Realtime Authorization：private broadcast channel `lottery:<session-id>`。
 -- 只有 session 的 host 或已配對的手機（authenticated，含匿名登入），且 session
@@ -162,14 +185,7 @@ for select
 to authenticated
 using (
   realtime.messages.extension = 'broadcast'
-  and exists (
-    select 1
-    from public.lottery_remote_sessions s
-    where s.topic = realtime.topic()
-      and s.revoked_at is null
-      and s.expires_at > now()
-      and (auth.uid() = s.host_user_id or auth.uid() = s.remote_user_id)
-  )
+  and public.is_lottery_remote_session_member((select realtime.topic()))
 );
 
 drop policy if exists "lottery session members can send broadcast" on realtime.messages;
@@ -179,12 +195,5 @@ for insert
 to authenticated
 with check (
   realtime.messages.extension = 'broadcast'
-  and exists (
-    select 1
-    from public.lottery_remote_sessions s
-    where s.topic = realtime.topic()
-      and s.revoked_at is null
-      and s.expires_at > now()
-      and (auth.uid() = s.host_user_id or auth.uid() = s.remote_user_id)
-  )
+  and public.is_lottery_remote_session_member((select realtime.topic()))
 );

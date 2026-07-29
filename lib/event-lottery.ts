@@ -14,6 +14,7 @@ export const MAX_NAME_LENGTH = 60;
 export const MAX_TITLE_LENGTH = 80;
 export const MAX_IMAGE_DATA_URL_LENGTH = 700_000;
 export const MAX_DRAW_COUNT_PER_ROUND = 500;
+export const MAX_STATE_REVISION = 2_147_483_647;
 
 export type Roster = { id: string; name: string };
 
@@ -86,6 +87,8 @@ export type LotteryEventState = {
   /** 舞台「下一步」（鍵盤／滑鼠／簡報筆／手機遙控／控制台）一次抽出的人數；
    *  控制台的「本輪抽出人數」欄位直接讀寫這個欄位，不是各自維護的 local state。 */
   stageDrawCount: number;
+  /** 每次活動狀態變更都遞增；手機的 expectedRevision 以此為準。 */
+  stateRevision: number;
   updatedAt: string;
 };
 
@@ -139,6 +142,7 @@ export function createEmptyEventState(now = new Date()): LotteryEventState {
     activePrizeId: null,
     pendingReveal: null,
     stageDrawCount: 1,
+    stateRevision: 0,
     updatedAt: now.toISOString(),
   };
 }
@@ -335,6 +339,8 @@ export function sanitizeEventState(value: unknown, now = new Date()): LotteryEve
     pendingReveal: pendingReveal && pendingReveal.prizeId === activePrizeId ? pendingReveal : null,
     // 舊 localStorage／舊備份沒有這個欄位時安全回退為 1。
     stageDrawCount: clampInt(data.stageDrawCount, 1, MAX_DRAW_COUNT_PER_ROUND, 1),
+    // 舊 localStorage／舊備份沒有這個欄位時從 0 開始；所有新的寫入都會遞增。
+    stateRevision: clampInt(data.stateRevision, 0, MAX_STATE_REVISION, 0),
     updatedAt: validIsoDate(data.updatedAt) ?? now.toISOString(),
   };
 }
@@ -601,6 +607,19 @@ export function drawEventWinners(state: LotteryEventState, prizeId: string, requ
     updatedAt: drawnAt,
   };
   return { winners, nextState };
+}
+
+/**
+ * 將一次已驗證的活動狀態變更標記成新版本。控制台、舞台本機操作與手機遙控
+ * 都必須經過這個 helper，讓手機拿到的 expectedRevision 能涵蓋所有入口，而不
+ * 只是涵蓋前一次手機命令。
+ */
+export function advanceStateRevision(state: LotteryEventState, now = new Date()): LotteryEventState {
+  return {
+    ...state,
+    stateRevision: Math.min(MAX_STATE_REVISION, state.stateRevision + 1),
+    updatedAt: now.toISOString(),
+  };
 }
 
 /** 失格：獎項已抽數量歸還一位，參加者恢復抽選資格；紀錄本身保留，不會被刪除。
