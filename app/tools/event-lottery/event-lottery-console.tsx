@@ -710,11 +710,15 @@ export function EventLotteryConsole() {
     commit({ ...state, stageDrawCount: next });
   }
 
-  const effectiveDrawPrizeId = orderedPrizes.some((prize) => prize.id === drawPrizeId) ? drawPrizeId : (orderedPrizes[0]?.id ?? "");
+  // 對齊原後台：控制台初始不預選獎項，主持人必須明確選擇後才能準備或抽獎，
+  // 避免剛開頁面就誤觸第一個獎項。
+  const effectiveDrawPrizeId = orderedPrizes.some((prize) => prize.id === drawPrizeId) ? drawPrizeId : "";
   const drawTargetPrize = orderedPrizes.find((prize) => prize.id === effectiveDrawPrizeId) ?? null;
   const drawCandidates = drawTargetPrize ? candidatePool(state, drawTargetPrize.id) : [];
   const drawRemaining = drawTargetPrize ? remainingSlots(drawTargetPrize) : 0;
-  const nextAvailablePrize = orderedPrizes.find((prize) => remainingSlots(prize) > 0) ?? null;
+  const remainingPrizes = orderedPrizes.filter((prize) => remainingSlots(prize) > 0);
+  const remainingPrizeSlots = remainingPrizes.reduce((sum, prize) => sum + remainingSlots(prize), 0);
+  const nextAvailablePrize = remainingPrizes[0] ?? null;
 
   function handlePrepareStage() {
     if (drawLocked) return;
@@ -933,13 +937,18 @@ export function EventLotteryConsole() {
             : <>
                 {drawLocked && <p className="gantt-notice gantt-notice-info">{noticeLocked ? "前台正在顯示重抽提示，請稍候…" : previewLocked ? "前台正在播放歷史得獎名單，請稍候…" : "上一輪還在舞台上揭曉中，請稍候再開始下一輪（可以按「清除舞台顯示」提前中止）"}</p>}
                 <div className="event-lottery-draw-hints">
-                  <p className="event-lottery-draw-hint event-lottery-draw-hint-success">🎁 剩餘獎項統計：{orderedPrizes.map((prize) => `${prize.name} ${remainingSlots(prize)} 名額`).join("、") || "尚無獎項"}</p>
-                  <p className="event-lottery-draw-hint event-lottery-draw-hint-warning">👉 下一個預定抽獎：{nextAvailablePrize?.name ?? "所有獎項皆已抽完"}</p>
+                  <p className="event-lottery-draw-hint event-lottery-draw-hint-success">🎁 {remainingPrizes.length > 0 ? <>剩餘 <strong>{remainingPrizes.length}</strong> 個獎項，共 <strong>{remainingPrizeSlots}</strong> 個名額未抽出</> : "所有獎項皆已抽完！"}</p>
+                  <p className="event-lottery-draw-hint event-lottery-draw-hint-warning">
+                    👉 下一個預定抽獎：{nextAvailablePrize
+                      ? <><span>第 {orderedPrizes.indexOf(nextAvailablePrize) + 1} 個 — {nextAvailablePrize.name}</span>（剩 {remainingSlots(nextAvailablePrize)} 個）<small>※ 您可直接在下方切換其他獎項，或依照系統順序往下抽。</small></>
+                      : "目前所有獎項皆已抽完！"}
+                  </p>
                 </div>
                 <div className="event-lottery-inline-form">
                   <label className="number-field" htmlFor="draw-prize">選擇獎項
                     <select id="draw-prize" className="key-input" value={effectiveDrawPrizeId} disabled={drawLocked} onChange={(event) => setDrawPrizeId(event.target.value)}>
-                      {orderedPrizes.map((prize) => <option key={prize.id} value={prize.id}>{prize.name}（剩餘 {remainingSlots(prize)}）</option>)}
+                      <option value="">請選擇抽獎獎項...</option>
+                      {orderedPrizes.filter((prize) => remainingSlots(prize) > 0).map((prize) => <option key={prize.id} value={prize.id}>{orderedPrizes.indexOf(prize) + 1}. {prize.name}（剩餘 {remainingSlots(prize)}）</option>)}
                     </select>
                   </label>
                   <label className="number-field" htmlFor="draw-count">本輪抽出人數
