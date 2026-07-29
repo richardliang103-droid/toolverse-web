@@ -740,7 +740,9 @@ test("JSON 備份匯入：不信任檔案內容，格式或版本錯誤要拒絕
 
 test("eventBackupFileName：檔名清掉不安全字元", () => {
   const state = { ...createEmptyEventState(), eventTitle: "2026/尾牙:活動" };
-  const name = eventBackupFileName(state, new Date("2026-01-15T00:00:00Z"));
+  const date = new Date("2026-01-15T00:00:00Z");
+  const pad = (value) => String(value).padStart(2, "0");
+  const name = eventBackupFileName(state, date);
   assert.doesNotMatch(name, /[\\/:*?"<>|]/);
-  assert.match(name, /2026-01-15\.json$/);
+  assert.equal(name, `Lottery_Backup_${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}.json`);
 });

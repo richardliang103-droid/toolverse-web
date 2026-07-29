@@ -905,7 +905,10 @@ function csvField(value: string): string {
 export function winnersToCsv(state: LotteryEventState): string {
   const prizeNames = new Map(state.prizes.map((prize) => [prize.id, prize.name]));
   const rows = [["抽取時間", "獎項", "部門", "姓名", "員工編號", "狀態"]];
-  for (const winner of state.winners) {
+  // 參考專案的歷史報表以最新得獎紀錄排在最前面；保留這個順序，讓匯出的
+  // Excel／CSV 與後台畫面及原版使用習慣一致。狀態欄是 Toolverse 額外保留
+  // 的失格歷史資訊，不影響前五個原版欄位。
+  for (const winner of [...state.winners].reverse()) {
     rows.push([
       winner.drawnAt,
       prizeNames.get(winner.prizeId) ?? "（已刪除的獎項）",
@@ -919,8 +922,10 @@ export function winnersToCsv(state: LotteryEventState): string {
 }
 
 export function eventBackupFileName(state: LotteryEventState, date = new Date()): string {
-  const title = state.eventTitle.replace(/[\\/:*?"<>|]/g, "").trim() || "活動抽獎";
-  return `${title}-${date.toISOString().slice(0, 10)}.json`;
+  // 參考專案使用固定的 Lottery_Backup_時間格式；固定前綴比活動標題更容易
+  // 在活動當天多次備份時排序與辨識，也避免標題中的特殊字元影響檔名。
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `Lottery_Backup_${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}.json`;
 }
 
 export function exportEventBackup(state: LotteryEventState, exportedAt = new Date()): string {

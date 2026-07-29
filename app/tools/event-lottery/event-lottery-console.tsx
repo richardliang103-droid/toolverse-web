@@ -878,7 +878,7 @@ export function EventLotteryConsole() {
   }
 
   function handleExportWinnersCsv() {
-    downloadBlob(new Blob([winnersToCsv(state)], { type: "text/csv;charset=utf-8" }), `${(state.eventTitle || "活動抽獎").replace(/[\\/:*?"<>|]/g, "")}-得獎紀錄.csv`);
+    downloadBlob(new Blob([winnersToCsv(state)], { type: "text/csv;charset=utf-8" }), `歷史中獎名單_${Date.now()}.csv`);
   }
 
   function handleExportRemainingCsv() {
@@ -1402,7 +1402,7 @@ export function EventLotteryConsole() {
             </div>
             <h3>一、事前準備 (資料匯入)</h3>
             <p>1. <strong>匯入人員名單</strong>：從左側「名單與報表」上傳 CSV 檔（預設提供 A/B/C 三組名單）。上傳前請確認檔案編碼（UTF-8 或 ANSI），<strong>避免產生亂碼</strong>。</p>
-            <p>2. <strong>設定獎項與圖片</strong>：從右側「獎項設定與清單」手動新增獎項，或批次匯入 CSV 檔。您可以直接在獎項表格中點選名稱進行<strong>快速修改</strong>，也可以從資料夾將圖片直接<strong>拖曳</strong>進入表格的「圖片(可拖曳)」欄位。</p>
+            <p>2. <strong>設定獎項與圖片</strong>：從右側「獎項設定」手動新增獎項，或批次匯入 CSV 檔。您可以直接在獎項表格中點選名稱進行<strong>快速修改</strong>，也可以從資料夾將圖片直接<strong>拖曳</strong>進入表格的「圖片(可拖曳)」欄位。</p>
             <p>3. <strong>獎項排序</strong>：在獎項清單中，按住獎項左側的「☰」符號上下拖曳，即可調整抽獎順序；系統會自動存檔，也可以在新增時指定接在第幾項後。</p>
             <h3>二、抽獎設定與同步</h3>
             <p>1. <strong>選擇抽獎模式</strong>：在上方控制列選擇「逐次抽出」（動畫一張一張翻出）或「一次抽出」（依據設定的<strong>抽獎動畫時間</strong>滾動後一次全開）。有音效需求也可在此開啟。</p>
