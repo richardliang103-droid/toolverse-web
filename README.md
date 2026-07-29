@@ -51,8 +51,8 @@ npm test
 - **資料模型**：`lib/event-lottery.ts` 定義名單群組、參加者、獎項、得獎紀錄，並提供 normalize／CSV 解析／安全抽選／失格歸還／JSON 備份驗證等純邏輯，`tests/event-lottery.test.mjs` 覆蓋。
 - **安全抽選**：候選人池建立後，直接重用 `lib/lottery.ts` 的 `drawWinners()`（Web Crypto API 的 Fisher–Yates 洗牌），不使用 `Math.random()`。
 - **分頁同步**：控制台與舞台各自開分頁，靠 `BroadcastChannel`（頻道 `toolverse:event-lottery:v1`）即時同步，並疊加 `storage` 事件當備援；資料本身存在 localStorage 的 `toolverse:event-lottery:v1`。抽獎結果只在確定的那一刻原子寫入一次（含 `pendingReveal.revealAt` 這個未來時間戳），舞台該顯示什麼一律用 `resolveStageDisplay(state, now)` 現算，不依賴任何存活的計時器——重新整理、關掉分頁、或分頁被瀏覽器背景節流都不影響正確性；`lib/event-lottery.ts` 的 `visibleWinnerCount()` 同一套原則也套用到逐一揭曉每一位得獎者的進度。
-- **抽獎操作**：可以在控制台操作（選擇獎項、指定人數、按鈕觸發），也可以直接在舞台用簡報筆、鍵盤（空白鍵／Enter／→／PageDown 前進，←／PageUp／Esc 清除畫面）或點擊畫面控制「抽下一個獎項」；兩種入口共用 `app/tools/event-lottery/actions.ts` 同一套動作，寫入的資料與廣播事件完全一致。
-- **CSV 範本**：參加者與獎項的 CSV 匯入區塊都提供「下載範例 CSV」，避免使用者要自己猜欄位格式。
+- **抽獎操作**：控制台可選擇獎項、設定本輪抽出人數，按「同步顯示於前台」後開始；舞台也能用簡報筆、鍵盤（空白鍵／Enter／→／PageDown 前進，←／PageUp／Esc 清除畫面）或點擊畫面控制。兩種入口共用 `app/tools/event-lottery/actions.ts` 同一套動作，寫入的資料與廣播事件完全一致。
+- **CSV／前台細節**：參加者與獎項匯入區塊提供 UTF-8／ANSI 選擇、下載範例 CSV；獎項 CSV 可指定 A／B／C 匯入對象。舞台會顯示獎品圖片、滾動候選姓名、逐次／一次揭曉、依人數縮放卡片，以及大量名單的自動捲動。
 - **舞台視覺**：重用專案既有的 GSAP 與 canvas-confetti，背景粒子用純 Canvas 繪製（不接任何外部粒子庫或 CDN），音效用 Web Audio API 即時合成一聲短鈴聲並在整個分頁共用同一個 `AudioContext`（不內建外部音檔），單輪超過 30 位得獎者只在第一位與最後一位放彩帶／音效，並尊重 `prefers-reduced-motion`。
 
 ## 活動抽獎手機遙控（optional）

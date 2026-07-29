@@ -155,7 +155,8 @@ export function buildHostStatus(state: LotteryEventState, revision: number, now 
   if (display.phase === "idle") phase = "idle";
   else if (display.phase === "prepared") phase = "prepared";
   else if (display.phase === "drawing") phase = "drawing";
-  else phase = now.getTime() < pendingRevealCompleteAt(display.pendingReveal) ? "revealing" : "finished";
+  else if (display.phase === "revealed") phase = now.getTime() < pendingRevealCompleteAt(display.pendingReveal) ? "revealing" : "finished";
+  else phase = "finished";
 
   const activePrize = state.activePrizeId ? state.prizes.find((prize) => prize.id === state.activePrizeId) ?? null : null;
 

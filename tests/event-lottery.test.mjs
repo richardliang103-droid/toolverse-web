@@ -24,12 +24,14 @@ import {
   parsePrizesCsv,
   pendingRevealCompleteAt,
   prepareStagePrize,
+  previewPrizeWinners,
   remainingSlots,
   resetEventDraws,
   resolveStageAdvance,
   resolveStageDisplay,
   sanitizeEventState,
   sequentialStepMs,
+  DEFAULT_SINGLE_SEQUENTIAL_MS,
   validateDraw,
   visibleWinnerCount,
   winnersToCsv,
@@ -63,7 +65,7 @@ test("normalize 修復錯誤資料：損壞欄位換成安全預設值，不會�
     animationDurationMs: "nope",
     soundEnabled: "yes",
   });
-  assert.equal(state.eventTitle, "活動抽獎");
+  assert.equal(state.eventTitle, "🎊 歡樂公司尾牙 🎊");
   assert.equal(state.rosters.length, 0);
   // 沒有任何名單群組時，參加者找不到有效 rosterId，應該被安全捨棄而不是讓整份資料壞掉。
   assert.equal(state.participants.length, 0);
@@ -71,7 +73,7 @@ test("normalize 修復錯誤資料：損壞欄位換成安全預設值，不會�
   assert.equal(state.prizes[0].totalCount, 1);
   assert.equal(state.winners.length, 0);
   assert.equal(state.revealMode, "sequential");
-  assert.equal(state.animationDurationMs, 3200);
+  assert.equal(state.animationDurationMs, 3000);
   assert.equal(state.soundEnabled, true);
   assert.equal(state.stageDrawCount, 1, "舊 localStorage／舊備份缺少 stageDrawCount 時安全回退為 1");
   assert.equal(state.stateRevision, 0, "舊 localStorage／舊備份缺少 stateRevision 時安全回退為 0");
@@ -202,6 +204,15 @@ test("CSV 解析：獎項 CSV 支援標題列、允許再參加與適用名單�
   assert.deepEqual(prizes[0].eligibleRosterIds, [rosterA.id]);
   assert.equal(prizes[1].allowRepeatWinners, true);
   assert.deepEqual(prizes[1].eligibleRosterIds, [rosterA.id, rosterB.id]);
+});
+
+test("CSV 解析：保留原版抽獎順序欄位", () => {
+  const { rosterA, rosterB } = buildBasicState();
+  const csv = `抽獎順序,獎項,數量\n2,二獎,1\n1,頭獎,1\n`;
+  const { prizes, warnings } = parsePrizesCsv(csv, [rosterA, rosterB], 0);
+  assert.equal(warnings.length, 0);
+  assert.equal(prizes[0].order, 1);
+  assert.equal(prizes[1].order, 0);
 });
 
 test("candidatePool：只從指定名單群組抽取，且排除停用人員", () => {
@@ -341,6 +352,17 @@ test("prepareStagePrize／clearStage／resetEventDraws：舞台與抽獎進度�
   assert.equal(resetState.participants.length, state.participants.length, "重置只清空抽獎進度，參加者要保留");
 });
 
+test("previewPrizeWinners：重新顯示歷史名單不會新增得獎紀錄或扣除名額", () => {
+  const { state, prize } = buildBasicState();
+  const { nextState } = drawEventWinners(state, prize.id, 1);
+  const preview = previewPrizeWinners(nextState, prize.id);
+  assert.equal(preview.stagePreview?.prizeId, prize.id);
+  assert.equal(preview.stagePreview?.winnerIds.length, 1);
+  assert.equal(preview.winners.length, nextState.winners.length);
+  assert.equal(preview.prizes[0].drawnCount, nextState.prizes[0].drawnCount);
+  assert.equal(resolveStageDisplay(preview).phase, "preview");
+});
+
 test("resolveStageDisplay：揭曉時間到之前是 drawing，到了之後是 revealed（純粹算時間，不靠計時器）", () => {
   const { state, prize } = buildBasicState();
   const bigPrize = { ...prize, totalCount: 3, order: 0 };
@@ -386,11 +408,19 @@ test("resolveStageDisplay：pendingReveal 跟 activePrizeId 對不上時忽略�
 
 test("sequentialStepMs：人數少時用預設間隔，人數多到會讓整輪超過一分鐘時自動壓縮", () => {
   assert.equal(sequentialStepMs(1), 0);
-  assert.equal(sequentialStepMs(2), 1400);
-  assert.equal(sequentialStepMs(10), 1400);
+  assert.equal(sequentialStepMs(2), 1000);
+  assert.equal(sequentialStepMs(10), 1000);
   const compressed = sequentialStepMs(500);
-  assert.ok(compressed < 1400);
+  assert.ok(compressed < 1000);
   assert.ok(compressed * 499 <= 60_000 + 1e-6, "500 人逐一揭曉的總時間不能超過一分鐘");
+});
+
+test("drawEventWinners：逐次抽出單一得獎者會保留原版 3 秒滾動時間", () => {
+  const prize = createPrize({ name: "頭獎", totalCount: 1 });
+  const state = { ...createEmptyEventState(), prizes: [prize], participants: [createParticipant({ name: "王小明", employeeId: "E001" })] };
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const { nextState } = drawEventWinners(state, prize.id, 1, now);
+  assert.equal(Date.parse(nextState.pendingReveal.revealAt), now.getTime() + DEFAULT_SINGLE_SEQUENTIAL_MS);
 });
 
 test("pendingRevealCompleteAt：逐一揭曉要等最後一位顯示完才算播完；一次揭曉等同 revealAt", () => {
@@ -548,14 +578,17 @@ test("resolveStageAdvance：目前獎項已抽完後，準備下一個還有名�
   assert.deepEqual(resolveStageAdvance(allDone, afterSecondReveal), { action: "none" });
 });
 
-test("disqualifyWinner 不會把人從 pendingReveal 移除，舞台仍會顯示（並標示已失格）", () => {
+test("disqualifyWinner：前台先顯示感謝訊息，再回到該獎項的重抽準備畫面", () => {
   const { state, prize } = buildBasicState();
   const bigPrize = { ...prize, totalCount: 3 };
   const current = { ...state, prizes: [bigPrize] };
   const { winners, nextState } = drawEventWinners(current, prize.id, 1);
   const disqualified = disqualifyWinner(nextState, winners[0].id);
-  assert.ok(disqualified.pendingReveal, "失格不應該清掉這一輪的揭曉狀態");
-  assert.deepEqual(disqualified.pendingReveal.winnerIds, nextState.pendingReveal.winnerIds);
+  assert.equal(disqualified.pendingReveal, null);
+  assert.equal(disqualified.stagePreview, null);
+  assert.match(disqualified.stageNotice?.message ?? "", /無私奉獻/);
+  assert.equal(resolveStageDisplay(disqualified).phase, "notice");
+  assert.equal(resolveStageDisplay(disqualified, new Date(Date.parse(disqualified.stageNotice.until) + 1)).phase, "prepared");
   assert.equal(disqualified.winners.find((winner) => winner.id === winners[0].id).disqualified, true);
 });
 
@@ -588,7 +621,7 @@ test("空白活動不崩潰：所有查詢函式對空狀態都安全", () => {
   const empty = createEmptyEventState();
   assert.deepEqual(candidatePool(empty, "anything"), []);
   assert.equal(validateDraw(empty, "anything", 1).ok, false);
-  assert.equal(winnersToCsv(empty), "﻿抽出時間,獎項,姓名,員工編號,部門,狀態");
+  assert.equal(winnersToCsv(empty), "﻿抽取時間,獎項,部門,姓名,員工編號,狀態");
   assert.equal(canDeletePrize(empty, "anything"), true);
 });
 

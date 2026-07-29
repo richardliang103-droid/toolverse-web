@@ -3,7 +3,7 @@
 import confetti from "canvas-confetti";
 import gsap from "gsap";
 import { useEffect, useRef, useState } from "react";
-import { createEmptyEventState, pendingRevealCompleteAt, resolveStageAdvance, resolveStageDisplay, visibleWinnerCount, type LotteryEventState, type PendingReveal } from "@/lib/event-lottery";
+import { candidatePool, createEmptyEventState, pendingRevealCompleteAt, remainingSlots, resolveStageAdvance, resolveStageDisplay, visibleWinnerCount, type LotteryEventState, type PendingReveal } from "@/lib/event-lottery";
 import {
   buildHostStatus,
   commitAcceptedCommand,
@@ -76,6 +76,28 @@ function playChime(context: AudioContextLike) {
   }
 }
 
+/** 參考前台在轉盤期間播放 roll.mp3；這裡用短促的低音 tick 取代外部音檔，
+ *  保留持續滾動的聽覺回饋，同時不把未確認授權的素材打包進 Toolverse。 */
+function playRollingTick(context: AudioContextLike) {
+  try {
+    if (context.state === "suspended") void context.resume();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "triangle";
+    oscillator.frequency.setValueAtTime(180, context.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(120, context.currentTime + 0.06);
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.035, context.currentTime + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.08);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.1);
+  } catch {
+    /* 音效是裝飾效果，播放失敗不得中斷抽獎。 */
+  }
+}
+
 export function EventLotteryStage() {
   const [state, setState] = useState<LotteryEventState>(() => createEmptyEventState());
   const [hydrated, setHydrated] = useState(false);
@@ -86,6 +108,8 @@ export function EventLotteryStage() {
   const stageRef = useRef<HTMLDivElement>(null);
   const winnerListRef = useRef<HTMLDivElement>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const winnerAutoScrollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const rollingSoundRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioContextRef = useRef<AudioContextLike | null>(null);
   // 這一輪抽選（用 drawId 識別）如果曾經被觀察到處於「抽選中」倒數階段，代表這個
   // 分頁是全程在場的——揭曉過程要播動畫、放彩帶、出聲音。如果分頁是在揭曉開始後
@@ -99,6 +123,9 @@ export function EventLotteryStage() {
   // 廣播、重新整理，還是很久以後才打開分頁，算出來的結果都一樣。
   const display = resolveStageDisplay(state, new Date(nowTick));
   const visibleCount = display.phase === "revealed" ? visibleWinnerCount(display.pendingReveal, new Date(nowTick)) : 0;
+  const displayedWinnerIds = display.phase === "revealed"
+    ? display.pendingReveal.winnerIds.slice(0, visibleCount)
+    : display.phase === "preview" ? display.winnerIds : [];
 
   const post = useEventLotterySync((message) => {
     if (message.type === "DRAW_ERROR") {
@@ -118,6 +145,8 @@ export function EventLotteryStage() {
     setHydrated(true);
     return () => {
       if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      if (winnerAutoScrollRef.current) clearInterval(winnerAutoScrollRef.current);
+      if (rollingSoundRef.current) clearInterval(rollingSoundRef.current);
       // audioContextRef 是延遲建立的單例（見 getSharedAudioContext），卸載當下的
       // .current 才是要收掉的那個，不是 mount 當時的快照，故意在 cleanup 裡才讀取。
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -282,8 +311,9 @@ export function EventLotteryStage() {
   // 背景節流、暫停個幾十秒也沒關係，恢復後下一次重新計算會直接跳到正確進度。
   useEffect(() => {
     const pending = state.pendingReveal;
-    if (!pending) return;
-    const completeAt = pendingRevealCompleteAt(pending);
+    const noticeUntil = state.stageNotice ? Date.parse(state.stageNotice.until) : 0;
+    if (!pending && !noticeUntil) return;
+    const completeAt = pending ? pendingRevealCompleteAt(pending) : noticeUntil;
     if (Date.now() >= completeAt) return;
     const interval = setInterval(() => {
       const now = Date.now();
@@ -291,15 +321,32 @@ export function EventLotteryStage() {
       if (now >= completeAt) clearInterval(interval);
     }, 200);
     return () => clearInterval(interval);
-    // 刻意只依賴 drawId／revealAt 兩個原始值，不用整個 pendingReveal 物件：其他跟
+    // 刻意只依賴 drawId／revealAt／noticeUntil 這些原始值，不用整個 state 物件：其他跟
     // 這一輪無關的狀態變更（例如收到 STATE_UPDATED 重新讀取）不該讓計時器重開。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.pendingReveal?.drawId, state.pendingReveal?.revealAt]);
+  }, [state.pendingReveal?.drawId, state.pendingReveal?.revealAt, state.stageNotice?.until]);
 
   useEffect(() => {
     if (display.phase === "drawing") liveDrawIdsRef.current.add(display.pendingReveal.drawId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [display.phase, state.pendingReveal?.drawId]);
+
+  // 參考前台在抽選期間會持續播放 roll 音效；以固定節奏合成短 tick，避免
+  // 每一個得獎者建立一個獨立音效物件，也讓背景分頁恢復時不必補播歷史音檔。
+  useEffect(() => {
+    if (rollingSoundRef.current) clearInterval(rollingSoundRef.current);
+    rollingSoundRef.current = null;
+    if (display.phase !== "drawing" || !display.pendingReveal.soundEnabled) return;
+    rollingSoundRef.current = setInterval(() => {
+      const context = getSharedAudioContext(audioContextRef);
+      if (context) playRollingTick(context);
+    }, 150);
+    return () => {
+      if (rollingSoundRef.current) clearInterval(rollingSoundRef.current);
+      rollingSoundRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [display.phase, state.pendingReveal?.drawId, state.pendingReveal?.soundEnabled]);
 
   // 慶祝效果（彩帶／音效）：只有全程在場的分頁才播放，且用「目前該顯示到第幾位」
   // 跟「上次已經慶祝到第幾位」的差距來補放，就算某一次 tick 一口氣跳過好幾位
@@ -353,6 +400,28 @@ export function EventLotteryStage() {
       gsap.fromTo(last, { opacity: 0, y: 26, scale: 0.75, rotate: -4 }, { opacity: 1, y: 0, scale: 1, rotate: 0, duration: 0.65, ease: "back.out(2.1)" });
     }
   }, [visibleCount]);
+
+  useEffect(() => {
+    if (winnerAutoScrollRef.current) clearInterval(winnerAutoScrollRef.current);
+    winnerAutoScrollRef.current = null;
+    const list = winnerListRef.current;
+    if (!list || displayedWinnerIds.length < 10 || list.scrollHeight <= list.clientHeight || reducedMotion()) return;
+    let position = 0;
+    let direction = 1;
+    let pause = 100;
+    winnerAutoScrollRef.current = setInterval(() => {
+      if (pause > 0) { pause -= 1; return; }
+      const maxScroll = list.scrollHeight - list.clientHeight;
+      position += direction;
+      if (position >= maxScroll) { position = maxScroll; direction = -1; pause = 100; }
+      if (position <= 0) { position = 0; direction = 1; pause = 100; }
+      list.scrollTop = position;
+    }, 30);
+    return () => {
+      if (winnerAutoScrollRef.current) clearInterval(winnerAutoScrollRef.current);
+      winnerAutoScrollRef.current = null;
+    };
+  }, [displayedWinnerIds.length, display.phase]);
 
   async function toggleFullscreen() {
     try {
@@ -414,10 +483,15 @@ export function EventLotteryStage() {
   if (!hydrated) return <div className="event-lottery-stage-loading" aria-hidden="true" />;
 
   const activePrize = display.phase === "idle" ? null : state.prizes.find((prize) => prize.id === display.prizeId) ?? null;
-  const revealedWinners = (display.phase === "revealed" ? display.pendingReveal.winnerIds.slice(0, visibleCount) : [])
+  const revealedWinners = displayedWinnerIds
     .map((id) => state.winners.find((winner) => winner.id === id))
     .filter((winner): winner is NonNullable<typeof winner> => Boolean(winner));
   const hasBackground = Boolean(state.backgroundImageDataUrl);
+  const rollingPool = activePrize ? candidatePool(state, activePrize.id) : [];
+  const rollingName = rollingPool.length > 0 ? rollingPool[Math.floor(nowTick / 50) % rollingPool.length]?.name ?? "???" : "???";
+  const stageDrawCount = activePrize ? Math.min(state.stageDrawCount, remainingSlots(activePrize), rollingPool.length) : 0;
+  const winnerScale = revealedWinners.length === 1 ? "count-1" : revealedWinners.length <= 4 ? "count-few" : revealedWinners.length <= 10 ? "count-medium" : revealedWinners.length <= 20 ? "count-many" : revealedWinners.length <= 40 ? "count-huge" : "count-massive";
+  const sequentialStillRolling = display.phase === "revealed" && display.pendingReveal.revealMode === "sequential" && visibleCount < display.pendingReveal.winnerIds.length;
 
   return (
     <div
@@ -448,35 +522,44 @@ export function EventLotteryStage() {
 
         {!transientError && display.phase === "idle" && (
           <>
-            <p className="event-lottery-stage-idle">等待控制台準備抽獎…</p>
+            <p className="event-lottery-stage-idle">準備迎接下一個幸運兒！</p>
             <p className="event-lottery-stage-hint">按空白鍵、→ 或點擊畫面／用簡報筆開始抽獎</p>
           </>
+        )}
+
+        {!transientError && display.phase === "notice" && (
+          <div className="event-lottery-stage-gratitude" aria-live="assertive">
+            <p>{display.message}</p>
+            <small>即將準備重抽 1 人</small>
+          </div>
         )}
 
         {!transientError && (display.phase === "prepared" || display.phase === "drawing") && activePrize && (
           <div className="event-lottery-stage-prize">
             {activePrize.imageDataUrl && <img className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
-            <h2>{activePrize.name}</h2>
+            <h2>{display.phase === "drawing" ? `【${activePrize.name}】 抽獎進行中...` : `即將抽出：${activePrize.name} 共 ${stageDrawCount} 名`}</h2>
             {display.phase === "drawing"
-              ? <p className="event-lottery-stage-spin">抽選中…{display.pendingReveal.winnerIds.length > 1 ? `（${display.pendingReveal.winnerIds.length} 位）` : ""}<span className="event-lottery-stage-spin-ring" aria-hidden="true" /></p>
-              : <><p className="event-lottery-stage-waiting">即將開始抽選</p><p className="event-lottery-stage-hint">再按一次開始抽選</p></>}
+              ? display.pendingReveal.revealMode === "sequential"
+                ? <div className="event-lottery-stage-sequence-drawing" aria-live="polite"><div className="event-lottery-stage-rolling-card"><span>{rollingName}</span></div></div>
+                : <div className="event-lottery-stage-slot-machine" aria-live="polite"><div className="event-lottery-stage-slot-window"><span>{rollingName}</span></div><p className="event-lottery-stage-spin">抽獎進行中…{display.pendingReveal.winnerIds.length > 1 ? `（${display.pendingReveal.winnerIds.length} 位）` : ""}<span className="event-lottery-stage-spin-ring" aria-hidden="true" /></p></div>
+              : <p className="event-lottery-stage-hint">再按一次開始抽獎</p>}
           </div>
         )}
 
-        {!transientError && display.phase === "revealed" && activePrize && (
-          <div className="event-lottery-stage-reveal">
+        {!transientError && (display.phase === "revealed" || display.phase === "preview") && activePrize && (
+          <div className={`event-lottery-stage-reveal${display.phase === "preview" ? " event-lottery-stage-preview" : ""}`}>
             {activePrize.imageDataUrl && <img className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
-            <h2>{activePrize.name}</h2>
-            <div ref={winnerListRef} className="event-lottery-stage-winner-list">
-              {revealedWinners.map((winner) => (
-                <div className={`event-lottery-stage-winner-card${winner.disqualified ? " event-lottery-stage-winner-disqualified" : ""}`} key={winner.id}>
+            <h2>{display.phase === "preview" ? `👁️ ${activePrize.name}` : sequentialStillRolling ? `【${activePrize.name}】 抽獎進行中...` : `🎉 恭喜【${activePrize.name}】得獎者 🎉`}</h2>
+            <div ref={winnerListRef} className={`event-lottery-stage-winner-list ${winnerScale}`}>
+              {revealedWinners.map((winner, index) => (
+                <div className={`event-lottery-stage-winner-card${winner.disqualified ? " event-lottery-stage-winner-disqualified" : ""}`} style={{ animationDelay: `${Math.min(index * 0.08, 3)}s` }} key={winner.id}>
+                  <span className="event-lottery-stage-winner-dept">{winner.department || "---"}</span>
                   <span className="event-lottery-stage-winner-name">{winner.participantName}</span>
-                  {(winner.employeeId || winner.department) && (
-                    <span className="event-lottery-stage-winner-meta">{[winner.employeeId, winner.department].filter(Boolean).join(" · ")}</span>
-                  )}
+                  <span className="event-lottery-stage-winner-emp">{winner.employeeId || "---"}</span>
                   {winner.disqualified && <span className="event-lottery-stage-winner-tag">已失格</span>}
                 </div>
               ))}
+              {sequentialStillRolling && <div className="event-lottery-stage-rolling-card"><span>{rollingName}</span></div>}
             </div>
           </div>
         )}
