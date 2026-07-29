@@ -160,8 +160,11 @@ export function EventLotteryStage() {
       if (rollingSoundRef.current) clearInterval(rollingSoundRef.current);
       // audioContextRef 是延遲建立的單例（見 getSharedAudioContext），卸載當下的
       // .current 才是要收掉的那個，不是 mount 當時的快照，故意在 cleanup 裡才讀取。
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      if (audioContextRef.current) void audioContextRef.current.close();
+      // cleanup 可能因 React StrictMode／HMR 被重入，先清掉 ref 並確認狀態，避免對
+      // 已關閉的 AudioContext 再呼叫 close() 造成未處理的 InvalidStateError。
+      const audioContext = audioContextRef.current;
+      audioContextRef.current = null;
+      if (audioContext && audioContext.state !== "closed") void audioContext.close().catch(() => undefined);
     };
   }, []);
 
