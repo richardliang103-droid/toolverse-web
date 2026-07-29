@@ -674,6 +674,35 @@ export function resolveStageDisplay(state: LotteryEventState, now = new Date()):
   return { phase: "prepared", prizeId: state.activePrizeId };
 }
 
+export type StageAdvanceAction =
+  | { action: "none" }
+  | { action: "prepare"; prizeId: string }
+  | { action: "draw"; prizeId: string; count: number };
+
+/**
+ * 舞台可以用簡報筆／鍵盤／點擊畫面控制「下一步」，不需要回到控制台操作。這個
+ * 函式純粹依目前狀態決定下一步該做什麼，方便在舞台與（如果同時開著）控制台
+ * 共用同一套判斷，也方便單獨測試：
+ * - 正在揭曉中：不做事，避免跟目前這輪疊在一起。
+ * - 還沒準備獎項、或目前獎項已經沒有剩餘名額：準備下一個還有名額的獎項
+ *   （依 order 排序，找不到就代表全部抽完了，回傳 none）。
+ * - 已經準備好、還有剩餘名額：把這個獎項剩下的名額一次抽完。
+ */
+export function resolveStageAdvance(state: LotteryEventState, now = new Date()): StageAdvanceAction {
+  const display = resolveStageDisplay(state, now);
+  if (display.phase === "drawing") return { action: "none" };
+
+  const nextPreparablePrize = [...state.prizes].sort((a, b) => a.order - b.order).find((prize) => remainingSlots(prize) > 0);
+
+  if (display.phase === "prepared") {
+    const prize = state.prizes.find((item) => item.id === display.prizeId);
+    const count = prize ? remainingSlots(prize) : 0;
+    if (prize && count > 0) return { action: "draw", prizeId: prize.id, count };
+  }
+
+  return nextPreparablePrize ? { action: "prepare", prizeId: nextPreparablePrize.id } : { action: "none" };
+}
+
 // ---------------------------------------------------------------------------
 // 匯出
 // ---------------------------------------------------------------------------

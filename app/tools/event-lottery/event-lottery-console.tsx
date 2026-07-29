@@ -7,13 +7,11 @@ import {
   canDeleteParticipant,
   canDeletePrize,
   canDeleteRoster,
-  clearStage,
   createEmptyEventState,
   createParticipant,
   createPrize,
   createRoster,
   disqualifyWinner,
-  drawEventWinners,
   eligibleParticipantCount,
   eventBackupFileName,
   exportEventBackup,
@@ -28,7 +26,6 @@ import {
   parseParticipantsCsv,
   parsePrizesCsv,
   pendingRevealCompleteAt,
-  prepareStagePrize,
   remainingSlots,
   resetEventDraws,
   totalParticipantCount,
@@ -38,6 +35,7 @@ import {
   type LotteryEventState,
 } from "@/lib/event-lottery";
 import { downloadBlob } from "@/lib/download";
+import { clearStageAction, prepareStage, startDraw } from "./actions";
 import { loadEventState, saveEventState, useEventLotterySync, type EventLotterySyncMessage } from "./sync";
 
 type TabId = "rosters" | "participants" | "prizes" | "draw" | "history";
@@ -54,6 +52,14 @@ type Notice = { text: string; tone: "info" | "error" };
 /** 舞台沒有回報 DRAW_FINISHED（例如舞台分頁根本沒開）時，控制台最多等理論播完
  *  時間之後再加這麼多毫秒就自動解鎖，避免永久鎖死。 */
 const DRAW_LOCK_FALLBACK_MARGIN_MS = 8000;
+
+/** CSV 匯入格式容易猜錯，提供範例檔案讓使用者照著填，而不是只靠文字說明。 */
+const PARTICIPANT_CSV_TEMPLATE = "姓名,員工編號,部門\r\n王小明,E001,業務部\r\n林小美,E002,行銷部\r\n";
+const PRIZE_CSV_TEMPLATE = "名稱,總數量,允許已得獎者再次參加,適用名單\r\n三獎,5,,\r\n特獎,1,是,\r\n";
+
+function downloadCsvTemplate(content: string, filename: string) {
+  downloadBlob(new Blob([`﻿${content}`], { type: "text/csv;charset=utf-8" }), filename);
+}
 
 /** 圖片上傳一律先縮圖再存進 localStorage：避免單張圖片就把容量塞爆。 */
 async function resizeImageToDataUrl(file: File, maxEdge = 900, quality = 0.85): Promise<string> {
@@ -413,46 +419,25 @@ export function EventLotteryConsole() {
   function handlePrepareStage() {
     if (drawLocked) return;
     if (!drawTargetPrize) { showNotice("請先選擇獎項", "error"); return; }
-    commit(prepareStagePrize(state, drawTargetPrize.id), { type: "PREPARE_PRIZE", prizeId: drawTargetPrize.id });
+    const result = prepareStage(state, drawTargetPrize.id, post);
+    if (!result.ok) { showNotice(result.reason, "error"); return; }
+    setState(result.state);
     showNotice(`舞台已準備顯示「${drawTargetPrize.name}」`);
   }
 
-  /**
-   * 抽選只有「一次」原子寫入：得獎紀錄、獎項已抽數量與這一輪的揭曉時間表
-   * （pendingReveal）一起落地。舞台什麼時候看起來揭曉，交給 resolveStageDisplay
-   * 用目前時間現算，不依賴這裡的計時器活著——就算儲存成功後立刻重新整理或整個
-   * 關掉控制台分頁，舞台（或之後重新打開的控制台）都能算出正確畫面。
-   * 這裡排的 setTimeout 純粹是「揭曉那一刻順便廣播一次 DRAW_RESULT」的錦上添花，
-   * 沒收到也不影響正確性。
-   */
   function handleStartDraw() {
     if (drawLocked) return;
     if (!drawTargetPrize) { showNotice("請先選擇獎項", "error"); return; }
-    let outcome;
-    try {
-      outcome = drawEventWinners(state, drawTargetPrize.id, drawCount);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "抽選時發生錯誤";
-      showNotice(message, "error");
-      post({ type: "DRAW_ERROR", message });
-      return;
-    }
-    if (!saveEventState(outcome.nextState)) {
-      showNotice("儲存失敗，可能是瀏覽器儲存空間不足，這輪抽獎未送出，請刪減圖片或紀錄後再試", "error");
-      return;
-    }
+    const result = startDraw(state, drawTargetPrize.id, drawCount, post);
+    if (!result.ok) { showNotice(result.reason, "error"); return; }
     setNotice(null);
-    setState(outcome.nextState);
-    post({ type: "START_DRAW", prizeId: drawTargetPrize.id });
-    const pendingReveal = outcome.nextState.pendingReveal;
-    if (pendingReveal) {
-      const delay = Math.max(0, Date.parse(pendingReveal.revealAt) - Date.now());
-      window.setTimeout(() => post({ type: "DRAW_RESULT", prizeId: drawTargetPrize.id }), delay);
-    }
+    setState(result.state);
   }
 
   function handleClearStage() {
-    commit(clearStage(state), { type: "CLEAR_STAGE" });
+    const result = clearStageAction(state, post);
+    if (!result.ok) { showNotice(result.reason, "error"); return; }
+    setState(result.state);
   }
 
   function handleResetEvent() {
@@ -573,6 +558,7 @@ export function EventLotteryConsole() {
               </select>
               <button className="button button-small button-secondary" type="button" onClick={() => csvFileInputRef.current?.click()} disabled={state.rosters.length === 0}>選擇 CSV 檔案</button>
               <input ref={csvFileInputRef} className="file-input" type="file" accept="text/csv,.csv" aria-label="選擇參加者 CSV 檔案" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleCsvFile(file); event.target.value = ""; }} />
+              <button className="button button-small button-secondary" type="button" onClick={() => downloadCsvTemplate(PARTICIPANT_CSV_TEMPLATE, "活動抽獎-參加者範例.csv")}>下載範例 CSV</button>
             </div>
             <textarea className="participant-input" placeholder={"或直接貼上 CSV 內容\n姓名,員工編號,部門\n小明,E001,業務"} value={csvText} onChange={(event) => setCsvText(event.target.value)} />
             <button className="button button-small button-secondary" type="button" onClick={() => applyParticipantCsv(csvText)} disabled={!csvText.trim() || state.rosters.length === 0}>匯入貼上的內容</button>
@@ -638,6 +624,7 @@ export function EventLotteryConsole() {
             <div className="event-lottery-inline-form">
               <button className="button button-small button-secondary" type="button" onClick={() => prizeCsvFileInputRef.current?.click()}>選擇 CSV 檔案</button>
               <input ref={prizeCsvFileInputRef} className="file-input" type="file" accept="text/csv,.csv" aria-label="選擇獎項 CSV 檔案" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handlePrizeCsvFile(file); event.target.value = ""; }} />
+              <button className="button button-small button-secondary" type="button" onClick={() => downloadCsvTemplate(PRIZE_CSV_TEMPLATE, "活動抽獎-獎項範例.csv")}>下載範例 CSV</button>
             </div>
             <textarea className="participant-input" placeholder={"或直接貼上 CSV 內容\n名稱,總數量\n三獎,5"} value={prizeCsvText} onChange={(event) => setPrizeCsvText(event.target.value)} />
             <button className="button button-small button-secondary" type="button" onClick={() => applyPrizeCsv(prizeCsvText)} disabled={!prizeCsvText.trim()}>匯入貼上的內容</button>
