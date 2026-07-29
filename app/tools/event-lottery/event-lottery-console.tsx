@@ -57,8 +57,8 @@ type Notice = { text: string; tone: "info" | "error" };
 const DRAW_LOCK_FALLBACK_MARGIN_MS = 8000;
 
 /** CSV 匯入格式容易猜錯，提供範例檔案讓使用者照著填，而不是只靠文字說明。 */
-const PARTICIPANT_CSV_TEMPLATE = "部門,姓名,員工編號\r\n業務部,王小明,E001\r\n行銷部,林小美,E002\r\n";
-const PRIZE_CSV_TEMPLATE = "抽獎順序,獎項,數量\r\n1,頭獎,1\r\n2,二獎,1\r\n3,參加獎,10\r\n";
+const PARTICIPANT_CSV_TEMPLATE = "部門,姓名,員工編號\r\n法金資訊部,梁O強,99999\r\n";
+const PRIZE_CSV_TEMPLATE = "抽獎順序,獎項,數量\r\n1,頭獎 台積電1張,1\r\n2,二獎 歐洲機票1張,1\r\n3,參加獎 電影票,10\r\n";
 
 async function readTextWithEncoding(file: File, encoding: "utf-8" | "big5"): Promise<string> {
   const bytes = await file.arrayBuffer();
@@ -69,21 +69,63 @@ function downloadCsvTemplate(content: string, filename: string) {
   downloadBlob(new Blob([`﻿${content}`], { type: "text/csv;charset=utf-8" }), filename);
 }
 
+type DecodedUploadImage = {
+  width: number;
+  height: number;
+  draw: (context: CanvasRenderingContext2D, width: number, height: number) => void;
+  close: () => void;
+};
+
+/** 依參考專案的 800px 寬度／JPEG 方式縮圖，再加上 Toolverse 的容量上限保護。 */
+async function decodeUploadImage(file: File): Promise<DecodedUploadImage> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(file);
+      return {
+        width: bitmap.width,
+        height: bitmap.height,
+        draw: (context, width, height) => context.drawImage(bitmap, 0, 0, width, height),
+        close: () => bitmap.close(),
+      };
+    } catch {
+      // Safari 與部分圖片格式不支援 createImageBitmap；退回原版的 Image 解碼流程。
+    }
+  }
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error("圖片解碼失敗"));
+      element.src = objectUrl;
+    });
+    return {
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      draw: (context, width, height) => context.drawImage(image, 0, 0, width, height),
+      close: () => URL.revokeObjectURL(objectUrl),
+    };
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl);
+    throw error;
+  }
+}
+
 /** 圖片上傳一律先縮圖再存進 localStorage：避免單張圖片就把容量塞爆。 */
-async function resizeImageToDataUrl(file: File, maxEdge = 900, quality = 0.85): Promise<string> {
+async function resizeImageToDataUrl(file: File, maxWidth = 800, quality = 0.7): Promise<string> {
   if (!file.type.startsWith("image/")) throw new Error("請選擇圖片檔案");
   if (file.size > 15 * 1024 * 1024) throw new Error("圖片檔案過大，上限 15MB");
-  const bitmap = await createImageBitmap(file);
+  const image = await decodeUploadImage(file);
   try {
-    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
-    const width = Math.max(1, Math.round(bitmap.width * scale));
-    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const scale = Math.min(1, maxWidth / image.width);
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) throw new Error("這個瀏覽器不支援圖片處理");
-    context.drawImage(bitmap, 0, 0, width, height);
+    image.draw(context, width, height);
     let currentQuality = quality;
     let dataUrl = canvas.toDataURL("image/jpeg", currentQuality);
     while (dataUrl.length > MAX_IMAGE_DATA_URL_LENGTH && currentQuality > 0.3) {
@@ -93,7 +135,7 @@ async function resizeImageToDataUrl(file: File, maxEdge = 900, quality = 0.85): 
     if (dataUrl.length > MAX_IMAGE_DATA_URL_LENGTH) throw new Error("圖片處理後仍太大，請換一張較小的圖片");
     return dataUrl;
   } finally {
-    bitmap.close();
+    image.close();
   }
 }
 
@@ -915,7 +957,7 @@ export function EventLotteryConsole() {
         <div className="event-lottery-background-row">
           <span className="panel-meta">前台背景</span>
           <button className="button button-small button-secondary" type="button" onClick={() => backgroundInputRef.current?.click()}>{state.backgroundImageDataUrl ? "更換背景圖片" : "上傳背景圖片"}</button>
-          {state.backgroundImageDataUrl && <button className="button button-small button-secondary" type="button" onClick={() => commit({ ...state, backgroundImageDataUrl: null })}>還原預設</button>}
+          <button className="button button-small button-secondary" type="button" onClick={() => commit({ ...state, backgroundImageDataUrl: null })}>還原預設</button>
           <input ref={backgroundInputRef} className="file-input" type="file" accept="image/*" aria-label="上傳舞台背景圖片" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleBackgroundImage(file); event.target.value = ""; }} />
         </div>
         <div className="event-lottery-quick-actions">
@@ -1041,7 +1083,7 @@ export function EventLotteryConsole() {
               <input ref={csvFileInputRef} className="file-input" type="file" accept="text/csv,.csv" aria-label="選擇參加者 CSV 檔案" onChange={(event) => setParticipantCsvFile(event.target.files?.[0] ?? null)} />
               <span className="panel-meta" title={participantCsvFile?.name}>{participantCsvFile?.name ?? "尚未選擇檔案"}</span>
               <button className="button button-small button-blue" type="button" onClick={() => void uploadParticipantCsv()} disabled={!participantCsvFile || state.rosters.length === 0}>上傳</button>
-              <button className="button button-small button-secondary" type="button" onClick={() => downloadCsvTemplate(PARTICIPANT_CSV_TEMPLATE, "活動抽獎-參加者範例.csv")}>下載範例 CSV</button>
+              <button className="button button-small button-secondary" type="button" onClick={() => downloadCsvTemplate(PARTICIPANT_CSV_TEMPLATE, "人員名單範例.csv")}>📥 下載人員名單範例</button>
             </div>
             <textarea className="participant-input" placeholder={"或直接貼上 CSV 內容\n部門,姓名,員工編號\n業務部,小明,E001"} value={csvText} onChange={(event) => setCsvText(event.target.value)} />
             <button className="button button-small button-secondary" type="button" onClick={() => applyParticipantCsv(csvText)} disabled={!csvText.trim() || state.rosters.length === 0}>匯入貼上的內容</button>
@@ -1120,7 +1162,7 @@ export function EventLotteryConsole() {
               <input ref={prizeCsvFileInputRef} className="file-input" type="file" accept="text/csv,.csv" aria-label="選擇獎項 CSV 檔案" onChange={(event) => setPrizeCsvFile(event.target.files?.[0] ?? null)} />
               <span className="panel-meta" title={prizeCsvFile?.name}>{prizeCsvFile?.name ?? "尚未選擇檔案"}</span>
               <button className="button button-small button-blue" type="button" onClick={() => void uploadPrizeCsv()} disabled={!prizeCsvFile}>上傳獎項 CSV</button>
-              <button className="button button-small button-secondary" type="button" onClick={() => downloadCsvTemplate(PRIZE_CSV_TEMPLATE, "活動抽獎-獎項範例.csv")}>下載範例 CSV</button>
+              <button className="button button-small button-secondary" type="button" onClick={() => downloadCsvTemplate(PRIZE_CSV_TEMPLATE, "獎品項目清單範例.csv")}>📥 下載獎品項目清單範例</button>
             </div>
             <fieldset className="event-lottery-roster-checks">
               <legend>CSV 匯入對象名單</legend>

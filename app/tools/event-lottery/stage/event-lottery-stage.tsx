@@ -563,7 +563,7 @@ export function EventLotteryStage() {
       aria-label="活動抽獎舞台展示"
       onClick={handleAdvance}
     >
-      {!hasBackground && <StageParticles />}
+      <StageParticles />
       <div className="event-lottery-stage-scrim" aria-hidden="true" />
 
       <button
