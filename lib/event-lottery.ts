@@ -75,6 +75,8 @@ export type StagePreview = {
   prizeId: string;
   winnerIds: string[];
   shownAt: string;
+  /** 歷史名單也沿用前台的抽獎動畫，時間到才揭曉卡片。 */
+  revealAt: string;
 };
 
 export type StageNotice = {
@@ -337,8 +339,9 @@ function sanitizeStagePreview(value: unknown, prizeIds: Set<string>, winnerIds: 
     ? [...new Set(value.winnerIds.filter((id): id is string => typeof id === "string" && winnerIds.has(id)))]
     : [];
   const shownAt = validIsoDate(value.shownAt);
-  if (!prizeId || ids.length === 0 || !shownAt) return null;
-  return { prizeId, winnerIds: ids, shownAt };
+  const revealAt = validIsoDate(value.revealAt) ?? shownAt;
+  if (!prizeId || ids.length === 0 || !shownAt || !revealAt) return null;
+  return { prizeId, winnerIds: ids, shownAt, revealAt };
 }
 
 function sanitizeStageNotice(value: unknown): StageNotice | null {
@@ -410,7 +413,7 @@ export function eligibleParticipantCount(participants: EventParticipant[]): numb
 // CSV 匯入
 // ---------------------------------------------------------------------------
 
-const PARTICIPANT_HEADER_KEYWORDS = ["姓名", "name", "員工編號", "employeeid", "employee_id", "部門", "department"];
+const PARTICIPANT_HEADER_KEYWORDS = ["姓名", "name", "員工編號", "employeeid", "employee_id", "emp_id", "id", "部門", "department", "dept"];
 
 function isParticipantHeaderRow(row: string[]): boolean {
   return row.some((cell) => PARTICIPANT_HEADER_KEYWORDS.includes(cell.trim().toLowerCase()));
@@ -432,8 +435,8 @@ export function parseParticipantsCsv(text: string): { rows: ParsedParticipantRow
     const header = table[0].map((cell) => cell.trim().toLowerCase());
     const findIndex = (keys: string[]) => header.findIndex((cell) => keys.includes(cell));
     nameIndex = Math.max(0, findIndex(["姓名", "name"]));
-    employeeIdIndex = findIndex(["員工編號", "employeeid", "employee_id", "編號"]);
-    departmentIndex = findIndex(["部門", "department"]);
+    employeeIdIndex = findIndex(["員工編號", "employeeid", "employee_id", "emp_id", "編號", "id"]);
+    departmentIndex = findIndex(["部門", "department", "dept"]);
     body = table.slice(1);
   }
 
@@ -476,7 +479,7 @@ export function mergeParticipantsFromCsv(
   return { participants: next, added, skipped };
 }
 
-const PRIZE_HEADER_KEYWORDS = ["名稱", "name", "總數量", "數量", "count", "抽獎順序", "顯示順序", "順序", "order", "允許已得獎者再次參加", "適用名單"];
+const PRIZE_HEADER_KEYWORDS = ["名稱", "獎項", "name", "prize", "總數量", "數量", "qty", "quantity", "count", "抽獎順序", "顯示順序", "順序", "order", "允許已得獎者再次參加", "allow_all", "allow_repeat", "適用名單"];
 
 function isPrizeHeaderRow(row: string[]): boolean {
   return row.some((cell) => PRIZE_HEADER_KEYWORDS.includes(cell.trim()));
@@ -497,10 +500,10 @@ export function parsePrizesCsv(text: string, rosters: Roster[], startOrder: numb
   if (isPrizeHeaderRow(table[0])) {
     const header = table[0].map((cell) => cell.trim());
     const findIndex = (keys: string[]) => header.findIndex((cell) => keys.includes(cell));
-    nameIndex = Math.max(0, findIndex(["名稱", "name"]));
-    countIndex = Math.max(1, findIndex(["總數量", "數量", "count"]));
+    nameIndex = Math.max(0, findIndex(["名稱", "獎項", "name", "prize"]));
+    countIndex = Math.max(1, findIndex(["總數量", "數量", "qty", "quantity", "count"]));
     orderIndex = findIndex(["抽獎順序", "顯示順序", "順序", "order"]);
-    allowRepeatIndex = findIndex(["允許已得獎者再次參加"]);
+    allowRepeatIndex = findIndex(["允許已得獎者再次參加", "allow_all", "allow_repeat"]);
     rostersIndex = findIndex(["適用名單"]);
     body = table.slice(1);
   }
@@ -713,7 +716,12 @@ export function previewPrizeWinners(state: LotteryEventState, prizeId: string, n
     ...state,
     activePrizeId: prizeId,
     pendingReveal: null,
-    stagePreview: { prizeId, winnerIds, shownAt: now.toISOString() },
+    stagePreview: {
+      prizeId,
+      winnerIds,
+      shownAt: now.toISOString(),
+      revealAt: new Date(now.getTime() + state.animationDurationMs).toISOString(),
+    },
     stageNotice: null,
     updatedAt: now.toISOString(),
   };
@@ -758,7 +766,7 @@ export type StageDisplay =
   | { phase: "prepared"; prizeId: string }
   | { phase: "drawing"; prizeId: string; pendingReveal: PendingReveal }
   | { phase: "revealed"; prizeId: string; pendingReveal: PendingReveal }
-  | { phase: "preview"; prizeId: string; winnerIds: string[] }
+  | { phase: "preview"; prizeId: string; winnerIds: string[]; rolling: boolean }
   | { phase: "notice"; message: string; until: string; prizeId: string };
 
 /**
@@ -779,7 +787,12 @@ export function resolveStageDisplay(state: LotteryEventState, now = new Date()):
       : { phase: "drawing", prizeId: pending.prizeId, pendingReveal: pending };
   }
   if (state.stagePreview && state.stagePreview.prizeId === state.activePrizeId) {
-    return { phase: "preview", prizeId: state.stagePreview.prizeId, winnerIds: state.stagePreview.winnerIds };
+    return {
+      phase: "preview",
+      prizeId: state.stagePreview.prizeId,
+      winnerIds: state.stagePreview.winnerIds,
+      rolling: now.getTime() < Date.parse(state.stagePreview.revealAt),
+    };
   }
   return { phase: "prepared", prizeId: state.activePrizeId };
 }
@@ -812,6 +825,10 @@ export function resolveStageAdvance(state: LotteryEventState, now = new Date()):
   }
 
   const display = resolveStageDisplay(state, now);
+
+  // 顯示歷史得獎名單也要等前台動畫播完，避免按鍵／手機遙控在卡片尚未揭曉
+  // 時就清掉這個預覽或切到下一個獎項。
+  if (display.phase === "preview" && display.rolling) return { action: "none" };
 
   const nextPreparablePrize = [...state.prizes].sort((a, b) => a.order - b.order).find((prize) => remainingSlots(prize) > 0);
 

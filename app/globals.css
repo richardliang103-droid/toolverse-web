@@ -1200,7 +1200,8 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 .event-lottery-subsection h3 { margin: 0 0 8px; font-size: 15px; }
 .event-lottery-roster-upload-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
 .event-lottery-roster-upload-card { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: #f9fbfb; }
-.event-lottery-roster-upload-heading { display: flex; justify-content: space-between; gap: 8px; }
+.event-lottery-roster-upload-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.event-lottery-roster-upload-heading .key-input { min-width: 0; flex: 1; font-weight: 700; }
 .event-lottery-roster-upload-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .event-lottery-roster-upload-actions .key-input { min-width: 0; flex: 1 1 90px; }
 .event-lottery-manual-add { margin-top: 4px; }

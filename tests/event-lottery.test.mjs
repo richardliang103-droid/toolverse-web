@@ -175,6 +175,17 @@ test("CSV 解析：沒有標題列時依固定欄位順序解讀，缺姓名的�
   assert.match(warnings[0], /缺少姓名/);
 });
 
+test("CSV 解析：相容參考專案使用的 emp_id／dept／prize／qty 欄位名稱", () => {
+  const participants = parseParticipantsCsv("dept,emp_id,name\n業務,E001,小明\n");
+  assert.deepEqual(participants.rows, [{ name: "小明", employeeId: "E001", department: "業務" }]);
+
+  const { prizes } = parsePrizesCsv("order,prize,qty,allow_all\n1,頭獎,2,true\n", [], 0);
+  assert.equal(prizes.length, 1);
+  assert.equal(prizes[0].name, "頭獎");
+  assert.equal(prizes[0].totalCount, 2);
+  assert.equal(prizes[0].allowRepeatWinners, true);
+});
+
 test("mergeParticipantsFromCsv：員工編號重複時略過並回報，不會靜默重複加入", () => {
   const { state, rosterA } = buildBasicState();
   const { rows } = parseParticipantsCsv("姓名,員工編號,部門\n小新,E001,業務\n小剛,E010,業務\n");
@@ -355,12 +366,31 @@ test("prepareStagePrize／clearStage／resetEventDraws：舞台與抽獎進度�
 test("previewPrizeWinners：重新顯示歷史名單不會新增得獎紀錄或扣除名額", () => {
   const { state, prize } = buildBasicState();
   const { nextState } = drawEventWinners(state, prize.id, 1);
-  const preview = previewPrizeWinners(nextState, prize.id);
+  const shownAt = new Date("2026-01-01T00:00:00.000Z");
+  const preview = previewPrizeWinners(nextState, prize.id, shownAt);
   assert.equal(preview.stagePreview?.prizeId, prize.id);
   assert.equal(preview.stagePreview?.winnerIds.length, 1);
+  assert.equal(preview.stagePreview?.revealAt, new Date(shownAt.getTime() + state.animationDurationMs).toISOString());
   assert.equal(preview.winners.length, nextState.winners.length);
   assert.equal(preview.prizes[0].drawnCount, nextState.prizes[0].drawnCount);
-  assert.equal(resolveStageDisplay(preview).phase, "preview");
+  assert.equal(resolveStageDisplay(preview, shownAt).phase, "preview");
+  assert.equal(resolveStageDisplay(preview, shownAt).rolling, true);
+});
+
+test("previewPrizeWinners：歷史名單預覽會先滾動，動畫完成後才顯示卡片並允許下一步", () => {
+  const { state, prize } = buildBasicState();
+  const oneShotPrize = { ...prize, totalCount: 1 };
+  const current = { ...state, prizes: [oneShotPrize] };
+  const drawnAt = new Date("2026-01-01T00:00:00.000Z");
+  const { nextState } = drawEventWinners(current, prize.id, 1, drawnAt);
+  const shownAt = new Date("2026-01-01T00:01:00.000Z");
+  const preview = previewPrizeWinners(nextState, prize.id, shownAt);
+  const revealAt = new Date(preview.stagePreview.revealAt);
+
+  assert.equal(resolveStageAdvance(preview, shownAt).action, "none");
+  assert.equal(resolveStageDisplay(preview, new Date(revealAt.getTime() - 1)).rolling, true);
+  assert.equal(resolveStageDisplay(preview, revealAt).rolling, false);
+  assert.deepEqual(resolveStageAdvance(preview, revealAt), { action: "clear" });
 });
 
 test("resolveStageDisplay：揭曉時間到之前是 drawing，到了之後是 revealed（純粹算時間，不靠計時器）", () => {

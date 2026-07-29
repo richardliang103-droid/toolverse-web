@@ -304,20 +304,24 @@ export function EventLotteryConsole() {
   useEffect(() => {
     const pending = state.pendingReveal;
     const noticeUntil = state.stageNotice ? Date.parse(state.stageNotice.until) : 0;
-    if ((!pending || ackedDrawIds.has(pending.drawId)) && (!noticeUntil || Date.now() >= noticeUntil)) return;
+    const previewRevealAt = state.stagePreview ? Date.parse(state.stagePreview.revealAt) : 0;
+    if ((!pending || ackedDrawIds.has(pending.drawId))
+      && (!noticeUntil || Date.now() >= noticeUntil)
+      && (!previewRevealAt || Date.now() >= previewRevealAt)) return;
     const interval = setInterval(() => setNowTick(Date.now()), 250);
     return () => clearInterval(interval);
-    // 刻意只依賴 drawId／revealAt 兩個原始值，不用整個 pendingReveal 物件：其他跟
+    // 刻意只依賴 drawId／revealAt／previewRevealAt 這些原始值，不用整個物件：其他跟
     // 這一輪無關的變更（重新讀取狀態等）不該讓這個計時器重新啟動。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.pendingReveal?.drawId, state.pendingReveal?.revealAt, state.stageNotice?.until, ackedDrawIds]);
+  }, [state.pendingReveal?.drawId, state.pendingReveal?.revealAt, state.stageNotice?.until, state.stagePreview?.revealAt, ackedDrawIds]);
 
   // 解鎖優先看舞台的 DRAW_FINISHED 回報；如果舞台分頁根本沒開、或訊息漏接，
   // 用「理論播完時間 + 安全緩衝」當備援，避免控制台永遠鎖死。
   const pendingReveal = state.pendingReveal;
   const pendingAcked = pendingReveal !== null && ackedDrawIds.has(pendingReveal.drawId);
   const noticeLocked = state.stageNotice !== null && nowTick < Date.parse(state.stageNotice.until);
-  const drawLocked = noticeLocked || (pendingReveal !== null && !pendingAcked && nowTick < pendingRevealCompleteAt(pendingReveal) + DRAW_LOCK_FALLBACK_MARGIN_MS);
+  const previewLocked = state.stagePreview !== null && nowTick < Date.parse(state.stagePreview.revealAt);
+  const drawLocked = noticeLocked || previewLocked || (pendingReveal !== null && !pendingAcked && nowTick < pendingRevealCompleteAt(pendingReveal) + DRAW_LOCK_FALLBACK_MARGIN_MS);
 
   const rosterConfirm = useArmedConfirm();
   const participantConfirm = useArmedConfirm();
@@ -387,11 +391,16 @@ export function EventLotteryConsole() {
       return;
     }
     rosterConfirm.confirm(id, () => {
+      const remainingRosterIds = state.rosters.filter((roster) => roster.id !== id).map((roster) => roster.id);
       commit({
         ...state,
         rosters: state.rosters.filter((roster) => roster.id !== id),
         participants: state.participants.filter((participant) => participant.rosterId !== id),
-        prizes: state.prizes.map((prize) => ({ ...prize, eligibleRosterIds: prize.eligibleRosterIds.filter((rid) => rid !== id) })),
+        prizes: state.prizes.map((prize) => {
+          if (prize.eligibleRosterIds.length === 0) return prize;
+          const eligibleRosterIds = prize.eligibleRosterIds.filter((rid) => rid !== id);
+          return { ...prize, eligibleRosterIds: eligibleRosterIds.length > 0 ? eligibleRosterIds : remainingRosterIds };
+        }),
       });
     });
   }
@@ -538,6 +547,7 @@ export function EventLotteryConsole() {
 
   const orderedPrizes = useMemo(() => [...state.prizes].sort((a, b) => a.order - b.order), [state.prizes]);
   const editingPrize = editingPrizeId ? state.prizes.find((prize) => prize.id === editingPrizeId) ?? null : null;
+  const allRosterIds = useMemo(() => state.rosters.map((roster) => roster.id), [state.rosters]);
   const effectivePrizeRosterIds = useMemo(() => {
     const valid = prizeRosterIds.filter((id) => state.rosters.some((roster) => roster.id === id));
     return valid.length > 0 ? valid : (state.rosters[0] ? [state.rosters[0].id] : []);
@@ -595,7 +605,7 @@ export function EventLotteryConsole() {
     setEditingPrizeDraft({
       name: prize.name,
       totalCount: prize.totalCount,
-      eligibleRosterIds: prize.eligibleRosterIds.length > 0 ? [...prize.eligibleRosterIds] : (state.rosters[0] ? [state.rosters[0].id] : []),
+      eligibleRosterIds: prize.eligibleRosterIds.length > 0 ? [...prize.eligibleRosterIds] : [...allRosterIds],
       allowRepeatWinners: prize.allowRepeatWinners,
     });
   }
@@ -625,9 +635,10 @@ export function EventLotteryConsole() {
   function toggleEligibleRoster(prizeId: string, rosterId: string) {
     const prize = state.prizes.find((item) => item.id === prizeId);
     if (!prize) return;
-    const next = prize.eligibleRosterIds.includes(rosterId)
-      ? prize.eligibleRosterIds.filter((id) => id !== rosterId)
-      : [...prize.eligibleRosterIds, rosterId];
+    const current = prize.eligibleRosterIds.length > 0 ? prize.eligibleRosterIds : allRosterIds;
+    const next = current.includes(rosterId)
+      ? current.filter((id) => id !== rosterId)
+      : [...current, rosterId];
     if (next.length === 0 && state.rosters.length > 0) {
       showNotice("最少必須選擇一個抽獎對象名單", "error");
       return;
@@ -790,15 +801,17 @@ export function EventLotteryConsole() {
       <div className="event-lottery-subsection">
         <h3>人員名單</h3>
         <p className="lottery-panel-note">每組名單可獨立上傳 CSV；支援 UTF-8 或 ANSI（Big5），欄位可使用「姓名、員工編號、部門」。</p>
-        <div className="event-lottery-roster-upload-grid">
+        {state.rosters.length === 0
+          ? <p className="result-empty"><strong>還沒有名單群組</strong>請先建立至少一個群組，才能加入參加者。</p>
+          : <div className="event-lottery-roster-upload-grid">
           {state.rosters.map((roster) => {
             const memberCount = state.participants.filter((participant) => participant.rosterId === roster.id).length;
             const encoding = rosterCsvEncodings[roster.id] ?? "utf-8";
             return (
               <div className="event-lottery-roster-upload-card" key={roster.id}>
                 <div className="event-lottery-roster-upload-heading">
-                  <strong>{roster.name}</strong>
-                  <span className="panel-meta">({memberCount} 人)</span>
+                  <input key={`${roster.id}:${roster.name}`} className="key-input" type="text" defaultValue={roster.name} maxLength={MAX_NAME_LENGTH} onBlur={(event) => handleRenameRoster(roster.id, event.target.value)} aria-label={`名單群組名稱：${roster.name}`} />
+                  <span className="panel-meta">({memberCount}人)</span>
                 </div>
                 <div className="event-lottery-roster-upload-actions">
                   <select className="key-input" value={encoding} onChange={(event) => setRosterCsvEncodings((current) => ({ ...current, [roster.id]: event.target.value === "big5" ? "big5" : "utf-8" }))} aria-label={`${roster.name} CSV 編碼`}>
@@ -808,6 +821,7 @@ export function EventLotteryConsole() {
                   <button className="button button-small button-secondary" type="button" onClick={() => rosterFileInputRefs.current.get(roster.id)?.click()}>上傳</button>
                   <input ref={(element) => { rosterFileInputRefs.current.set(roster.id, element); }} className="file-input" type="file" accept="text/csv,.csv" aria-label={`上傳 ${roster.name} CSV`} onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleRosterCsvFile(roster.id, file); event.target.value = ""; }} />
                   <button className="button button-small button-danger" type="button" onClick={() => clearRoster(roster.id)}>{rosterConfirm.armedId === `clear:${roster.id}` ? "再按一次清空" : "清空"}</button>
+                  <button className="button button-small button-danger" type="button" onClick={() => handleDeleteRoster(roster.id)}>{rosterConfirm.armedId === roster.id ? "再按一次刪除" : "刪除群組"}</button>
                 </div>
                 <details className="event-lottery-manual-add">
                   <summary>＋ 手動新增人員</summary>
@@ -821,7 +835,7 @@ export function EventLotteryConsole() {
               </div>
             );
           })}
-        </div>
+        </div>}
         <button className="button button-small button-secondary" type="button" onClick={() => downloadCsvTemplate(PARTICIPANT_CSV_TEMPLATE, "人員名單範例.csv")}>📥 下載人員名單範例</button>
       </div>
     );
@@ -867,7 +881,7 @@ export function EventLotteryConsole() {
           <span className="panel-meta">前台背景</span>
           <button className="button button-small button-secondary" type="button" onClick={() => backgroundInputRef.current?.click()}>{state.backgroundImageDataUrl ? "更換背景圖片" : "上傳背景圖片"}</button>
           {state.backgroundImageDataUrl && <button className="button button-small button-secondary" type="button" onClick={() => commit({ ...state, backgroundImageDataUrl: null })}>還原預設</button>}
-          <input ref={backgroundInputRef} className="file-input" type="file" accept="image/png,image/jpeg,image/webp" aria-label="上傳舞台背景圖片" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleBackgroundImage(file); event.target.value = ""; }} />
+          <input ref={backgroundInputRef} className="file-input" type="file" accept="image/*" aria-label="上傳舞台背景圖片" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleBackgroundImage(file); event.target.value = ""; }} />
         </div>
         <div className="event-lottery-quick-actions">
           <Link className="button button-small button-blue" href="/tools/event-lottery/stage" target="_blank" rel="noopener">開啟舞台展示 ↗</Link>
@@ -923,20 +937,6 @@ export function EventLotteryConsole() {
             <input className="key-input" type="text" placeholder="新名單群組名稱，例如：內場員工" value={newRosterName} maxLength={MAX_NAME_LENGTH} onChange={(event) => setNewRosterName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") handleAddRoster(); }} />
             <button className="button button-small button-blue" type="button" onClick={handleAddRoster} disabled={!newRosterName.trim() || state.rosters.length >= MAX_ROSTERS}>＋ 新增群組</button>
           </div>
-          {state.rosters.length === 0
-            ? <p className="result-empty"><strong>還沒有名單群組</strong>先建立至少一個群組，才能加入參加者。</p>
-            : <ul className="event-lottery-roster-list">
-                {state.rosters.map((roster) => {
-                  const memberCount = state.participants.filter((participant) => participant.rosterId === roster.id).length;
-                  return (
-                    <li key={roster.id} className="event-lottery-roster-row">
-                      <input className="key-input" type="text" defaultValue={roster.name} maxLength={MAX_NAME_LENGTH} onBlur={(event) => handleRenameRoster(roster.id, event.target.value)} aria-label={`名單群組名稱：${roster.name}`} />
-                      <span className="panel-meta">{memberCount} 人</span>
-                      <button className="button button-small button-danger" type="button" onClick={() => handleDeleteRoster(roster.id)}>{rosterConfirm.armedId === roster.id ? `再按一次刪除（含 ${memberCount} 人）` : "刪除"}</button>
-                    </li>
-                  );
-                })}
-              </ul>}
           {renderRosterUploadCards()}
           </section>
 
@@ -945,7 +945,7 @@ export function EventLotteryConsole() {
           {orderedPrizes.length === 0
             ? <p className="result-empty"><strong>還沒有獎項</strong>請先到「獎項管理」新增至少一個獎項。</p>
             : <>
-                {drawLocked && <p className="gantt-notice gantt-notice-info">{noticeLocked ? "前台正在顯示重抽提示，請稍候…" : "上一輪還在舞台上揭曉中，請稍候再開始下一輪（可以按「清除舞台顯示」提前中止）"}</p>}
+                {drawLocked && <p className="gantt-notice gantt-notice-info">{noticeLocked ? "前台正在顯示重抽提示，請稍候…" : previewLocked ? "前台正在播放歷史得獎名單，請稍候…" : "上一輪還在舞台上揭曉中，請稍候再開始下一輪（可以按「清除舞台顯示」提前中止）"}</p>}
                 <div className="event-lottery-draw-hints">
                   <p className="event-lottery-draw-hint event-lottery-draw-hint-success">🎁 剩餘獎項統計：{orderedPrizes.map((prize) => `${prize.name} ${remainingSlots(prize)} 名額`).join("、") || "尚無獎項"}</p>
                   <p className="event-lottery-draw-hint event-lottery-draw-hint-warning">👉 下一個預定抽獎：{nextAvailablePrize?.name ?? "所有獎項皆已抽完"}</p>
@@ -1051,7 +1051,7 @@ export function EventLotteryConsole() {
                 <input id="prize-insert-after" className="number-input" type="number" min={1} value={prizeInsertAfter} onChange={(event) => setPrizeInsertAfter(event.target.value)} />
               </label>
               <button className="button button-small button-secondary" type="button" onClick={() => newPrizeImageInputRef.current?.click()}>{prizeImageDataUrl ? "更換獎品圖片" : "上傳獎品圖片"}</button>
-              <input ref={newPrizeImageInputRef} className="file-input" type="file" accept="image/png,image/jpeg,image/webp" aria-label="上傳新獎項的獎品圖片" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleNewPrizeImage(file); event.target.value = ""; }} />
+              <input ref={newPrizeImageInputRef} className="file-input" type="file" accept="image/*" aria-label="上傳新獎項的獎品圖片" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleNewPrizeImage(file); event.target.value = ""; }} />
               <label className="check-row"><input type="checkbox" checked={prizeAllowRepeat} onChange={(event) => setPrizeAllowRepeat(event.target.checked)} />全員重抽</label>
               <button className="button button-small button-blue" type="button" onClick={handleAddPrize}>手動新增獎項</button>
             </div>
@@ -1118,7 +1118,7 @@ export function EventLotteryConsole() {
                         : <span className="event-lottery-prize-thumb event-lottery-prize-thumb-empty" aria-hidden="true">🖼️<small>拖曳圖片</small></span>}
                     </div>
                     <div className="event-lottery-prize-info">
-                      <input className="key-input" type="text" defaultValue={prize.name} maxLength={MAX_NAME_LENGTH} onBlur={(event) => handleUpdatePrize(prize.id, { name: event.target.value.trim().slice(0, MAX_NAME_LENGTH) || prize.name })} aria-label={`獎項名稱：${prize.name}`} />
+                      <input key={`${prize.id}:${prize.name}`} className="key-input" type="text" defaultValue={prize.name} maxLength={MAX_NAME_LENGTH} onBlur={(event) => handleUpdatePrize(prize.id, { name: event.target.value.trim().slice(0, MAX_NAME_LENGTH) || prize.name })} aria-label={`獎項名稱：${prize.name}`} />
                       <div className="event-lottery-prize-meta">
                         <label className="number-field">總數量
                           <input className="number-input" type="number" min={prize.drawnCount || 1} value={prize.totalCount} onChange={(event) => handleUpdatePrize(prize.id, { totalCount: Math.max(prize.drawnCount || 1, Math.round(Number(event.target.value)) || prize.totalCount) })} />
@@ -1130,7 +1130,7 @@ export function EventLotteryConsole() {
                         <legend>適用名單（至少選擇一個）</legend>
                         {state.rosters.map((roster) => (
                           <label className="check-row" key={roster.id}>
-                            <input type="checkbox" checked={prize.eligibleRosterIds.includes(roster.id)} onChange={() => toggleEligibleRoster(prize.id, roster.id)} />
+                            <input type="checkbox" checked={prize.eligibleRosterIds.length === 0 || prize.eligibleRosterIds.includes(roster.id)} onChange={() => toggleEligibleRoster(prize.id, roster.id)} />
                             {roster.name}
                           </label>
                         ))}
@@ -1142,7 +1142,7 @@ export function EventLotteryConsole() {
                       <button className="button button-small button-secondary" type="button" onClick={() => handleShowPrizeWinners(prize.id)} disabled={!state.winners.some((winner) => winner.prizeId === prize.id)}>👁️ 顯示名單</button>
                       <button className="button button-small button-secondary" type="button" onClick={() => openPrizeEditor(prize)}>編輯</button>
                       <button className="button button-small button-secondary" type="button" onClick={() => prizeImageInputRefs.current.get(prize.id)?.click()}>{prize.imageDataUrl ? "更換圖片" : "上傳圖片"}</button>
-                      <input ref={(element) => { prizeImageInputRefs.current.set(prize.id, element); }} className="file-input" type="file" accept="image/png,image/jpeg,image/webp" aria-label={`上傳「${prize.name}」的圖片`} onChange={(event) => { const file = event.target.files?.[0]; if (file) void handlePrizeImage(prize.id, file); event.target.value = ""; }} />
+                      <input ref={(element) => { prizeImageInputRefs.current.set(prize.id, element); }} className="file-input" type="file" accept="image/*" aria-label={`上傳「${prize.name}」的圖片`} onChange={(event) => { const file = event.target.files?.[0]; if (file) void handlePrizeImage(prize.id, file); event.target.value = ""; }} />
                       <button className="button button-small button-danger" type="button" onClick={() => handleDeletePrize(prize.id)}>{prizeConfirm.armedId === prize.id ? "確定？" : "刪除"}</button>
                     </div>
                   </li>

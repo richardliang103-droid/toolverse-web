@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createEmptyEventState, createParticipant, createPrize, createRoster, prepareStagePrize } from "../lib/event-lottery.ts";
+import { createEmptyEventState, createParticipant, createPrize, createRoster, drawEventWinners, prepareStagePrize, previewPrizeWinners } from "../lib/event-lottery.ts";
 import {
   buildHostStatus,
   commitAcceptedCommand,
@@ -182,6 +182,26 @@ test("buildHostStatus：prepared 狀態下 nextAction 為 draw，drawCount 等�
   assert.equal(status.prizeName, "特獎");
   assert.equal(status.locked, false);
   assert.equal(status.revision, 3);
+});
+
+test("buildHostStatus：歷史名單預覽動畫未完成前，手機遙控保持鎖定；完成後才可清除或前進", () => {
+  const roster = createRoster("內場");
+  const prize = createPrize({ name: "特獎", totalCount: 1, order: 0 });
+  const participant = createParticipant({ name: "小明", rosterId: roster.id });
+  const drawnAt = new Date("2026-01-01T00:00:00.000Z");
+  const shownAt = new Date("2026-01-01T00:01:00.000Z");
+  const initial = { ...createEmptyEventState(), rosters: [roster], participants: [participant], prizes: [prize], animationDurationMs: 3_000 };
+  const { nextState } = drawEventWinners(initial, prize.id, 1, drawnAt);
+  const preview = previewPrizeWinners(nextState, prize.id, shownAt);
+  const rolling = buildHostStatus(preview, 4, shownAt);
+  assert.equal(rolling.phase, "drawing");
+  assert.equal(rolling.nextAction, "none");
+  assert.equal(rolling.locked, true);
+
+  const finished = buildHostStatus(preview, 4, new Date(Date.parse(preview.stagePreview.revealAt)));
+  assert.equal(finished.phase, "finished");
+  assert.equal(finished.nextAction, "clear");
+  assert.equal(finished.locked, false);
 });
 
 test("isHostStatusStale：從未收過或超過 8 秒沒收到都視為逾時", () => {
