@@ -361,7 +361,7 @@ export function EventLotteryConsole() {
 
   async function handleBackgroundImage(file: File) {
     try {
-      const dataUrl = await resizeImageToDataUrl(file, 1600, 0.82);
+      const dataUrl = await resizeImageToDataUrl(file, 800, 0.7);
       commit({ ...state, backgroundImageDataUrl: dataUrl });
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "圖片處理失敗", "error");
@@ -630,20 +630,6 @@ export function EventLotteryConsole() {
       allowRepeatWinners: editingPrizeDraft.allowRepeatWinners,
     });
     closePrizeEditor();
-  }
-
-  function toggleEligibleRoster(prizeId: string, rosterId: string) {
-    const prize = state.prizes.find((item) => item.id === prizeId);
-    if (!prize) return;
-    const current = prize.eligibleRosterIds.length > 0 ? prize.eligibleRosterIds : allRosterIds;
-    const next = current.includes(rosterId)
-      ? current.filter((id) => id !== rosterId)
-      : [...current, rosterId];
-    if (next.length === 0 && state.rosters.length > 0) {
-      showNotice("最少必須選擇一個抽獎對象名單", "error");
-      return;
-    }
-    handleUpdatePrize(prizeId, { eligibleRosterIds: next });
   }
 
   function handleDeletePrize(id: string) {
@@ -1093,7 +1079,18 @@ export function EventLotteryConsole() {
 
           {orderedPrizes.length === 0
             ? <p className="result-empty"><strong>還沒有獎項</strong>用上方表單新增，或匯入 CSV。</p>
-            : <ul className="event-lottery-prize-list">
+            : <>
+                <div className="event-lottery-prize-list-head" aria-hidden="true">
+                  <span />
+                  <span>#</span>
+                  <span>獎項名稱</span>
+                  <span>已抽／總數</span>
+                  <span>對象名單</span>
+                  <span>旗標</span>
+                  <span>圖片（可拖曳）</span>
+                  <span>操作</span>
+                </div>
+                <ul className="event-lottery-prize-list">
                 {orderedPrizes.map((prize, index) => (
                   <li
                     key={prize.id}
@@ -1104,8 +1101,27 @@ export function EventLotteryConsole() {
                     onDragEnd={() => { dragPrizeIdRef.current = null; setDragOverPrizeId(null); }}
                     onDrop={(event) => event.preventDefault()}
                   >
-                    <span className="event-lottery-prize-order" aria-label={`第 ${index + 1} 項`}>{index + 1}</span>
                     <span className="event-lottery-prize-drag-handle" aria-hidden="true">☰</span>
+                    <span className="event-lottery-prize-order" aria-label={`第 ${index + 1} 項`}>{index + 1}</span>
+                    <div className="event-lottery-prize-name">
+                      <input key={`${prize.id}:${prize.name}`} className="key-input" type="text" defaultValue={prize.name} maxLength={MAX_NAME_LENGTH} onBlur={(event) => handleUpdatePrize(prize.id, { name: event.target.value.trim().slice(0, MAX_NAME_LENGTH) || prize.name })} aria-label={`獎項名稱：${prize.name}`} />
+                    </div>
+                    <div className="event-lottery-prize-qty">
+                      <label className="number-field">總數量
+                        <input className="number-input" type="number" min={prize.drawnCount || 1} value={prize.totalCount} onChange={(event) => handleUpdatePrize(prize.id, { totalCount: Math.max(prize.drawnCount || 1, Math.round(Number(event.target.value)) || prize.totalCount) })} />
+                      </label>
+                      <span className="panel-meta">已抽 {prize.drawnCount} · 剩餘 {remainingSlots(prize)}</span>
+                    </div>
+                    <div className="event-lottery-prize-target" title="可參加的名單群組">
+                      {prize.eligibleRosterIds.length === 0
+                        ? "全部名單"
+                        : state.rosters.filter((roster) => prize.eligibleRosterIds.includes(roster.id)).map((roster) => roster.name).join(" / ") || "—"}
+                    </div>
+                    <div className="event-lottery-prize-flag">
+                      {prize.allowRepeatWinners
+                        ? <span className="event-lottery-prize-repeat-badge">可重抽</span>
+                        : <span className="event-lottery-prize-no-repeat">—</span>}
+                    </div>
                     <div
                       className={`event-lottery-prize-thumb-drop${dragOverPrizeId === prize.id ? " event-lottery-prize-thumb-drop-active" : ""}`}
                       onDragOver={(event) => { event.preventDefault(); setDragOverPrizeId(prize.id); }}
@@ -1116,25 +1132,6 @@ export function EventLotteryConsole() {
                       {prize.imageDataUrl
                         ? <img className="event-lottery-prize-thumb" src={prize.imageDataUrl} alt="" />
                         : <span className="event-lottery-prize-thumb event-lottery-prize-thumb-empty" aria-hidden="true">🖼️<small>拖曳圖片</small></span>}
-                    </div>
-                    <div className="event-lottery-prize-info">
-                      <input key={`${prize.id}:${prize.name}`} className="key-input" type="text" defaultValue={prize.name} maxLength={MAX_NAME_LENGTH} onBlur={(event) => handleUpdatePrize(prize.id, { name: event.target.value.trim().slice(0, MAX_NAME_LENGTH) || prize.name })} aria-label={`獎項名稱：${prize.name}`} />
-                      <div className="event-lottery-prize-meta">
-                        <label className="number-field">總數量
-                          <input className="number-input" type="number" min={prize.drawnCount || 1} value={prize.totalCount} onChange={(event) => handleUpdatePrize(prize.id, { totalCount: Math.max(prize.drawnCount || 1, Math.round(Number(event.target.value)) || prize.totalCount) })} />
-                        </label>
-                        <span className="panel-meta">已抽 {prize.drawnCount} · 剩餘 {remainingSlots(prize)}</span>
-                        <label className="check-row"><input type="checkbox" checked={prize.allowRepeatWinners} onChange={(event) => handleUpdatePrize(prize.id, { allowRepeatWinners: event.target.checked })} />🚩 允許全員重抽(不排除已中獎者)</label>
-                      </div>
-                      <fieldset className="event-lottery-roster-checks">
-                        <legend>適用名單（至少選擇一個）</legend>
-                        {state.rosters.map((roster) => (
-                          <label className="check-row" key={roster.id}>
-                            <input type="checkbox" checked={prize.eligibleRosterIds.length === 0 || prize.eligibleRosterIds.includes(roster.id)} onChange={() => toggleEligibleRoster(prize.id, roster.id)} />
-                            {roster.name}
-                          </label>
-                        ))}
-                      </fieldset>
                     </div>
                     <div className="event-lottery-prize-actions">
                       <button className="gantt-row-delete" type="button" aria-label="往上移" disabled={index === 0} onClick={() => movePrize(prize.id, -1)}>↑</button>
@@ -1147,7 +1144,8 @@ export function EventLotteryConsole() {
                     </div>
                   </li>
                 ))}
-              </ul>}
+                </ul>
+              </>}
           </section>
 
           <section id="event-lottery-history" className="panel" aria-label="得獎紀錄">
