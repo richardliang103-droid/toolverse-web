@@ -98,7 +98,13 @@ export function EventLotteryStage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setState(loadEventState());
     setHydrated(true);
-    return () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current); };
+    return () => {
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      // audioContextRef 是延遲建立的單例（見 getSharedAudioContext），卸載當下的
+      // .current 才是要收掉的那個，不是 mount 當時的快照，故意在 cleanup 裡才讀取。
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (audioContextRef.current) void audioContextRef.current.close();
+    };
   }, []);
 
   // 倒數與逐一揭曉期間都要每隔一小段時間重新計算一次「現在該顯示到第幾位了」；
