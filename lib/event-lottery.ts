@@ -902,6 +902,14 @@ function csvField(value: string): string {
   return /["\n\r,]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
+/** 參考專案的歷史紀錄格式：在地時間、年月日與時分秒都補零。 */
+export function formatLotteryTimestamp(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return "-";
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
 export function winnersToCsv(state: LotteryEventState): string {
   const prizeNames = new Map(state.prizes.map((prize) => [prize.id, prize.name]));
   const rows = [["抽取時間", "獎項", "部門", "姓名", "員工編號", "狀態"]];
@@ -910,7 +918,7 @@ export function winnersToCsv(state: LotteryEventState): string {
   // 的失格歷史資訊，不影響前五個原版欄位。
   for (const winner of [...state.winners].reverse()) {
     rows.push([
-      winner.drawnAt,
+      formatLotteryTimestamp(winner.drawnAt),
       prizeNames.get(winner.prizeId) ?? "（已刪除的獎項）",
       winner.department,
       winner.participantName,

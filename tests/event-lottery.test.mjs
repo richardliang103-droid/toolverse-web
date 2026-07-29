@@ -14,6 +14,7 @@ import {
   drawEventWinners,
   EventLotteryError,
   eventBackupFileName,
+  formatLotteryTimestamp,
   exportEventBackup,
   findDuplicateEmployeeId,
   advanceStateRevision,
@@ -706,6 +707,12 @@ test("空白活動不崩潰：所有查詢函式對空狀態都安全", () => {
   assert.equal(validateDraw(empty, "anything", 1).ok, false);
   assert.equal(winnersToCsv(empty), "﻿抽取時間,獎項,部門,姓名,員工編號,狀態");
   assert.equal(canDeletePrize(empty, "anything"), true);
+});
+
+test("formatLotteryTimestamp：沿用原版補零的在地時間格式", () => {
+  const date = new Date("2026-01-02T03:04:05.000Z");
+  const pad = (value) => String(value).padStart(2, "0");
+  assert.equal(formatLotteryTimestamp(date), `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`);
 });
 
 test("winnersToCsv：欄位含逗號時正確跳脫", () => {

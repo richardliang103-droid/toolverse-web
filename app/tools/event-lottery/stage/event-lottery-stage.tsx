@@ -613,7 +613,7 @@ export function EventLotteryStage() {
         {!transientError && display.phase === "notice" && <h2>{display.message}</h2>}
         {!transientError && display.phase !== "idle" && display.phase !== "notice" && activePrize && (
           <>
-            {activePrize.imageDataUrl && <img className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
+            {activePrize.imageDataUrl && <img key={activePrize.id} className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
             <h2>
               {display.phase === "prepared"
                 ? `即將抽出：${activePrizeDisplayName} 共 ${stageDrawCount} 名`

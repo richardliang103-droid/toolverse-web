@@ -16,6 +16,7 @@ import {
   eventBackupFileName,
   exportEventBackup,
   findDuplicateEmployeeId,
+  formatLotteryTimestamp,
   MAX_DRAW_COUNT_PER_ROUND,
   MAX_IMAGE_DATA_URL_LENGTH,
   MAX_NAME_LENGTH,
@@ -1298,7 +1299,7 @@ export function EventLotteryConsole() {
                 <tbody>
                   {sortedWinners.map((winner) => (
                     <tr key={winner.id} className={winner.disqualified ? "event-lottery-row-disqualified" : undefined}>
-                      <td>{new Date(winner.drawnAt).toLocaleString("zh-TW", { hour12: false })}</td>
+                      <td>{formatLotteryTimestamp(winner.drawnAt)}</td>
                       <td>{prizeNameById.get(winner.prizeId) ?? "（已刪除的獎項）"}</td>
                       <td>{winner.department}</td>
                       <td>{winner.participantName}</td>
