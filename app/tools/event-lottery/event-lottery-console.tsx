@@ -997,7 +997,7 @@ export function EventLotteryConsole() {
 
           <div className="event-lottery-subsection">
             <h3>CSV 匯入</h3>
-            <p className="lottery-panel-note">欄位：部門,姓名,員工編號（可含標題列，也支援自訂欄位順序）。員工編號重複的列會被略過並列出清單。</p>
+            <p className="lottery-panel-note">欄位：部門,姓名,員工編號（可含標題列，也支援自訂欄位順序）。同一名單的重複員工編號會先確認後更新；跨名單重複會略過並列出清單。</p>
             <div className="event-lottery-inline-form">
               <select className="key-input" value={effectiveCsvRosterId} onChange={(event) => setCsvRosterId(event.target.value)} aria-label="CSV 匯入到哪個名單群組">
                 {state.rosters.map((roster) => <option key={roster.id} value={roster.id}>{roster.name}</option>)}
