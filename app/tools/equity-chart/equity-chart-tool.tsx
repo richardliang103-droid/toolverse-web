@@ -42,7 +42,7 @@ export function EquityChartTool() {
   const [notice, setNotice] = useState<{ message: string; tone: "info" | "error" } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const svgRef = useRef<EquityChartSvgHandle>(null);
+  const exportSvgRef = useRef<EquityChartSvgHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -133,7 +133,9 @@ export function EquityChartTool() {
   }
 
   function exportSvgMarkup() {
-    const markup = svgRef.current?.exportSvg();
+    // 匯出讀的是下面那份「永遠不帶選取狀態」的隱藏 SVG，而不是畫面上互動用的那份——
+    // 畫面上的節點選取只是操作介面的提示，不該烙進報告用的 PNG／SVG 裡。
+    const markup = exportSvgRef.current?.exportSvg();
     if (!markup) { showNotice("圖表尚未就緒，請再試一次", "error"); return null; }
     return markup;
   }
@@ -318,7 +320,11 @@ export function EquityChartTool() {
       <div className="panel panel-tinted">
         <div className="panel-header"><h2>預覽</h2><span className="panel-meta">白底輸出，適合貼進報告</span></div>
         <div className="gantt-canvas equity-canvas">
-          <EquityChartSvg ref={svgRef} chart={chart} layout={layout} selectedId={selectedId} onSelect={setSelectedId} />
+          <EquityChartSvg chart={chart} layout={layout} selectedId={selectedId} onSelect={setSelectedId} />
+        </div>
+        {/* 匯出專用、不顯示的第二份 SVG：永遠不帶選取樣式，PNG／SVG／複製到剪貼簿都讀這份。 */}
+        <div aria-hidden="true" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", opacity: 0, pointerEvents: "none" }}>
+          <EquityChartSvg ref={exportSvgRef} chart={chart} layout={layout} selectedId={null} onSelect={() => {}} />
         </div>
         <ul className="equity-legend" aria-label="圖例">
           <li><span className="equity-swatch equity-swatch-person" />自然人</li>

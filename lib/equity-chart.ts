@@ -216,6 +216,12 @@ const COLUMN_GAP = 28;
 const LAYER_GAP = 96;
 const MARGIN = 40;
 
+/** 交叉持股虛線弧線往右繞出去的最小幅度；SVG 元件畫弧線時用同一個常數，避免版面算的寬度跟實際畫的弧線兜不起來。 */
+export const CROSS_EDGE_MIN_BULGE = 60;
+/** 「交叉持股 100%」這類標籤的保守寬度估計，用來預留畫布右側空間，避免文字被裁切。 */
+const CROSS_EDGE_LABEL_WIDTH = 130;
+const CROSS_EDGE_LABEL_GAP = 6;
+
 /**
  * 以受查公司為第 0 層，用 BFS 往外展開：「A 持有 B」代表 B 的層數是
  * A 的層數 + 1（B 在 A 下面）。同一個實體第一次被到達時決定層數與
@@ -336,8 +342,24 @@ export function computeEquityLayout(chart: EquityChart): EquityLayout {
     kind: (treeEdgeIds.has(holding.id) ? "tree" : "cross") as "tree" | "cross",
   })).filter((edge) => nodePosition.has(edge.fromId) && nodePosition.has(edge.toId));
 
+  // 交叉持股畫成往右繞出去的虛線弧線＋標籤（見 equity-chart-svg.tsx 的 crossPath）。
+  // 這裡用同一套幾何算出最右邊的節點需要多少額外空間，避免弧線或標籤超出 viewBox 被裁切。
+  let width = canvasWidth;
+  for (const edge of edges) {
+    if (edge.kind !== "cross") continue;
+    const from = nodePosition.get(edge.fromId)!;
+    const to = nodePosition.get(edge.toId)!;
+    const fromCenterY = from.y + EQUITY_BOX_HEIGHT / 2;
+    const toCenterY = to.y + EQUITY_BOX_HEIGHT / 2;
+    const bulge = Math.max(CROSS_EDGE_MIN_BULGE, Math.abs(toCenterY - fromCenterY) / 2);
+    const rightmostNodeEdge = Math.max(from.x, to.x) + EQUITY_BOX_WIDTH;
+    const curveRightEdge = rightmostNodeEdge + bulge;
+    const labelRightEdge = rightmostNodeEdge + CROSS_EDGE_LABEL_GAP + CROSS_EDGE_LABEL_WIDTH;
+    width = Math.max(width, Math.max(curveRightEdge, labelRightEdge) + MARGIN);
+  }
+
   const height = layers.length === 0 ? MARGIN * 2 + EQUITY_BOX_HEIGHT : MARGIN * 2 + (layers.length - 1) * LAYER_GAP + EQUITY_BOX_HEIGHT;
-  return { nodes, edges, width: Math.round(canvasWidth), height: Math.round(height) };
+  return { nodes, edges, width: Math.round(width), height: Math.round(height) };
 }
 
 // --- 快速貼上：一行一筆「股東 > 被投資公司 百分比」 ---
@@ -384,6 +406,7 @@ export function parseQuickPaste(text: string, title: string): QuickPasteResult {
     const holder = entityFor(holderName);
     const owned = entityFor(ownedName);
     if (marked) explicitSubjectName = holder.name;
+    if (holder.id === owned.id) { warnings.push(`股東與被投資公司相同，已略過：「${line}」`); continue; }
     const percentage = Math.min(Math.max(Number(percentageText), 0), 100);
     holdings.push({ id: newId(), holderId: holder.id, ownedId: owned.id, percentage });
   }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  EQUITY_BOX_WIDTH,
   chartWarnings,
   computeEquityLayout,
   createEntity,
@@ -150,6 +151,29 @@ test("computeEquityLayout handles an empty chart without throwing", () => {
   assert.ok(layout.width > 0 && layout.height > 0);
 });
 
+test("computeEquityLayout widens the canvas so a cross edge's curve and label stay inside the viewBox", () => {
+  const s = createEntity({ id: "s", name: "S", isSubject: true });
+  const b1 = createEntity({ id: "b1", name: "B1" });
+  const b2 = createEntity({ id: "b2", name: "B2" });
+  const b3 = createEntity({ id: "b3", name: "B3" });
+  const chart = chartOf([s, b1, b2, b3], [
+    { id: "h1", holderId: "s", ownedId: "b1", percentage: 10 },
+    { id: "h2", holderId: "s", ownedId: "b2", percentage: 10 },
+    { id: "h3", holderId: "s", ownedId: "b3", percentage: 10 }, // b3 排在該層最右邊
+    { id: "h4", holderId: "b3", ownedId: "s", percentage: 5 }, // 交叉持股，弧線與標籤都會往 b3 右側延伸
+  ]);
+  const layout = computeEquityLayout(chart);
+  const crossEdge = layout.edges.find((edge) => edge.kind === "cross");
+  assert.ok(crossEdge);
+  const byId = new Map(layout.nodes.map((node) => [node.id, node]));
+  const from = byId.get(crossEdge.fromId);
+  const to = byId.get(crossEdge.toId);
+  const rightmostNodeEdge = Math.max(from.x, to.x) + EQUITY_BOX_WIDTH;
+  const bulge = Math.max(60, Math.abs(to.y - from.y) / 2); // 跟 equity-chart-svg.tsx 的 crossPath 同一個公式
+  assert.ok(layout.width >= rightmostNodeEdge + bulge, "畫布要能完整容納交叉持股弧線");
+  assert.ok(layout.width >= rightmostNodeEdge + 130, "畫布要能完整容納「交叉持股 xx%」標籤");
+});
+
 test("parseQuickPaste creates entities and holdings from 股東 > 公司 百分比 lines", () => {
   const { chart, warnings } = parseQuickPaste("王大明 > 宏昌實業 45\n林美惠 > 宏昌實業 35", "股權");
   assert.equal(warnings.length, 0);
@@ -179,4 +203,11 @@ test("parseQuickPaste reports unparsable lines instead of silently dropping them
   const { warnings } = parseQuickPaste("這不是有效格式", "股權");
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /看不懂這一行/);
+});
+
+test("parseQuickPaste rejects a self-holding line instead of creating a fake loop", () => {
+  const { chart, warnings } = parseQuickPaste("甲公司 > 甲公司 100", "股權");
+  assert.equal(chart.holdings.length, 0);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /股東與被投資公司相同/);
 });

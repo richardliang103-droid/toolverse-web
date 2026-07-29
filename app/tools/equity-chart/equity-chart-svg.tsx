@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useRef } from "react";
-import { EQUITY_BOX_HEIGHT, EQUITY_BOX_WIDTH, ENTITY_STATUS_LABELS } from "@/lib/equity-chart";
+import { CROSS_EDGE_MIN_BULGE, EQUITY_BOX_HEIGHT, EQUITY_BOX_WIDTH, ENTITY_STATUS_LABELS } from "@/lib/equity-chart";
 import type { EntityKind, EntityStatus, EquityChart, EquityLayout, EquityLayoutNode } from "@/lib/equity-chart";
 
 const INK = "#101628";
@@ -46,7 +46,7 @@ function crossPath(from: EquityLayoutNode, to: EquityLayoutNode) {
   const startY = from.y + EQUITY_BOX_HEIGHT / 2;
   const endX = to.x + EQUITY_BOX_WIDTH;
   const endY = to.y + EQUITY_BOX_HEIGHT / 2;
-  const bulge = Math.max(60, Math.abs(endY - startY) / 2);
+  const bulge = Math.max(CROSS_EDGE_MIN_BULGE, Math.abs(endY - startY) / 2);
   return `M${startX} ${startY} C${startX + bulge} ${startY} ${endX + bulge} ${endY} ${endX} ${endY}`;
 }
 
