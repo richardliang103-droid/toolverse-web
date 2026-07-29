@@ -37,6 +37,7 @@ test("server-renders all tool routes", async () => {
     ["/tools/background-remover", /把圖片拖到這裡/],
     ["/tools/ai-flowchart", /描述你的流程/],
     ["/tools/gantt", /新增任務/],
+    ["/tools/equity-chart", /持股關係/],
     ["/tools/random-groups", /開始分組/],
     ["/tools/image-compressor", /開始壓縮/],
     ["/tools/qr-code", /網址或文字/],
