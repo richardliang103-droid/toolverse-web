@@ -633,6 +633,35 @@ export const toolManifests: readonly ToolManifest[] = [
     privacy: "local-only",
     privacyNote: "月曆與假日資料都內建在網站裡，不會連線查詢，也不會記錄你看過哪些日期。",
   },
+  {
+    slug: "event-lottery",
+    name: "活動抽獎控制台",
+    description: "尾牙、公司活動用的正式抽獎控制台：多名單群組、多獎項、後台控制搭配獨立投影舞台，得獎紀錄可匯出備份。",
+    category: "random",
+    symbol: "❋",
+    accent: "matsuba",
+    status: "beta",
+    processing: "local",
+    engines: ["native"],
+    inputs: [
+      { kind: "structured-data" },
+      { kind: "file", mimeTypes: ["text/csv"], extensions: [".csv"] },
+      { kind: "file", mimeTypes: ["application/json"], extensions: [".json"], maxFiles: 1 },
+      { kind: "file", mimeTypes: ["image/png", "image/jpeg", "image/webp"], maxFiles: 1, maxSizeBytes: 15 * MB },
+    ],
+    outputs: [
+      { kind: "file", mimeTypes: ["text/csv"], extensions: [".csv"] },
+      { kind: "file", mimeTypes: ["application/json"], extensions: [".json"] },
+    ],
+    supportsBatch: false,
+    supportsWorkspace: false,
+    supportsRecipe: false,
+    supportsOffline: true,
+    handoff: { canSend: false, canReceive: false, kinds: [] },
+    suggestedNextTools: ["lottery", "random-groups"],
+    privacy: "local-only",
+    privacyNote: "活動設定、名單、獎項與得獎紀錄只留在這台裝置的 localStorage，控制台與舞台分頁靠瀏覽器內建機制同步，不會傳到伺服器。",
+  },
 ];
 
 const BY_SLUG = new Map<string, ToolManifest>(toolManifests.map((manifest) => [manifest.slug, manifest]));

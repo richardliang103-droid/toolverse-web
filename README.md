@@ -3,6 +3,7 @@
 一組免安裝、免登入的實用網頁工具。目前包含：
 
 - 線上抽獎：真的轉盤動畫，使用 Web Crypto API 抽選，名單與紀錄只存在瀏覽器。
+- 活動抽獎控制台：尾牙、公司活動用的正式抽獎後台，多名單群組、多獎項、控制台與投影舞台分頁同步，得獎紀錄可匯出備份。
 - 圖片去背：使用 Transformers.js 與 RMBG-1.4，圖片不會上傳伺服器。
 - 流程圖：中文需求轉成經驗證的節點與連線，可匯出 Mermaid、PNG、SVG 與 draw.io。
 - 甘特圖：拖曳排出任務、里程碑與依賴關係，時程只存在瀏覽器，可匯出 PNG、CSV、Mermaid 與 JSON。
@@ -42,6 +43,15 @@ npm test
 - **轉盤**：`app/tools/lottery/lottery-wheel.tsx` 用 SVG 畫出霓虹漸層轉盤，每位參加者一格，用 GSAP 做「高速旋轉 → 慢慢減速 → 指針精準停在得獎者格子上」的物理動畫；名額 ≤ 14 人時格子上會顯示名字，超過則只顯示漸層色塊（避免文字重疊看不清楚），得獎者一律會在轉盤上方用大字＋彩帶特效公告。
 - **多人中獎**：一次抽多位時會依序轉一輪、公布一位，並把已中獎者從轉盤移除再轉下一輪，動畫時間會隨中獎人數增加而縮短，避免抽太多人要等太久。
 - **配色**：抽獎工具的卡片區採用獨立的霓虹暗色系（`.lottery-neon`，定義在 `app/globals.css`），只套用在這個工具本身，不影響網站其他頁面的配色。
+
+## 活動抽獎控制台
+
+跟輕量版的「線上抽獎」是兩個互相獨立的工具，`/tools/event-lottery` 是給尾牙、公司活動用的正式後台，`/tools/event-lottery/stage` 是給投影機用的全螢幕舞台頁，兩者用不同分頁開啟。
+
+- **資料模型**：`lib/event-lottery.ts` 定義名單群組、參加者、獎項、得獎紀錄，並提供 normalize／CSV 解析／安全抽選／失格歸還／JSON 備份驗證等純邏輯，`tests/event-lottery.test.mjs` 覆蓋。
+- **安全抽選**：候選人池建立後，直接重用 `lib/lottery.ts` 的 `drawWinners()`（Web Crypto API 的 Fisher–Yates 洗牌），不使用 `Math.random()`。
+- **分頁同步**：控制台與舞台各自開分頁，靠 `BroadcastChannel`（頻道 `toolverse:event-lottery:v1`）即時同步，並疊加 `storage` 事件當備援；資料本身存在 localStorage 的 `toolverse:event-lottery:v1`，重新整理任一分頁都能還原目前狀態。抽選結果一律先在控制台用安全亂數確定，再同步到舞台播放動畫公布，舞台本身不做任何隨機抽選。
+- **舞台視覺**：重用專案既有的 GSAP 與 canvas-confetti，背景粒子用純 Canvas 繪製（不接任何外部粒子庫或 CDN），音效用 Web Audio API 即時合成一聲短鈴聲（不內建外部音檔），並尊重 `prefers-reduced-motion`。
 
 ## 圖片去背
 
