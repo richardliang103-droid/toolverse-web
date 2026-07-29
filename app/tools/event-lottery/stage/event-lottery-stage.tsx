@@ -3,7 +3,8 @@
 import confetti from "canvas-confetti";
 import gsap from "gsap";
 import { useEffect, useRef, useState } from "react";
-import { createEmptyEventState, pendingRevealCompleteAt, resolveStageDisplay, visibleWinnerCount, type LotteryEventState, type PendingReveal } from "@/lib/event-lottery";
+import { createEmptyEventState, pendingRevealCompleteAt, resolveStageAdvance, resolveStageDisplay, visibleWinnerCount, type LotteryEventState, type PendingReveal } from "@/lib/event-lottery";
+import { clearStageAction, prepareStage, startDraw } from "../actions";
 import { loadEventState, useEventLotterySync } from "../sync";
 import { StageParticles } from "./stage-particles";
 
@@ -194,6 +195,54 @@ export function EventLotteryStage() {
     }
   }
 
+  function showTransientError(message: string) {
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    setTransientError(message);
+    errorTimerRef.current = setTimeout(() => setTransientError(""), 4000);
+  }
+
+  /**
+   * 舞台可以直接用簡報筆／鍵盤／點擊畫面控制「抽下一個獎項」，不需要回頭操作
+   * 控制台——每次都重新讀一次 localStorage（不是用 React state），確保簡報筆連續
+   * 按兩下時，第二下看到的一定是第一下剛寫進去的最新狀態，不會因為畫面還沒重新
+   * 渲染就對同一份舊資料重複動作。實際的準備／抽選邏輯跟控制台按鈕共用同一套
+   * （見 ../actions.ts），兩邊操作完全一致。
+   */
+  function handleAdvance() {
+    const currentState = loadEventState();
+    const action = resolveStageAdvance(currentState, new Date());
+    if (action.action === "none") return;
+    const result = action.action === "prepare"
+      ? prepareStage(currentState, action.prizeId, post)
+      : startDraw(currentState, action.prizeId, action.count, post);
+    if (result.ok) setState(result.state);
+    else showTransientError(result.reason);
+  }
+
+  function handleBack() {
+    const currentState = loadEventState();
+    const result = clearStageAction(currentState, post);
+    if (result.ok) setState(result.state);
+    else showTransientError(result.reason);
+  }
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.repeat) return;
+      if (event.key === " " || event.key === "Enter" || event.key === "ArrowRight" || event.key === "PageDown") {
+        event.preventDefault();
+        handleAdvance();
+      } else if (event.key === "ArrowLeft" || event.key === "PageUp" || event.key === "Escape" || event.key === "Backspace") {
+        event.preventDefault();
+        handleBack();
+      } else if (event.key.toLowerCase() === "f") {
+        void toggleFullscreen();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
   if (!hydrated) return <div className="event-lottery-stage-loading" aria-hidden="true" />;
 
   const activePrize = display.phase === "idle" ? null : state.prizes.find((prize) => prize.id === display.prizeId) ?? null;
@@ -208,11 +257,17 @@ export function EventLotteryStage() {
       className={`event-lottery-stage${hasBackground ? " event-lottery-stage-has-image" : ""}`}
       style={hasBackground ? { backgroundImage: `url(${state.backgroundImageDataUrl})` } : undefined}
       aria-label="活動抽獎舞台展示"
+      onClick={handleAdvance}
     >
       {!hasBackground && <StageParticles />}
       <div className="event-lottery-stage-scrim" aria-hidden="true" />
 
-      <button className="event-lottery-stage-fullscreen" type="button" onClick={() => void toggleFullscreen()} aria-label={isFullscreen ? "離開全螢幕" : "全螢幕顯示"}>
+      <button
+        className="event-lottery-stage-fullscreen"
+        type="button"
+        onClick={(event) => { event.stopPropagation(); void toggleFullscreen(); }}
+        aria-label={isFullscreen ? "離開全螢幕" : "全螢幕顯示"}
+      >
         {isFullscreen ? "⤡" : "⤢"}
       </button>
 
@@ -223,7 +278,12 @@ export function EventLotteryStage() {
       <main className="event-lottery-stage-main">
         {transientError && <p className="event-lottery-stage-error">{transientError}</p>}
 
-        {!transientError && display.phase === "idle" && <p className="event-lottery-stage-idle">等待控制台準備抽獎…</p>}
+        {!transientError && display.phase === "idle" && (
+          <>
+            <p className="event-lottery-stage-idle">等待控制台準備抽獎…</p>
+            <p className="event-lottery-stage-hint">按空白鍵、→ 或點擊畫面／用簡報筆開始抽獎</p>
+          </>
+        )}
 
         {!transientError && (display.phase === "prepared" || display.phase === "drawing") && activePrize && (
           <div className="event-lottery-stage-prize">
@@ -231,7 +291,7 @@ export function EventLotteryStage() {
             <h2>{activePrize.name}</h2>
             {display.phase === "drawing"
               ? <p className="event-lottery-stage-spin">抽選中…{display.pendingReveal.winnerIds.length > 1 ? `（${display.pendingReveal.winnerIds.length} 位）` : ""}<span className="event-lottery-stage-spin-ring" aria-hidden="true" /></p>
-              : <p className="event-lottery-stage-waiting">即將開始抽選</p>}
+              : <><p className="event-lottery-stage-waiting">即將開始抽選</p><p className="event-lottery-stage-hint">再按一次開始抽選</p></>}
           </div>
         )}
 
