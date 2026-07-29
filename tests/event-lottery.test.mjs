@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   candidatePool,
+  canDeleteParticipant,
   canDeletePrize,
+  canDeleteRoster,
   clearStage,
   createEmptyEventState,
   createParticipant,
@@ -18,10 +20,13 @@ import {
   parseEventBackup,
   parseParticipantsCsv,
   parsePrizesCsv,
+  pendingRevealCompleteAt,
   prepareStagePrize,
   remainingSlots,
   resetEventDraws,
+  resolveStageDisplay,
   sanitizeEventState,
+  sequentialStepMs,
   validateDraw,
   winnersToCsv,
 } from "../lib/event-lottery.ts";
@@ -64,6 +69,31 @@ test("normalize 修復錯誤資料：損壞欄位換成安全預設值，不會�
   assert.equal(state.revealMode, "sequential");
   assert.equal(state.animationDurationMs, 3200);
   assert.equal(state.soundEnabled, true);
+});
+
+test("normalize：損壞的 pendingReveal（指向不存在的獎項或得獎者、缺 revealAt）一律捨棄", () => {
+  const withMissingPrize = sanitizeEventState({
+    prizes: [{ id: "prize-1", name: "特獎", totalCount: 1 }],
+    activePrizeId: "prize-1",
+    pendingReveal: { prizeId: "prize-missing", winnerIds: [], revealAt: new Date().toISOString() },
+  });
+  assert.equal(withMissingPrize.pendingReveal, null);
+
+  const withMissingWinner = sanitizeEventState({
+    prizes: [{ id: "prize-1", name: "特獎", totalCount: 1 }],
+    winners: [],
+    activePrizeId: "prize-1",
+    pendingReveal: { prizeId: "prize-1", winnerIds: ["winner-missing"], revealAt: new Date().toISOString() },
+  });
+  assert.equal(withMissingWinner.pendingReveal, null);
+
+  const withoutRevealAt = sanitizeEventState({
+    prizes: [{ id: "prize-1", name: "特獎", totalCount: 1 }],
+    winners: [{ id: "winner-1", prizeId: "prize-1", participantId: "p1", participantName: "小明", drawnAt: new Date().toISOString() }],
+    activePrizeId: "prize-1",
+    pendingReveal: { prizeId: "prize-1", winnerIds: ["winner-1"] },
+  });
+  assert.equal(withoutRevealAt.pendingReveal, null);
 });
 
 test("normalize：名單群組遺失時，參加者改掛第一個可用群組而不是整筆消失", () => {
@@ -270,21 +300,126 @@ test("prepareStagePrize／clearStage／resetEventDraws：舞台與抽獎進度�
   let current = { ...state, prizes: [bigPrize] };
   current = prepareStagePrize(current, prize.id);
   assert.equal(current.activePrizeId, prize.id);
-  assert.deepEqual(current.stageWinnerIds, []);
+  assert.equal(current.pendingReveal, null);
 
   const { nextState } = drawEventWinners(current, prize.id, 1);
-  assert.equal(nextState.stageWinnerIds.length, 1);
+  assert.equal(nextState.pendingReveal.winnerIds.length, 1);
+  assert.equal(nextState.pendingReveal.prizeId, prize.id);
 
   const cleared = clearStage(nextState);
   assert.equal(cleared.activePrizeId, null);
-  assert.deepEqual(cleared.stageWinnerIds, []);
+  assert.equal(cleared.pendingReveal, null);
 
   const resetState = resetEventDraws(nextState);
   assert.equal(resetState.winners.length, 0);
   assert.equal(resetState.prizes[0].drawnCount, 0);
   assert.equal(resetState.activePrizeId, null);
+  assert.equal(resetState.pendingReveal, null);
   assert.equal(resetState.rosters.length, state.rosters.length, "重置只清空抽獎進度，名單要保留");
   assert.equal(resetState.participants.length, state.participants.length, "重置只清空抽獎進度，參加者要保留");
+});
+
+test("resolveStageDisplay：揭曉時間到之前是 drawing，到了之後是 revealed（純粹算時間，不靠計時器）", () => {
+  const { state, prize } = buildBasicState();
+  const bigPrize = { ...prize, totalCount: 3, order: 0 };
+  const current = { ...state, prizes: [bigPrize] };
+  const drawnAt = new Date("2026-01-01T00:00:00.000Z");
+  const { nextState } = drawEventWinners(current, prize.id, 1, drawnAt);
+  const revealAtMs = Date.parse(nextState.pendingReveal.revealAt);
+
+  const beforeReveal = resolveStageDisplay(nextState, new Date(revealAtMs - 1));
+  assert.equal(beforeReveal.phase, "drawing");
+
+  const afterReveal = resolveStageDisplay(nextState, new Date(revealAtMs));
+  assert.equal(afterReveal.phase, "revealed");
+  assert.deepEqual(afterReveal.pendingReveal.winnerIds, nextState.pendingReveal.winnerIds);
+});
+
+test("resolveStageDisplay 回歸測試：控制台在動畫播完前重新整理或關閉分頁，舞台（或重新載入的控制台）仍能正確算出已揭曉——不會卡在準備中出不來", () => {
+  const { state, prize } = buildBasicState();
+  const bigPrize = { ...prize, totalCount: 3, order: 0 };
+  const current = { ...state, prizes: [bigPrize] };
+  const { nextState } = drawEventWinners(current, prize.id, 2, new Date("2026-01-01T00:00:00.000Z"));
+
+  // 模擬：狀態已經寫進 localStorage，但負責倒數的分頁在動畫播完前就消失了
+  // （重新整理或直接關閉）——不會再有任何計時器去補寫 stageWinnerIds。
+  // 很久以後才重新讀取這份持久化狀態，仍然要能正確算出「已經揭曉」。
+  const muchLater = new Date(Date.parse(nextState.pendingReveal.revealAt) + 5 * 60_000);
+  const display = resolveStageDisplay(nextState, muchLater);
+  assert.equal(display.phase, "revealed");
+  assert.equal(display.pendingReveal.winnerIds.length, 2);
+});
+
+test("resolveStageDisplay：pendingReveal 跟 activePrizeId 對不上時忽略，回到 prepared", () => {
+  const { state, prize } = buildBasicState();
+  const otherPrize = createPrize({ name: "另一個獎項", totalCount: 1, order: 1 });
+  const current = { ...state, prizes: [prize, otherPrize], activePrizeId: otherPrize.id };
+  const { nextState } = drawEventWinners(current, prize.id, 1);
+  // drawEventWinners 會把 activePrizeId 設成同一個獎項，這裡故意改壞來模擬損壞資料。
+  const corrupted = { ...nextState, activePrizeId: otherPrize.id };
+  const display = resolveStageDisplay(corrupted, new Date());
+  assert.equal(display.phase, "prepared");
+  assert.equal(display.prizeId, otherPrize.id);
+});
+
+test("sequentialStepMs：人數少時用預設間隔，人數多到會讓整輪超過一分鐘時自動壓縮", () => {
+  assert.equal(sequentialStepMs(1), 0);
+  assert.equal(sequentialStepMs(2), 1400);
+  assert.equal(sequentialStepMs(10), 1400);
+  const compressed = sequentialStepMs(500);
+  assert.ok(compressed < 1400);
+  assert.ok(compressed * 499 <= 60_000 + 1e-6, "500 人逐一揭曉的總時間不能超過一分鐘");
+});
+
+test("pendingRevealCompleteAt：逐一揭曉要等最後一位顯示完才算播完；一次揭曉等同 revealAt", () => {
+  const { state, prize } = buildBasicState();
+  const bigPrize = { ...prize, totalCount: 3, order: 0 };
+  const sequentialState = { ...state, prizes: [bigPrize], revealMode: "sequential" };
+  const { nextState } = drawEventWinners(sequentialState, prize.id, 3, new Date("2026-01-01T00:00:00.000Z"));
+  const revealAtMs = Date.parse(nextState.pendingReveal.revealAt);
+  const completeAt = pendingRevealCompleteAt(nextState.pendingReveal);
+  assert.ok(completeAt > revealAtMs, "逐一揭曉三位，播完時間要晚於揭曉開始時間");
+  assert.equal(completeAt, revealAtMs + 2 * nextState.pendingReveal.stepMs);
+
+  const simultaneousState = { ...state, prizes: [bigPrize], revealMode: "simultaneous" };
+  const { nextState: simultaneousNext } = drawEventWinners(simultaneousState, prize.id, 3, new Date("2026-01-01T00:00:00.000Z"));
+  assert.equal(pendingRevealCompleteAt(simultaneousNext.pendingReveal), Date.parse(simultaneousNext.pendingReveal.revealAt));
+});
+
+test("disqualifyWinner 不會把人從 pendingReveal 移除，舞台仍會顯示（並標示已失格）", () => {
+  const { state, prize } = buildBasicState();
+  const bigPrize = { ...prize, totalCount: 3 };
+  const current = { ...state, prizes: [bigPrize] };
+  const { winners, nextState } = drawEventWinners(current, prize.id, 1);
+  const disqualified = disqualifyWinner(nextState, winners[0].id);
+  assert.ok(disqualified.pendingReveal, "失格不應該清掉這一輪的揭曉狀態");
+  assert.deepEqual(disqualified.pendingReveal.winnerIds, nextState.pendingReveal.winnerIds);
+  assert.equal(disqualified.winners.find((winner) => winner.id === winners[0].id).disqualified, true);
+});
+
+test("canDeleteParticipant／canDeleteRoster：已有得獎紀錄的人不可刪除，含他的名單群組也不可整組刪除", () => {
+  const { state, prize, rosterA } = buildBasicState();
+  const bigPrize = { ...prize, totalCount: 3 };
+  const current = { ...state, prizes: [bigPrize] };
+  const winnerParticipant = current.participants.find((participant) => participant.rosterId === rosterA.id);
+  assert.equal(canDeleteParticipant(current, winnerParticipant.id), true);
+  assert.equal(canDeleteRoster(current, rosterA.id), true);
+
+  const { nextState } = drawEventWinners(current, prize.id, 1);
+  // 找出這輪真正中獎的那個人（安全抽選是隨機的，不能假設是哪一位）。
+  const wonParticipantId = nextState.winners[0].participantId;
+  const wonParticipant = nextState.participants.find((participant) => participant.id === wonParticipantId);
+  assert.equal(canDeleteParticipant(nextState, wonParticipantId), false);
+  assert.equal(canDeleteRoster(nextState, wonParticipant.rosterId), false);
+
+  // 失格之後歷史紀錄仍然存在（不會被刪除），所以還是不能刪除這個人或他的名單群組。
+  const disqualified = disqualifyWinner(nextState, nextState.winners[0].id);
+  assert.equal(canDeleteParticipant(disqualified, wonParticipantId), false);
+  assert.equal(canDeleteRoster(disqualified, wonParticipant.rosterId), false);
+
+  // 沒中獎的人不受影響，還是可以刪除。
+  const untouchedParticipant = current.participants.find((participant) => participant.id !== wonParticipantId);
+  assert.equal(canDeleteParticipant(nextState, untouchedParticipant.id), true);
 });
 
 test("空白活動不崩潰：所有查詢函式對空狀態都安全", () => {

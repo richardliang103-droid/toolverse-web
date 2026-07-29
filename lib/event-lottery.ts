@@ -53,6 +53,22 @@ export type WinnerRecord = {
 
 export type RevealMode = "sequential" | "simultaneous";
 
+/**
+ * 一輪已經確定、但可能還沒到揭曉時間的抽選結果。`revealAt` 之前，任何分頁
+ * （包含重新整理過的舞台或控制台）都應該顯示「抽選中」；`revealAt` 之後就
+ * 是「已揭曉」——這個判斷只看目前時間與這筆資料，不依賴任何計時器活著。
+ */
+export type PendingReveal = {
+  drawId: string;
+  prizeId: string;
+  winnerIds: string[];
+  revealMode: RevealMode;
+  soundEnabled: boolean;
+  /** 逐一揭曉時每位得獎者之間的間隔（毫秒）；一次揭曉時不使用。 */
+  stepMs: number;
+  revealAt: string;
+};
+
 export type LotteryEventState = {
   version: typeof EVENT_LOTTERY_VERSION;
   eventTitle: string;
@@ -65,8 +81,8 @@ export type LotteryEventState = {
   soundEnabled: boolean;
   backgroundImageDataUrl: string | null;
   activePrizeId: string | null;
-  /** 目前顯示在舞台上的得獎紀錄 id；重新整理舞台頁時用它還原畫面。 */
-  stageWinnerIds: string[];
+  /** 舞台目前這一輪的揭曉狀態；null 代表沒有正在進行或剛結束的抽選。 */
+  pendingReveal: PendingReveal | null;
   updatedAt: string;
 };
 
@@ -118,7 +134,7 @@ export function createEmptyEventState(now = new Date()): LotteryEventState {
     soundEnabled: true,
     backgroundImageDataUrl: null,
     activePrizeId: null,
-    stageWinnerIds: [],
+    pendingReveal: null,
     updatedAt: now.toISOString(),
   };
 }
@@ -266,6 +282,25 @@ function sanitizeWinnerList(value: unknown, prizes: EventPrize[]): WinnerRecord[
   return winners;
 }
 
+function sanitizePendingReveal(value: unknown, prizeIds: Set<string>, winnerIds: Set<string>): PendingReveal | null {
+  if (!isRecord(value)) return null;
+  const prizeId = typeof value.prizeId === "string" && prizeIds.has(value.prizeId) ? value.prizeId : null;
+  const winnerIdList = Array.isArray(value.winnerIds)
+    ? value.winnerIds.filter((id): id is string => typeof id === "string" && winnerIds.has(id))
+    : [];
+  const revealAt = validIsoDate(value.revealAt);
+  if (!prizeId || winnerIdList.length === 0 || !revealAt) return null;
+  return {
+    drawId: typeof value.drawId === "string" && value.drawId !== "" ? value.drawId : generateId("draw"),
+    prizeId,
+    winnerIds: winnerIdList,
+    revealMode: value.revealMode === "simultaneous" ? "simultaneous" : "sequential",
+    soundEnabled: value.soundEnabled !== false,
+    stepMs: clampInt(value.stepMs, 0, 15_000, sequentialStepMs(winnerIdList.length)),
+    revealAt,
+  };
+}
+
 /** localStorage／匯入的 JSON 都可能損壞或殘缺；逐欄修復，救得回多少是多少。 */
 export function sanitizeEventState(value: unknown, now = new Date()): LotteryEventState {
   const data = isRecord(value) ? value : {};
@@ -277,9 +312,7 @@ export function sanitizeEventState(value: unknown, now = new Date()): LotteryEve
   const prizeIds = new Set(prizes.map((prize) => prize.id));
 
   const activePrizeId = typeof data.activePrizeId === "string" && prizeIds.has(data.activePrizeId) ? data.activePrizeId : null;
-  const stageWinnerIds = Array.isArray(data.stageWinnerIds)
-    ? data.stageWinnerIds.filter((id): id is string => typeof id === "string" && winnerIds.has(id))
-    : [];
+  const pendingReveal = sanitizePendingReveal(data.pendingReveal, prizeIds, winnerIds);
 
   return {
     version: EVENT_LOTTERY_VERSION,
@@ -293,7 +326,9 @@ export function sanitizeEventState(value: unknown, now = new Date()): LotteryEve
     soundEnabled: data.soundEnabled !== false,
     backgroundImageDataUrl: isValidImageDataUrl(data.backgroundImageDataUrl) ? data.backgroundImageDataUrl : null,
     activePrizeId,
-    stageWinnerIds,
+    // pendingReveal 指向的獎項若跟 activePrizeId 對不上（例如手改壞的資料），
+    // 寧可捨棄這輪揭曉狀態，也不要顯示跟目前準備獎項不符的得獎者。
+    pendingReveal: pendingReveal && pendingReveal.prizeId === activePrizeId ? pendingReveal : null,
     updatedAt: validIsoDate(data.updatedAt) ?? now.toISOString(),
   };
 }
@@ -480,7 +515,33 @@ export function validateDraw(state: LotteryEventState, prizeId: string, requeste
 
 export type DrawOutcome = { winners: WinnerRecord[]; nextState: LotteryEventState };
 
-/** 安全抽選：候選人池建立後，用 lib/lottery.ts 的 Web Crypto Fisher–Yates 洗牌抽出，不使用 Math.random()。 */
+export const MAX_SEQUENTIAL_TOTAL_MS = 60_000;
+export const DEFAULT_SEQUENTIAL_STEP_MS = 1400;
+
+/**
+ * 逐一揭曉時每位得獎者之間的間隔：人數少時用預設間隔，人數多到會讓整輪逐一
+ * 揭曉超過一分鐘時自動壓縮間隔，讓整輪揭曉的總時間有上限，不會出現「單輪抽
+ * 500 人、逐一揭曉要播十幾分鐘」的情況。
+ */
+export function sequentialStepMs(winnerCount: number): number {
+  if (winnerCount <= 1) return 0;
+  return Math.min(DEFAULT_SEQUENTIAL_STEP_MS, MAX_SEQUENTIAL_TOTAL_MS / (winnerCount - 1));
+}
+
+/** 這一輪揭曉動畫完全播完的時間點（毫秒 epoch）；一次揭曉等同 revealAt。 */
+export function pendingRevealCompleteAt(pendingReveal: PendingReveal): number {
+  const revealAtMs = Date.parse(pendingReveal.revealAt);
+  if (pendingReveal.revealMode !== "sequential" || pendingReveal.winnerIds.length <= 1) return revealAtMs;
+  return revealAtMs + (pendingReveal.winnerIds.length - 1) * pendingReveal.stepMs;
+}
+
+/**
+ * 安全抽選：候選人池建立後，用 lib/lottery.ts 的 Web Crypto Fisher–Yates 洗牌抽出，
+ * 不使用 Math.random()。得獎紀錄與獎項已抽數量會立刻寫入回傳的 state（歷史資料
+ * 必須馬上落地，不可延後）；舞台什麼時候「看起來」揭曉，交給 pendingReveal.revealAt
+ * ——這是之後每次讀取狀態時用目前時間現算的結果，不依賴任何存活的計時器，重新
+ * 整理或直接關掉分頁都不會讓這輪結果卡住或消失。
+ */
 export function drawEventWinners(state: LotteryEventState, prizeId: string, requestedCount: number, now = new Date()): DrawOutcome {
   const validation = validateDraw(state, prizeId, requestedCount);
   if (!validation.ok) throw new EventLotteryError(validation.reason);
@@ -500,18 +561,30 @@ export function drawEventWinners(state: LotteryEventState, prizeId: string, requ
     disqualifiedAt: null,
   }));
 
+  const pendingReveal: PendingReveal = {
+    drawId: generateId("draw"),
+    prizeId,
+    winnerIds: winners.map((winner) => winner.id),
+    revealMode: state.revealMode,
+    soundEnabled: state.soundEnabled,
+    stepMs: sequentialStepMs(winners.length),
+    revealAt: new Date(now.getTime() + state.animationDurationMs).toISOString(),
+  };
+
   const nextState: LotteryEventState = {
     ...state,
     prizes: state.prizes.map((item) => (item.id === prizeId ? { ...item, drawnCount: item.drawnCount + winners.length } : item)),
     winners: [...state.winners, ...winners],
     activePrizeId: prizeId,
-    stageWinnerIds: winners.map((winner) => winner.id),
+    pendingReveal,
     updatedAt: drawnAt,
   };
   return { winners, nextState };
 }
 
-/** 失格：獎項已抽數量歸還一位，參加者恢復抽選資格；紀錄本身保留，不會被刪除。 */
+/** 失格：獎項已抽數量歸還一位，參加者恢復抽選資格；紀錄本身保留，不會被刪除。
+ *  舞台原本準備／已經顯示的這一輪得獎者維持不變，失格只會反映在得獎狀態欄位上
+ *  （舞台會加註「已失格」，不會把人從畫面上直接移除）。 */
 export function disqualifyWinner(state: LotteryEventState, winnerId: string, now = new Date()): LotteryEventState {
   const record = state.winners.find((winner) => winner.id === winnerId);
   if (!record) throw new EventLotteryError("找不到這筆得獎紀錄");
@@ -522,19 +595,18 @@ export function disqualifyWinner(state: LotteryEventState, winnerId: string, now
     ...state,
     winners: state.winners.map((winner) => (winner.id === winnerId ? { ...winner, disqualified: true, disqualifiedAt } : winner)),
     prizes: state.prizes.map((prize) => (prize.id === record.prizeId ? { ...prize, drawnCount: Math.max(0, prize.drawnCount - 1) } : prize)),
-    stageWinnerIds: state.stageWinnerIds.filter((id) => id !== winnerId),
     updatedAt: disqualifiedAt,
   };
 }
 
-/** 舞台準備：選定獎項、清空目前舞台顯示的得獎名單。 */
+/** 舞台準備：選定獎項、清空上一輪的揭曉狀態。 */
 export function prepareStagePrize(state: LotteryEventState, prizeId: string, now = new Date()): LotteryEventState {
-  return { ...state, activePrizeId: prizeId, stageWinnerIds: [], updatedAt: now.toISOString() };
+  return { ...state, activePrizeId: prizeId, pendingReveal: null, updatedAt: now.toISOString() };
 }
 
-/** 清除舞台顯示（不影響已抽出的紀錄與獎項數量）。 */
+/** 清除舞台顯示（不影響已抽出的紀錄與獎項數量）；抽選進行中按下也能立刻中止舞台上的倒數／揭曉畫面。 */
 export function clearStage(state: LotteryEventState, now = new Date()): LotteryEventState {
-  return { ...state, activePrizeId: null, stageWinnerIds: [], updatedAt: now.toISOString() };
+  return { ...state, activePrizeId: null, pendingReveal: null, updatedAt: now.toISOString() };
 }
 
 /** 重置整場活動的抽獎進度：清空得獎紀錄與已抽數量，保留名單、獎項設定與活動資訊。 */
@@ -544,7 +616,7 @@ export function resetEventDraws(state: LotteryEventState, now = new Date()): Lot
     winners: [],
     prizes: state.prizes.map((prize) => ({ ...prize, drawnCount: 0 })),
     activePrizeId: null,
-    stageWinnerIds: [],
+    pendingReveal: null,
     updatedAt: now.toISOString(),
   };
 }
@@ -552,6 +624,39 @@ export function resetEventDraws(state: LotteryEventState, now = new Date()): Lot
 /** 獎項若已有任何得獎紀錄（含失格），必須阻止刪除，避免歷史資料出現懸空引用。 */
 export function canDeletePrize(state: LotteryEventState, prizeId: string): boolean {
   return !state.winners.some((winner) => winner.prizeId === prizeId);
+}
+
+/** 參加者若已有任何得獎紀錄（含失格），必須阻止刪除，只能停用，避免紀錄與失格恢復資格的邏輯出現懸空引用。 */
+export function canDeleteParticipant(state: LotteryEventState, participantId: string): boolean {
+  return !state.winners.some((winner) => winner.participantId === participantId);
+}
+
+/** 名單群組若含有任何已有得獎紀錄的成員，必須阻止整組刪除，理由同 canDeleteParticipant。 */
+export function canDeleteRoster(state: LotteryEventState, rosterId: string): boolean {
+  return !state.participants.some((participant) => participant.rosterId === rosterId && !canDeleteParticipant(state, participant.id));
+}
+
+export type StageDisplay =
+  | { phase: "idle" }
+  | { phase: "prepared"; prizeId: string }
+  | { phase: "drawing"; prizeId: string; pendingReveal: PendingReveal }
+  | { phase: "revealed"; prizeId: string; pendingReveal: PendingReveal };
+
+/**
+ * 舞台這一刻該顯示什麼，純粹是「目前狀態 + 現在幾點」的函式，不依賴任何計時
+ * 器或訊息歷史——不管是剛收到廣播、重新整理、還是很久以後才打開分頁，算出
+ * 來的結果都一樣，這樣舞台跟控制台才能永遠正確地互相還原。
+ */
+export function resolveStageDisplay(state: LotteryEventState, now = new Date()): StageDisplay {
+  if (!state.activePrizeId) return { phase: "idle" };
+  const pending = state.pendingReveal;
+  if (pending && pending.prizeId === state.activePrizeId) {
+    const revealed = now.getTime() >= Date.parse(pending.revealAt);
+    return revealed
+      ? { phase: "revealed", prizeId: pending.prizeId, pendingReveal: pending }
+      : { phase: "drawing", prizeId: pending.prizeId, pendingReveal: pending };
+  }
+  return { phase: "prepared", prizeId: state.activePrizeId };
 }
 
 // ---------------------------------------------------------------------------

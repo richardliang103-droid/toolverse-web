@@ -3,13 +3,9 @@
 import confetti from "canvas-confetti";
 import gsap from "gsap";
 import { useEffect, useRef, useState } from "react";
-import { createEmptyEventState, type LotteryEventState, type WinnerRecord } from "@/lib/event-lottery";
+import { createEmptyEventState, resolveStageDisplay, type LotteryEventState, type PendingReveal } from "@/lib/event-lottery";
 import { loadEventState, useEventLotterySync } from "../sync";
 import { StageParticles } from "./stage-particles";
-
-type StagePhase = "idle" | "prepared" | "drawing" | "revealing" | "error";
-
-const SEQUENTIAL_STEP_MS = 1400;
 
 function reducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -45,127 +41,101 @@ function playChime() {
   }
 }
 
+function celebrate(soundEnabled: boolean, finale: boolean) {
+  fireConfetti(finale);
+  if (soundEnabled) playChime();
+}
+
 export function EventLotteryStage() {
   const [state, setState] = useState<LotteryEventState>(() => createEmptyEventState());
   const [hydrated, setHydrated] = useState(false);
-  const [phase, setPhase] = useState<StagePhase>("idle");
-  const [revealedIds, setRevealedIds] = useState<string[]>([]);
-  const [drawingCount, setDrawingCount] = useState(0);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [displayedWinnerIds, setDisplayedWinnerIds] = useState<string[]>([]);
+  const [transientError, setTransientError] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const stageRef = useRef<HTMLDivElement>(null);
   const winnerListRef = useRef<HTMLDivElement>(null);
-  const revealTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const staggerTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // START_DRAW 到揭曉動畫播完這段期間，storage 事件 fallback（其他分頁改了
-  // localStorage 就會觸發）不該打斷正在播放的逐一／一次揭曉動畫。
-  const isAnimatingRef = useRef(false);
+  // 這一輪抽選（用 drawId 識別）如果曾經被觀察到處於「抽選中」倒數階段，代表這個
+  // 分頁是全程在場的——揭曉那一刻要播動畫、放彩帶、出聲音。如果分頁是在 revealAt
+  // 已經過了之後才打開或重新整理（例如舞台分頁被關掉又重開），就直接靜靜顯示最終
+  // 結果，不會突然把已經播過的動畫或音效再放一次。
+  const seenDrawingRef = useRef(new Set<string>());
+  const animatedDrawIdsRef = useRef(new Set<string>());
 
-  function clearRevealTimers() {
-    revealTimersRef.current.forEach(clearTimeout);
-    revealTimersRef.current = [];
+  function clearStaggerTimers() {
+    staggerTimersRef.current.forEach(clearTimeout);
+    staggerTimersRef.current = [];
   }
 
-  /** 靜態還原（重新整理／收到 STATE_UPDATED）：直接依資料呈現目前畫面，不重播動畫。 */
-  function applySnapshot(next: LotteryEventState) {
-    isAnimatingRef.current = false;
-    clearRevealTimers();
-    setState(next);
-    setErrorMessage("");
-    if (next.activePrizeId && next.stageWinnerIds.length > 0) {
-      setPhase("revealing");
-      setRevealedIds(next.stageWinnerIds);
-    } else if (next.activePrizeId) {
-      setPhase("prepared");
-      setRevealedIds([]);
-    } else {
-      setPhase("idle");
-      setRevealedIds([]);
-    }
-  }
-
-  function celebrate(soundEnabled: boolean, finale: boolean) {
-    fireConfetti(finale);
-    if (soundEnabled) playChime();
-  }
+  // 舞台這一刻該顯示什麼，純粹是「目前狀態 + 現在幾點」的函式；不管是剛收到
+  // 廣播、重新整理，還是很久以後才打開分頁，算出來的結果都一樣。
+  const display = resolveStageDisplay(state, new Date(nowTick));
 
   useEventLotterySync((message) => {
-    switch (message.type) {
-      case "STATE_UPDATED":
-        // 動畫播放期間收到的 STATE_UPDATED 多半是 storage 事件 fallback 對同一次
-        // 抽選的重複通知；先更新底層資料，畫面留給正在播放的動畫決定何時揭曉。
-        if (isAnimatingRef.current) { setState(loadEventState()); break; }
-        applySnapshot(loadEventState());
-        break;
-      case "RESET_EVENT":
-      case "CLEAR_STAGE":
-        applySnapshot(loadEventState());
-        break;
-      case "PREPARE_PRIZE":
-        isAnimatingRef.current = false;
-        setState(loadEventState());
-        clearRevealTimers();
-        setErrorMessage("");
-        setPhase("prepared");
-        setRevealedIds([]);
-        break;
-      case "START_DRAW":
-        isAnimatingRef.current = true;
-        setState(loadEventState());
-        clearRevealTimers();
-        setErrorMessage("");
-        setDrawingCount(message.count);
-        setPhase("drawing");
-        setRevealedIds([]);
-        break;
-      case "DRAW_RESULT": {
-        const next = loadEventState();
-        setState(next);
-        clearRevealTimers();
-        setPhase("revealing");
-        const winners = message.winners;
-        if (message.revealMode === "simultaneous" || winners.length <= 1) {
-          setRevealedIds(winners.map((winner) => winner.id));
-          celebrate(message.soundEnabled, true);
-          isAnimatingRef.current = false;
-        } else {
-          winners.forEach((winner, index) => {
-            const timer = setTimeout(() => {
-              setRevealedIds((current) => [...current, winner.id]);
-              celebrate(message.soundEnabled, index === winners.length - 1);
-              if (index === winners.length - 1) isAnimatingRef.current = false;
-            }, index * SEQUENTIAL_STEP_MS);
-            revealTimersRef.current.push(timer);
-          });
-        }
-        break;
-      }
-      case "DISQUALIFY_WINNER":
-        setState(loadEventState());
-        break;
-      case "DRAW_ERROR":
-        if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
-        setErrorMessage(message.message);
-        setPhase("error");
-        errorTimerRef.current = setTimeout(() => setPhase("prepared"), 4000);
-        break;
-      default:
-        break;
+    if (message.type === "DRAW_ERROR") {
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      setTransientError(message.message);
+      errorTimerRef.current = setTimeout(() => setTransientError(""), 4000);
+      return;
     }
+    setTransientError("");
+    setState(loadEventState());
   });
 
   useEffect(() => {
     // 還原舞台目前狀態需要一次性的 client hydration。
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    applySnapshot(loadEventState());
+    setState(loadEventState());
     setHydrated(true);
-    return () => {
-      clearRevealTimers();
-      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current); };
   }, []);
+
+  // 倒數期間才需要每隔一小段時間重新計算一次「揭曉時間到了沒」；其餘時候完全不跑計時器。
+  useEffect(() => {
+    if (display.phase !== "drawing") return;
+    const interval = setInterval(() => setNowTick(Date.now()), 200);
+    return () => clearInterval(interval);
+  }, [display.phase, state.pendingReveal?.drawId, state.pendingReveal?.revealAt]);
+
+  useEffect(() => {
+    if (display.phase === "drawing") seenDrawingRef.current.add(display.pendingReveal.drawId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [display.phase, state.pendingReveal?.drawId]);
+
+  // 揭曉那一刻要不要播動畫、要顯示哪些得獎者，每個 drawId 只處理一次；離開「已揭曉」
+  // 狀態（準備下一輪、清除舞台）時要把上一輪顯示的得獎者清空，這是跟外部狀態同步、
+  // 不是可以挪到 render 階段算的衍生值，所以刻意在 effect 裡呼叫 setState。
+  useEffect(() => {
+    if (display.phase !== "revealed") {
+      clearStaggerTimers();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDisplayedWinnerIds([]);
+      return undefined;
+    }
+    const pending: PendingReveal = display.pendingReveal;
+    if (animatedDrawIdsRef.current.has(pending.drawId)) return undefined;
+    animatedDrawIdsRef.current.add(pending.drawId);
+    clearStaggerTimers();
+
+    const playAnimation = seenDrawingRef.current.has(pending.drawId);
+    if (!playAnimation || pending.revealMode === "simultaneous" || pending.winnerIds.length <= 1) {
+      setDisplayedWinnerIds(pending.winnerIds);
+      if (playAnimation) celebrate(pending.soundEnabled, true);
+      return undefined;
+    }
+    pending.winnerIds.forEach((id, index) => {
+      const timer = setTimeout(() => {
+        setDisplayedWinnerIds((current) => [...current, id]);
+        celebrate(pending.soundEnabled, index === pending.winnerIds.length - 1);
+      }, index * pending.stepMs);
+      staggerTimersRef.current.push(timer);
+    });
+    return clearStaggerTimers;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [display.phase, state.pendingReveal?.drawId]);
 
   useEffect(() => {
     function onFullscreenChange() { setIsFullscreen(Boolean(document.fullscreenElement)); }
@@ -174,12 +144,12 @@ export function EventLotteryStage() {
   }, []);
 
   useEffect(() => {
-    if (revealedIds.length === 0 || !winnerListRef.current) return;
+    if (displayedWinnerIds.length === 0 || !winnerListRef.current) return;
     const last = winnerListRef.current.lastElementChild;
     if (last && !reducedMotion()) {
       gsap.fromTo(last, { opacity: 0, y: 26, scale: 0.75, rotate: -4 }, { opacity: 1, y: 0, scale: 1, rotate: 0, duration: 0.65, ease: "back.out(2.1)" });
     }
-  }, [revealedIds]);
+  }, [displayedWinnerIds]);
 
   async function toggleFullscreen() {
     try {
@@ -192,10 +162,10 @@ export function EventLotteryStage() {
 
   if (!hydrated) return <div className="event-lottery-stage-loading" aria-hidden="true" />;
 
-  const activePrize = state.prizes.find((prize) => prize.id === state.activePrizeId) ?? null;
-  const revealedWinners: WinnerRecord[] = revealedIds
+  const activePrize = display.phase === "idle" ? null : state.prizes.find((prize) => prize.id === display.prizeId) ?? null;
+  const revealedWinners = displayedWinnerIds
     .map((id) => state.winners.find((winner) => winner.id === id))
-    .filter((winner): winner is WinnerRecord => Boolean(winner));
+    .filter((winner): winner is NonNullable<typeof winner> => Boolean(winner));
   const hasBackground = Boolean(state.backgroundImageDataUrl);
 
   return (
@@ -217,21 +187,21 @@ export function EventLotteryStage() {
       </header>
 
       <main className="event-lottery-stage-main">
-        {phase === "idle" && <p className="event-lottery-stage-idle">等待控制台準備抽獎…</p>}
+        {transientError && <p className="event-lottery-stage-error">{transientError}</p>}
 
-        {phase === "error" && <p className="event-lottery-stage-error">{errorMessage}</p>}
+        {!transientError && display.phase === "idle" && <p className="event-lottery-stage-idle">等待控制台準備抽獎…</p>}
 
-        {(phase === "prepared" || phase === "drawing") && activePrize && (
+        {!transientError && (display.phase === "prepared" || display.phase === "drawing") && activePrize && (
           <div className="event-lottery-stage-prize">
             {activePrize.imageDataUrl && <img className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
             <h2>{activePrize.name}</h2>
-            {phase === "drawing"
-              ? <p className="event-lottery-stage-spin">抽選中…{drawingCount > 1 ? `（${drawingCount} 位）` : ""}<span className="event-lottery-stage-spin-ring" aria-hidden="true" /></p>
+            {display.phase === "drawing"
+              ? <p className="event-lottery-stage-spin">抽選中…{display.pendingReveal.winnerIds.length > 1 ? `（${display.pendingReveal.winnerIds.length} 位）` : ""}<span className="event-lottery-stage-spin-ring" aria-hidden="true" /></p>
               : <p className="event-lottery-stage-waiting">即將開始抽選</p>}
           </div>
         )}
 
-        {phase === "revealing" && activePrize && (
+        {!transientError && display.phase === "revealed" && activePrize && (
           <div className="event-lottery-stage-reveal">
             {activePrize.imageDataUrl && <img className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
             <h2>{activePrize.name}</h2>

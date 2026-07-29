@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   candidatePool,
+  canDeleteParticipant,
   canDeletePrize,
+  canDeleteRoster,
   clearStage,
   createEmptyEventState,
   createParticipant,
@@ -25,6 +27,7 @@ import {
   parseEventBackup,
   parseParticipantsCsv,
   parsePrizesCsv,
+  pendingRevealCompleteAt,
   prepareStagePrize,
   remainingSlots,
   resetEventDraws,
@@ -102,9 +105,8 @@ export function EventLotteryConsole() {
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const post = useEventLotterySync((message) => {
-    if (message.type === "STATE_UPDATED" || message.type === "RESET_EVENT" || message.type === "DISQUALIFY_WINNER") {
-      setState(loadEventState());
-    }
+    if (message.type === "DRAW_ERROR") return; // 舞台端的暫時性提示，控制台不需要重新讀取狀態
+    setState(loadEventState());
   });
 
   useEffect(() => {
@@ -118,11 +120,27 @@ export function EventLotteryConsole() {
     setNotice({ text, tone });
   }
 
+  /** 儲存失敗（例如 localStorage 容量不足）時整個操作要中止：不更新畫面、不廣播，
+   *  避免其他分頁被通知了一個其實沒有真的落地的變更。 */
   function commit(next: LotteryEventState, message: EventLotterySyncMessage = { type: "STATE_UPDATED" }) {
+    if (!saveEventState(next)) {
+      showNotice("儲存失敗，可能是瀏覽器儲存空間不足，這次變更未套用，請刪減圖片或紀錄後再試", "error");
+      return;
+    }
     setState(next);
-    if (!saveEventState(next)) showNotice("儲存失敗，可能是瀏覽器儲存空間不足，請刪減圖片或紀錄後再試", "error");
     post(message);
   }
+
+  // 抽選揭曉時間到了之前，畫面需要每隔一小段時間重新算一次「現在是否該解鎖」；
+  // 沒有進行中的揭曉時完全不跑計時器。
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!state.pendingReveal) return;
+    const interval = setInterval(() => setNowTick(Date.now()), 250);
+    return () => clearInterval(interval);
+  }, [state.pendingReveal]);
+
+  const drawLocked = state.pendingReveal !== null && nowTick < pendingRevealCompleteAt(state.pendingReveal);
 
   const rosterConfirm = useArmedConfirm();
   const participantConfirm = useArmedConfirm();
@@ -184,6 +202,10 @@ export function EventLotteryConsole() {
   }
 
   function handleDeleteRoster(id: string) {
+    if (!canDeleteRoster(state, id)) {
+      showNotice("這個名單群組裡有成員已經有得獎紀錄，無法整組刪除；請先個別停用不再需要的人，得獎者無法刪除", "error");
+      return;
+    }
     rosterConfirm.confirm(id, () => {
       commit({
         ...state,
@@ -225,6 +247,10 @@ export function EventLotteryConsole() {
   }
 
   function handleDeleteParticipant(id: string) {
+    if (!canDeleteParticipant(state, id)) {
+      showNotice("這位參加者已經有得獎紀錄，無法刪除；如果不想讓他繼續抽選，請改為停用", "error");
+      return;
+    }
     participantConfirm.confirm(id, () => {
       commit({ ...state, participants: state.participants.filter((participant) => participant.id !== id) });
     });
@@ -357,9 +383,6 @@ export function EventLotteryConsole() {
   // ---- 抽獎控制 ----
   const [drawPrizeId, setDrawPrizeId] = useState("");
   const [drawCount, setDrawCount] = useState(1);
-  const [drawing, setDrawing] = useState(false);
-  const drawTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (drawTimerRef.current) clearTimeout(drawTimerRef.current); }, []);
 
   const effectiveDrawPrizeId = orderedPrizes.some((prize) => prize.id === drawPrizeId) ? drawPrizeId : (orderedPrizes[0]?.id ?? "");
   const drawTargetPrize = orderedPrizes.find((prize) => prize.id === effectiveDrawPrizeId) ?? null;
@@ -367,13 +390,22 @@ export function EventLotteryConsole() {
   const drawRemaining = drawTargetPrize ? remainingSlots(drawTargetPrize) : 0;
 
   function handlePrepareStage() {
+    if (drawLocked) return;
     if (!drawTargetPrize) { showNotice("請先選擇獎項", "error"); return; }
     commit(prepareStagePrize(state, drawTargetPrize.id), { type: "PREPARE_PRIZE", prizeId: drawTargetPrize.id });
     showNotice(`舞台已準備顯示「${drawTargetPrize.name}」`);
   }
 
+  /**
+   * 抽選只有「一次」原子寫入：得獎紀錄、獎項已抽數量與這一輪的揭曉時間表
+   * （pendingReveal）一起落地。舞台什麼時候看起來揭曉，交給 resolveStageDisplay
+   * 用目前時間現算，不依賴這裡的計時器活著——就算儲存成功後立刻重新整理或整個
+   * 關掉控制台分頁，舞台（或之後重新打開的控制台）都能算出正確畫面。
+   * 這裡排的 setTimeout 純粹是「揭曉那一刻順便廣播一次 DRAW_RESULT」的錦上添花，
+   * 沒收到也不影響正確性。
+   */
   function handleStartDraw() {
-    if (drawing) return;
+    if (drawLocked) return;
     if (!drawTargetPrize) { showNotice("請先選擇獎項", "error"); return; }
     let outcome;
     try {
@@ -384,23 +416,18 @@ export function EventLotteryConsole() {
       post({ type: "DRAW_ERROR", message });
       return;
     }
+    if (!saveEventState(outcome.nextState)) {
+      showNotice("儲存失敗，可能是瀏覽器儲存空間不足，這輪抽獎未送出，請刪減圖片或紀錄後再試", "error");
+      return;
+    }
     setNotice(null);
-    setDrawing(true);
-    // 得獎紀錄與獎項已抽數量要立刻落地（歷史、剩餘名額都以此為準）；但舞台要看到的
-    // stageWinnerIds 先保持原樣，等揭曉那一刻才寫入，避免其他分頁的 storage 事件
-    // fallback 在動畫播完之前就把答案提前爆雷、又跟 BroadcastChannel 的揭曉重複疊加。
-    const committedState: LotteryEventState = { ...outcome.nextState, stageWinnerIds: state.stageWinnerIds };
-    setState(committedState);
-    if (!saveEventState(committedState)) showNotice("儲存失敗，可能是瀏覽器儲存空間不足", "error");
-    const { revealMode, animationDurationMs, soundEnabled } = outcome.nextState;
-    post({ type: "START_DRAW", prizeId: drawTargetPrize.id, count: drawCount, revealMode, animationDurationMs, soundEnabled });
-    drawTimerRef.current = setTimeout(() => {
-      const revealedState: LotteryEventState = { ...committedState, stageWinnerIds: outcome.winners.map((winner) => winner.id), updatedAt: new Date().toISOString() };
-      setState(revealedState);
-      if (!saveEventState(revealedState)) showNotice("儲存失敗，可能是瀏覽器儲存空間不足", "error");
-      post({ type: "DRAW_RESULT", winners: outcome.winners, revealMode, animationDurationMs, soundEnabled });
-      setDrawing(false);
-    }, animationDurationMs);
+    setState(outcome.nextState);
+    post({ type: "START_DRAW", prizeId: drawTargetPrize.id });
+    const pendingReveal = outcome.nextState.pendingReveal;
+    if (pendingReveal) {
+      const delay = Math.max(0, Date.parse(pendingReveal.revealAt) - Date.now());
+      window.setTimeout(() => post({ type: "DRAW_RESULT", prizeId: drawTargetPrize.id }), delay);
+    }
   }
 
   function handleClearStage() {
@@ -650,20 +677,21 @@ export function EventLotteryConsole() {
           {orderedPrizes.length === 0
             ? <p className="result-empty"><strong>還沒有獎項</strong>請先到「獎項管理」新增至少一個獎項。</p>
             : <>
+                {drawLocked && <p className="gantt-notice gantt-notice-info">上一輪還在舞台上揭曉中，請稍候再開始下一輪（可以按「清除舞台顯示」提前中止）</p>}
                 <div className="event-lottery-inline-form">
                   <label className="number-field" htmlFor="draw-prize">選擇獎項
-                    <select id="draw-prize" className="key-input" value={effectiveDrawPrizeId} onChange={(event) => setDrawPrizeId(event.target.value)}>
+                    <select id="draw-prize" className="key-input" value={effectiveDrawPrizeId} disabled={drawLocked} onChange={(event) => setDrawPrizeId(event.target.value)}>
                       {orderedPrizes.map((prize) => <option key={prize.id} value={prize.id}>{prize.name}（剩餘 {remainingSlots(prize)}）</option>)}
                     </select>
                   </label>
                   <label className="number-field" htmlFor="draw-count">本輪抽出人數
-                    <input id="draw-count" className="number-input" type="number" min={1} max={Math.max(1, drawRemaining)} value={drawCount} onChange={(event) => setDrawCount(Math.max(1, Math.round(Number(event.target.value)) || 1))} />
+                    <input id="draw-count" className="number-input" type="number" min={1} max={Math.max(1, drawRemaining)} value={drawCount} disabled={drawLocked} onChange={(event) => setDrawCount(Math.max(1, Math.round(Number(event.target.value)) || 1))} />
                   </label>
                 </div>
                 {drawTargetPrize && <p className="panel-meta">符合資格的候選人：{drawCandidates.length} 位 · 獎項剩餘名額：{drawRemaining} 個</p>}
                 <div className="event-lottery-quick-actions">
-                  <button className="button button-secondary" type="button" onClick={handlePrepareStage} disabled={!drawTargetPrize}>準備舞台畫面</button>
-                  <button className="button button-blue draw-button" type="button" onClick={handleStartDraw} disabled={drawing || !drawTargetPrize || drawRemaining === 0}>{drawing ? "抽選中…" : "開始抽獎"}</button>
+                  <button className="button button-secondary" type="button" onClick={handlePrepareStage} disabled={drawLocked || !drawTargetPrize}>準備舞台畫面</button>
+                  <button className="button button-blue draw-button" type="button" onClick={handleStartDraw} disabled={drawLocked || !drawTargetPrize || drawRemaining === 0}>{drawLocked ? "抽選中…" : "開始抽獎"}</button>
                   <button className="button button-secondary" type="button" onClick={handleClearStage}>清除舞台顯示</button>
                   <button className="button button-danger" type="button" onClick={handleResetEvent}>{resetConfirm.armedId === "reset" ? "再按一次確定重置" : "重置抽獎進度"}</button>
                 </div>

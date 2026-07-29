@@ -7,20 +7,20 @@ import {
   EVENT_LOTTERY_STORAGE_KEY,
   sanitizeEventState,
   type LotteryEventState,
-  type RevealMode,
-  type WinnerRecord,
 } from "@/lib/event-lottery";
 
 /**
- * 控制台與舞台的分頁同步事件。抽出結果一律先在控制台用安全亂數確定，
- * 這裡只負責把「已經確定的結果」與「舞台該做什麼動畫」廣播出去；
- * 舞台本身不做任何隨機抽選。
+ * 控制台與舞台的分頁同步事件。抽出結果一律先在控制台用安全亂數確定並完整寫進
+ * localStorage（含這一輪的揭曉時間表），這裡的訊息只是「請重新讀取狀態」的
+ * 即時提示，不是唯一的真相來源——就算訊息遺失或分頁重新整理，接收端都能單靠
+ * localStorage 目前的內容＋目前時間，算出正確畫面（見 lib/event-lottery.ts 的
+ * resolveStageDisplay）。
  */
 export type EventLotterySyncMessage =
   | { type: "STATE_UPDATED" }
   | { type: "PREPARE_PRIZE"; prizeId: string }
-  | { type: "START_DRAW"; prizeId: string; count: number; revealMode: RevealMode; animationDurationMs: number; soundEnabled: boolean }
-  | { type: "DRAW_RESULT"; winners: WinnerRecord[]; revealMode: RevealMode; animationDurationMs: number; soundEnabled: boolean }
+  | { type: "START_DRAW"; prizeId: string }
+  | { type: "DRAW_RESULT"; prizeId: string }
   | { type: "DRAW_ERROR"; message: string }
   | { type: "CLEAR_STAGE" }
   | { type: "DISQUALIFY_WINNER"; winnerId: string }
