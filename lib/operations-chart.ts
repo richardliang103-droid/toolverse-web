@@ -138,8 +138,9 @@ export type ChartWarning = { side: PartySide; message: string };
 export function chartWarnings(chart: OperationsChart): ChartWarning[] {
   const warnings: ChartWarning[] = [];
   for (const side of ["upstream", "downstream"] as const) {
-    const total = chart.parties.filter((party) => party.side === side).reduce((sum, party) => sum + party.percentage, 0);
-    if (total === 0) continue;
+    const parties = chart.parties.filter((party) => party.side === side);
+    if (parties.length === 0) continue; // 這側完全沒有對象，不算「未滿 100%」
+    const total = parties.reduce((sum, party) => sum + party.percentage, 0);
     const label = side === "upstream" ? "上游供應商" : "下游客戶";
     if (total > 100.001) warnings.push({ side, message: `${label}佔比加總 ${round1(total)}%，超過 100%` });
     else if (total < 99.999) warnings.push({ side, message: `${label}佔比加總 ${round1(total)}%，未滿 100%` });

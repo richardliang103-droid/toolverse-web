@@ -59,6 +59,15 @@ test("chartWarnings stays silent when a side has no parties at all", () => {
   assert.equal(warnings.length, 0); // downstream 完全沒有對象，不該被當成「0% 未滿」報警
 });
 
+test("chartWarnings still flags a side that has parties but they're all still at 0%", () => {
+  const parties = [
+    createParty({ side: "upstream", percentage: 100 }),
+    createParty({ side: "downstream", percentage: 0 }), // 已新增對象，只是還沒填佔比
+  ];
+  const warnings = chartWarnings(chartOf(parties));
+  assert.ok(warnings.some((w) => w.side === "downstream" && /未滿 100%/.test(w.message)));
+});
+
 test("chartWarnings is silent when totals are exactly 100%", () => {
   const parties = [createParty({ side: "upstream", percentage: 60 }), createParty({ side: "upstream", percentage: 40 })];
   assert.equal(chartWarnings(chartOf(parties)).length, 0);
