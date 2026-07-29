@@ -71,6 +71,15 @@ test("server-renders the event lottery stage page", async () => {
   assert.match(html, /noindex/);
 });
 
+test("server-renders the event lottery mobile remote page without leaking any client-only state", async () => {
+  const response = await render("/tools/event-lottery/remote");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  // 手機遙控頁不該被索引，也不該在伺服器端就洩漏任何 hydration 前的 client 狀態。
+  assert.match(html, /noindex/);
+  assert.doesNotMatch(html, /長按開始抽獎|顯示下一個獎項/);
+});
+
 test("server-renders the workspace page without touching browser storage", async () => {
   const response = await render("/workspace");
   assert.equal(response.status, 200);

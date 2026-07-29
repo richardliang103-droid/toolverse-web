@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  advanceStateRevision,
   candidatePool,
   canDeleteParticipant,
   canDeletePrize,
@@ -16,6 +17,7 @@ import {
   eventBackupFileName,
   exportEventBackup,
   findDuplicateEmployeeId,
+  MAX_DRAW_COUNT_PER_ROUND,
   MAX_IMAGE_DATA_URL_LENGTH,
   MAX_NAME_LENGTH,
   MAX_PARTICIPANTS,
@@ -35,6 +37,16 @@ import {
   type LotteryEventState,
 } from "@/lib/event-lottery";
 import { downloadBlob } from "@/lib/download";
+import {
+  buildPairingUrl,
+  EVENT_LOTTERY_REMOTE_STORAGE_KEY,
+  generatePairingToken,
+  isRemoteSessionUsable,
+  sanitizeStoredRemoteSessionPointer,
+  type StoredRemoteSessionPointer,
+} from "@/lib/event-lottery-remote";
+import { connectRemoteChannel, ensureAnonymousSession, type RemoteChannelHandle } from "@/lib/event-lottery-remote-channel";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase-browser";
 import { clearStageAction, prepareStage, startDraw } from "./actions";
 import { loadEventState, saveEventState, useEventLotterySync, type EventLotterySyncMessage } from "./sync";
 
@@ -142,13 +154,137 @@ export function EventLotteryConsole() {
   /** 儲存失敗（例如 localStorage 容量不足）時整個操作要中止：不更新畫面、不廣播，
    *  避免其他分頁被通知了一個其實沒有真的落地的變更。 */
   function commit(next: LotteryEventState, message: EventLotterySyncMessage = { type: "STATE_UPDATED" }) {
-    if (!saveEventState(next)) {
+    // 以 storage 中最新版本為基準，避免另一個分頁剛完成變更時把 revision 倒退。
+    const latest = loadEventState();
+    const versioned = advanceStateRevision({
+      ...next,
+      stateRevision: Math.max(next.stateRevision, latest.stateRevision),
+    });
+    if (!saveEventState(versioned)) {
       showNotice("儲存失敗，可能是瀏覽器儲存空間不足，這次變更未套用，請刪減圖片或紀錄後再試", "error");
       return;
     }
-    setState(next);
+    setState(versioned);
     post(message);
   }
+
+  // ---- 手機遙控（optional enhancement，Supabase 沒設定或連不上都不影響上面的本機抽獎） ----
+  const supabaseConfigured = useMemo(() => isSupabaseConfigured(), []);
+  const [remoteSession, setRemoteSession] = useState<StoredRemoteSessionPointer | null>(null);
+  const [remoteQrDataUrl, setRemoteQrDataUrl] = useState("");
+  const [remoteBusy, setRemoteBusy] = useState(false);
+  const [remoteNotice, setRemoteNotice] = useState<Notice | null>(null);
+  const [remotePairedAt, setRemotePairedAt] = useState<number | null>(null);
+  const remoteChannelRef = useRef<RemoteChannelHandle | null>(null);
+
+  function showRemoteNotice(text: string, tone: Notice["tone"] = "info") {
+    setRemoteNotice({ text, tone });
+  }
+
+  async function subscribeRemoteChannel(sessionId: string) {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    remoteChannelRef.current?.close();
+    remoteChannelRef.current = null;
+    const handle = await connectRemoteChannel(supabase, sessionId, (message) => {
+      // 控制台只被動觀察配對狀態（手機連上時會送 REMOTE_HELLO），實際指令一律由
+      // 舞台處理，避免控制台與舞台同時處理同一個手機命令。
+      if (message.type === "REMOTE_HELLO") setRemotePairedAt(Date.now());
+    });
+    remoteChannelRef.current = handle;
+  }
+
+  useEffect(() => {
+    if (!supabaseConfigured || typeof window === "undefined") return;
+    let cancelled = false;
+    try {
+      const raw = window.localStorage.getItem(EVENT_LOTTERY_REMOTE_STORAGE_KEY);
+      const pointer = raw ? sanitizeStoredRemoteSessionPointer(JSON.parse(raw)) : null;
+      if (pointer && isRemoteSessionUsable({ expiresAt: pointer.expiresAt, revokedAt: null })) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setRemoteSession(pointer);
+        void subscribeRemoteChannel(pointer.sessionId).then(() => { if (cancelled) remoteChannelRef.current?.close(); });
+      } else if (raw) {
+        window.localStorage.removeItem(EVENT_LOTTERY_REMOTE_STORAGE_KEY);
+      }
+    } catch {
+      /* localStorage 損壞就當作沒有先前的 session */
+    }
+    return () => {
+      cancelled = true;
+      remoteChannelRef.current?.close();
+      remoteChannelRef.current = null;
+    };
+  }, [supabaseConfigured]);
+
+  async function handleEnableRemote() {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) { showRemoteNotice("尚未設定手機遙控服務", "error"); return; }
+    setRemoteBusy(true);
+    setRemoteNotice(null);
+    try {
+      await ensureAnonymousSession(supabase);
+      const token = generatePairingToken();
+      const { data, error } = await supabase.rpc("create_lottery_remote_session", { pairing_token: token });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("建立遙控 session 失敗");
+      const pointer: StoredRemoteSessionPointer = { sessionId: row.id, topic: row.topic, expiresAt: row.expires_at };
+      window.localStorage.setItem(EVENT_LOTTERY_REMOTE_STORAGE_KEY, JSON.stringify(pointer));
+      setRemoteSession(pointer);
+      setRemotePairedAt(null);
+
+      const pairingUrl = buildPairingUrl(window.location.origin, pointer.sessionId, token);
+      const QRCode = (await import("qrcode")).default;
+      const dataUrl = await QRCode.toDataURL(pairingUrl, { errorCorrectionLevel: "M", margin: 2, width: 320 });
+      setRemoteQrDataUrl(dataUrl);
+      await subscribeRemoteChannel(pointer.sessionId);
+    } catch (error) {
+      showRemoteNotice(error instanceof Error ? error.message : "啟用手機遙控失敗，請稍後再試", "error");
+    } finally {
+      setRemoteBusy(false);
+    }
+  }
+
+  async function handleRevokeRemote() {
+    const supabase = getSupabaseBrowserClient();
+    if (!remoteSession) return;
+    setRemoteBusy(true);
+    try {
+      if (!supabase) throw new Error("尚未設定手機遙控服務");
+      const { error } = await supabase.rpc("revoke_lottery_remote_session", { session_id: remoteSession.sessionId });
+      if (error) throw error;
+      try {
+        await remoteChannelRef.current?.send({ type: "SESSION_REVOKED" });
+      } catch {
+        /* DB 已完成撤銷；即時通知只是加速讓手機離線，失敗不影響權限撤銷。 */
+      }
+      showRemoteNotice("已撤銷手機遙控");
+      remoteChannelRef.current?.close();
+      remoteChannelRef.current = null;
+      window.localStorage.removeItem(EVENT_LOTTERY_REMOTE_STORAGE_KEY);
+      setRemoteSession(null);
+      setRemoteQrDataUrl("");
+      setRemotePairedAt(null);
+    } catch (error) {
+      // RPC 失敗時保留 session 指標與控制項，讓使用者可以重試；不能讓
+      // 資料庫仍有效的 session 失去撤銷入口。
+      showRemoteNotice(error instanceof Error ? error.message : "撤銷失敗，請稍後再試", "error");
+    } finally {
+      setRemoteBusy(false);
+    }
+  }
+
+  // 純粹驅動「配對是否還算在線」的畫面更新；沒有配對紀錄時完全不需要跑計時器。
+  const [remoteNowTick, setRemoteNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (remotePairedAt === null) return;
+    const interval = setInterval(() => setRemoteNowTick(Date.now()), 5000);
+    return () => clearInterval(interval);
+  }, [remotePairedAt]);
+
+  const remotePaired = remotePairedAt !== null;
+  const remotePairedStale = remotePairedAt !== null && remoteNowTick - remotePairedAt > 30_000;
 
   // 抽選揭曉時間到了之前，畫面需要每隔一小段時間重新算一次「現在是否該解鎖」；
   // 沒有進行中的揭曉、或這一輪已經被舞台回報播完時，完全不跑計時器。
@@ -409,7 +545,15 @@ export function EventLotteryConsole() {
 
   // ---- 抽獎控制 ----
   const [drawPrizeId, setDrawPrizeId] = useState("");
-  const [drawCount, setDrawCount] = useState(1);
+
+  // 「本輪抽出人數」是活動狀態的一部分（stageDrawCount），不是控制台自己的 local
+  // state：手機遙控、舞台鍵盤／滑鼠／簡報筆與控制台都要讀同一份數字，改一處
+  // 全部同步，不會各自維護不同人數。
+  function handleStageDrawCountChange(value: number) {
+    const next = Math.min(MAX_DRAW_COUNT_PER_ROUND, Math.max(1, Math.round(value) || 1));
+    if (next === state.stageDrawCount) return;
+    commit({ ...state, stageDrawCount: next });
+  }
 
   const effectiveDrawPrizeId = orderedPrizes.some((prize) => prize.id === drawPrizeId) ? drawPrizeId : (orderedPrizes[0]?.id ?? "");
   const drawTargetPrize = orderedPrizes.find((prize) => prize.id === effectiveDrawPrizeId) ?? null;
@@ -428,7 +572,7 @@ export function EventLotteryConsole() {
   function handleStartDraw() {
     if (drawLocked) return;
     if (!drawTargetPrize) { showNotice("請先選擇獎項", "error"); return; }
-    const result = startDraw(state, drawTargetPrize.id, drawCount, post);
+    const result = startDraw(state, drawTargetPrize.id, state.stageDrawCount, post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setNotice(null);
     setState(result.state);
@@ -500,6 +644,30 @@ export function EventLotteryConsole() {
           <button className="button button-small button-danger" type="button" onClick={handleClearAllData}>{clearAllConfirm.armedId === "clear-all" ? "再按一次確定清除" : "清除所有資料"}</button>
         </div>
         {notice && <p className={`gantt-notice gantt-notice-${notice.tone}`} role={notice.tone === "error" ? "alert" : "status"}>{notice.text}</p>}
+      </div>
+
+      <div className="panel event-lottery-remote-panel" aria-label="手機遙控">
+        <div className="panel-header"><h2>手機遙控</h2><span className="panel-meta">選填功能，不影響本機抽獎</span></div>
+        {!supabaseConfigured && <p className="result-empty">尚未設定手機遙控服務</p>}
+        {supabaseConfigured && !remoteSession && (
+          <div className="event-lottery-quick-actions">
+            <button className="button button-blue" type="button" onClick={handleEnableRemote} disabled={remoteBusy}>{remoteBusy ? "啟用中…" : "啟用手機遙控"}</button>
+          </div>
+        )}
+        {supabaseConfigured && remoteSession && (
+          <div className="event-lottery-remote-qr">
+            {remoteQrDataUrl && !remotePaired && <img src={remoteQrDataUrl} alt="手機遙控配對 QR Code，用手機相機掃描後直接進入遙控頁" />}
+            <div className="event-lottery-remote-qr-meta">
+              {!remotePaired && <p>{remoteQrDataUrl ? "等待手機掃描…" : "已建立 session；控制台重新整理過就無法再顯示 QR Code，請撤銷後重新啟用"}</p>}
+              {remotePaired && <p><strong>{remotePairedStale ? "手機可能已離線" : "已配對"}</strong></p>}
+              <p>Session 到期時間：{new Date(remoteSession.expiresAt).toLocaleString("zh-TW", { hour12: false })}</p>
+              <div className="event-lottery-quick-actions">
+                <button className="button button-small button-danger" type="button" onClick={handleRevokeRemote} disabled={remoteBusy}>撤銷手機遙控</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {remoteNotice && <p className={`gantt-notice gantt-notice-${remoteNotice.tone}`} role={remoteNotice.tone === "error" ? "alert" : "status"}>{remoteNotice.text}</p>}
       </div>
 
       <div className="event-lottery-tabs" role="tablist" aria-label="控制台分頁">
@@ -693,7 +861,7 @@ export function EventLotteryConsole() {
                     </select>
                   </label>
                   <label className="number-field" htmlFor="draw-count">本輪抽出人數
-                    <input id="draw-count" className="number-input" type="number" min={1} max={Math.max(1, drawRemaining)} value={drawCount} disabled={drawLocked} onChange={(event) => setDrawCount(Math.max(1, Math.round(Number(event.target.value)) || 1))} />
+                    <input id="draw-count" className="number-input" type="number" min={1} max={Math.max(1, drawRemaining)} value={state.stageDrawCount} disabled={drawLocked} onChange={(event) => handleStageDrawCountChange(Number(event.target.value))} />
                   </label>
                 </div>
                 {drawTargetPrize && <p className="panel-meta">符合資格的候選人：{drawCandidates.length} 位 · 獎項剩餘名額：{drawRemaining} 個</p>}

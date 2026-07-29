@@ -14,6 +14,7 @@ export const MAX_NAME_LENGTH = 60;
 export const MAX_TITLE_LENGTH = 80;
 export const MAX_IMAGE_DATA_URL_LENGTH = 700_000;
 export const MAX_DRAW_COUNT_PER_ROUND = 500;
+export const MAX_STATE_REVISION = 2_147_483_647;
 
 export type Roster = { id: string; name: string };
 
@@ -83,6 +84,11 @@ export type LotteryEventState = {
   activePrizeId: string | null;
   /** 舞台目前這一輪的揭曉狀態；null 代表沒有正在進行或剛結束的抽選。 */
   pendingReveal: PendingReveal | null;
+  /** 舞台「下一步」（鍵盤／滑鼠／簡報筆／手機遙控／控制台）一次抽出的人數；
+   *  控制台的「本輪抽出人數」欄位直接讀寫這個欄位，不是各自維護的 local state。 */
+  stageDrawCount: number;
+  /** 每次活動狀態變更都遞增；手機的 expectedRevision 以此為準。 */
+  stateRevision: number;
   updatedAt: string;
 };
 
@@ -135,6 +141,8 @@ export function createEmptyEventState(now = new Date()): LotteryEventState {
     backgroundImageDataUrl: null,
     activePrizeId: null,
     pendingReveal: null,
+    stageDrawCount: 1,
+    stateRevision: 0,
     updatedAt: now.toISOString(),
   };
 }
@@ -329,6 +337,10 @@ export function sanitizeEventState(value: unknown, now = new Date()): LotteryEve
     // pendingReveal 指向的獎項若跟 activePrizeId 對不上（例如手改壞的資料），
     // 寧可捨棄這輪揭曉狀態，也不要顯示跟目前準備獎項不符的得獎者。
     pendingReveal: pendingReveal && pendingReveal.prizeId === activePrizeId ? pendingReveal : null,
+    // 舊 localStorage／舊備份沒有這個欄位時安全回退為 1。
+    stageDrawCount: clampInt(data.stageDrawCount, 1, MAX_DRAW_COUNT_PER_ROUND, 1),
+    // 舊 localStorage／舊備份沒有這個欄位時從 0 開始；所有新的寫入都會遞增。
+    stateRevision: clampInt(data.stateRevision, 0, MAX_STATE_REVISION, 0),
     updatedAt: validIsoDate(data.updatedAt) ?? now.toISOString(),
   };
 }
@@ -597,6 +609,19 @@ export function drawEventWinners(state: LotteryEventState, prizeId: string, requ
   return { winners, nextState };
 }
 
+/**
+ * 將一次已驗證的活動狀態變更標記成新版本。控制台、舞台本機操作與手機遙控
+ * 都必須經過這個 helper，讓手機拿到的 expectedRevision 能涵蓋所有入口，而不
+ * 只是涵蓋前一次手機命令。
+ */
+export function advanceStateRevision(state: LotteryEventState, now = new Date()): LotteryEventState {
+  return {
+    ...state,
+    stateRevision: Math.min(MAX_STATE_REVISION, state.stateRevision + 1),
+    updatedAt: now.toISOString(),
+  };
+}
+
 /** 失格：獎項已抽數量歸還一位，參加者恢復抽選資格；紀錄本身保留，不會被刪除。
  *  舞台原本準備／已經顯示的這一輪得獎者維持不變，失格只會反映在得獎狀態欄位上
  *  （舞台會加註「已失格」，不會把人從畫面上直接移除）。 */
@@ -680,24 +705,36 @@ export type StageAdvanceAction =
   | { action: "draw"; prizeId: string; count: number };
 
 /**
- * 舞台可以用簡報筆／鍵盤／點擊畫面控制「下一步」，不需要回到控制台操作。這個
- * 函式純粹依目前狀態決定下一步該做什麼，方便在舞台與（如果同時開著）控制台
- * 共用同一套判斷，也方便單獨測試：
- * - 正在揭曉中：不做事，避免跟目前這輪疊在一起。
+ * 舞台可以用簡報筆／鍵盤／點擊畫面／手機遙控控制「下一步」，不需要回到控制台
+ * 操作。這個函式純粹依目前狀態決定下一步該做什麼，方便在舞台與（如果同時開
+ * 著）控制台共用同一套判斷，也方便單獨測試：
+ * - 這一輪揭曉還沒完全播完（逐一揭曉可能還在顯示中間的得獎者）：不做事，避免
+ *   跟目前這輪疊在一起準備下一獎項或再抽一次。
  * - 還沒準備獎項、或目前獎項已經沒有剩餘名額：準備下一個還有名額的獎項
  *   （依 order 排序，找不到就代表全部抽完了，回傳 none）。
- * - 已經準備好、還有剩餘名額：把這個獎項剩下的名額一次抽完。
+ * - 已經準備好、還有剩餘名額：抽出 state.stageDrawCount（並依剩餘名額、候選人數
+ *   與單輪上限收斂）位，而不是一次把整個獎項抽光。
  */
 export function resolveStageAdvance(state: LotteryEventState, now = new Date()): StageAdvanceAction {
+  if (state.pendingReveal !== null && now.getTime() < pendingRevealCompleteAt(state.pendingReveal)) {
+    return { action: "none" };
+  }
+
   const display = resolveStageDisplay(state, now);
-  if (display.phase === "drawing") return { action: "none" };
 
   const nextPreparablePrize = [...state.prizes].sort((a, b) => a.order - b.order).find((prize) => remainingSlots(prize) > 0);
 
   if (display.phase === "prepared") {
     const prize = state.prizes.find((item) => item.id === display.prizeId);
-    const count = prize ? remainingSlots(prize) : 0;
-    if (prize && count > 0) return { action: "draw", prizeId: prize.id, count };
+    if (prize) {
+      const count = Math.min(
+        state.stageDrawCount,
+        remainingSlots(prize),
+        candidatePool(state, prize.id).length,
+        MAX_DRAW_COUNT_PER_ROUND,
+      );
+      if (count > 0) return { action: "draw", prizeId: prize.id, count };
+    }
   }
 
   return nextPreparablePrize ? { action: "prepare", prizeId: nextPreparablePrize.id } : { action: "none" };
