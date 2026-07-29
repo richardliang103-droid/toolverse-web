@@ -33,6 +33,11 @@ function reducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+/** 參考前台不把 CSV 的「抽獎順序」前綴帶到投影畫面；後台仍保留原始獎項名稱。 */
+function cleanPrizeName(name: string) {
+  return name.replace(/^\d+[\.、\s]+/, "");
+}
+
 function fireConfetti(finale: boolean) {
   if (reducedMotion()) return;
   confetti({ particleCount: finale ? 90 : 55, spread: finale ? 100 : 72, startVelocity: 34, ticks: 140, scalar: finale ? 1 : 0.8, origin: { y: 0.55 } });
@@ -104,6 +109,7 @@ export function EventLotteryStage() {
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [transientError, setTransientError] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [stageFocused, setStageFocused] = useState(false);
 
   const stageRef = useRef<HTMLDivElement>(null);
   const winnerListRef = useRef<HTMLDivElement>(null);
@@ -232,9 +238,11 @@ export function EventLotteryStage() {
       sendHostStatus();
       return;
     }
-    const result = action.action === "prepare"
-      ? prepareStage(currentState, action.prizeId, post)
-      : startDraw(currentState, action.prizeId, action.count, post);
+    const result = action.action === "clear"
+      ? clearStageAction(currentState, post)
+      : action.action === "prepare"
+        ? prepareStage(currentState, action.prizeId, post)
+        : startDraw(currentState, action.prizeId, action.count, post);
 
     if (!result.ok) {
       void channel?.send({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: remoteCommandLogRef.current.revision, reason: result.reason });
@@ -393,6 +401,19 @@ export function EventLotteryStage() {
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
+  // 原始前台只在展示視窗取得焦點時讓標題 pulse；切到後台時停下，避免投影畫面
+  // 在主持人操作其他視窗時仍持續閃爍。
+  useEffect(() => {
+    function updateFocus() { setStageFocused(document.hasFocus()); }
+    updateFocus();
+    window.addEventListener("focus", updateFocus);
+    window.addEventListener("blur", updateFocus);
+    return () => {
+      window.removeEventListener("focus", updateFocus);
+      window.removeEventListener("blur", updateFocus);
+    };
+  }, []);
+
   useEffect(() => {
     if (visibleCount === 0 || !winnerListRef.current) return;
     const last = winnerListRef.current.lastElementChild;
@@ -449,9 +470,11 @@ export function EventLotteryStage() {
     const currentState = loadEventState();
     const action = resolveStageAdvance(currentState, new Date());
     if (action.action === "none") return;
-    const result = action.action === "prepare"
-      ? prepareStage(currentState, action.prizeId, post)
-      : startDraw(currentState, action.prizeId, action.count, post);
+    const result = action.action === "clear"
+      ? clearStageAction(currentState, post)
+      : action.action === "prepare"
+        ? prepareStage(currentState, action.prizeId, post)
+        : startDraw(currentState, action.prizeId, action.count, post);
     if (result.ok) setState(result.state);
     else showTransientError(result.reason);
   }
@@ -483,6 +506,7 @@ export function EventLotteryStage() {
   if (!hydrated) return <div className="event-lottery-stage-loading" aria-hidden="true" />;
 
   const activePrize = display.phase === "idle" ? null : state.prizes.find((prize) => prize.id === display.prizeId) ?? null;
+  const activePrizeDisplayName = activePrize ? cleanPrizeName(activePrize.name) : "";
   const revealedWinners = displayedWinnerIds
     .map((id) => state.winners.find((winner) => winner.id === id))
     .filter((winner): winner is NonNullable<typeof winner> => Boolean(winner));
@@ -514,7 +538,7 @@ export function EventLotteryStage() {
       </button>
 
       <header className="event-lottery-stage-header">
-        <h1>{state.eventTitle}</h1>
+        <h1 className={stageFocused ? "event-lottery-stage-title-pulsing" : undefined}>{state.eventTitle}</h1>
       </header>
 
       <main className="event-lottery-stage-main">
@@ -537,7 +561,7 @@ export function EventLotteryStage() {
         {!transientError && (display.phase === "prepared" || display.phase === "drawing") && activePrize && (
           <div className="event-lottery-stage-prize">
             {activePrize.imageDataUrl && <img className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
-            <h2>{display.phase === "drawing" ? `【${activePrize.name}】 抽獎進行中...` : `即將抽出：${activePrize.name} 共 ${stageDrawCount} 名`}</h2>
+            <h2>{display.phase === "drawing" ? `【${activePrizeDisplayName}】 抽獎進行中...` : `即將抽出：${activePrizeDisplayName} 共 ${stageDrawCount} 名`}</h2>
             {display.phase === "drawing"
               ? display.pendingReveal.revealMode === "sequential"
                 ? <div className="event-lottery-stage-sequence-drawing" aria-live="polite"><div className="event-lottery-stage-rolling-card"><span>{rollingName}</span></div></div>
@@ -549,7 +573,7 @@ export function EventLotteryStage() {
         {!transientError && (display.phase === "revealed" || display.phase === "preview") && activePrize && (
           <div className={`event-lottery-stage-reveal${display.phase === "preview" ? " event-lottery-stage-preview" : ""}`}>
             {activePrize.imageDataUrl && <img className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
-            <h2>{display.phase === "preview" ? `👁️ ${activePrize.name}` : sequentialStillRolling ? `【${activePrize.name}】 抽獎進行中...` : `🎉 恭喜【${activePrize.name}】得獎者 🎉`}</h2>
+            <h2>{display.phase === "preview" ? `👁️ ${activePrizeDisplayName}` : sequentialStillRolling ? `【${activePrizeDisplayName}】 抽獎進行中...` : `🎉 恭喜【${activePrizeDisplayName}】得獎者 🎉`}</h2>
             <div ref={winnerListRef} className={`event-lottery-stage-winner-list ${winnerScale}`}>
               {revealedWinners.map((winner, index) => (
                 <div className={`event-lottery-stage-winner-card${winner.disqualified ? " event-lottery-stage-winner-disqualified" : ""}`} style={{ animationDelay: `${Math.min(index * 0.08, 3)}s` }} key={winner.id}>

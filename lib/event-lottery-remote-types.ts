@@ -11,7 +11,7 @@
  *  讓手機知道按鈕何時可以再次按下。 */
 export type RemoteHostPhase = "offline" | "idle" | "prepared" | "drawing" | "revealing" | "finished";
 
-export type RemoteNextAction = "prepare" | "draw" | "none";
+export type RemoteNextAction = "prepare" | "draw" | "clear" | "none";
 
 export type RemoteMessage =
   | {

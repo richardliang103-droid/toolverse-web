@@ -242,7 +242,7 @@ export function EventLotteryRemote() {
   function handlePointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
     if (effectiveDisabled) return;
     event.preventDefault();
-    if (buttonState.kind === "prepare") { sendAdvanceCommand(); return; }
+    if (buttonState.kind === "prepare" || buttonState.kind === "clear") { sendAdvanceCommand(); return; }
     if (buttonState.kind !== "draw") return;
     setPressing(true);
     longPressTimerRef.current = setTimeout(() => {
@@ -314,6 +314,8 @@ export function EventLotteryRemote() {
 
   const buttonLabel = buttonState.kind === "prepare"
     ? "顯示下一個獎項"
+    : buttonState.kind === "clear"
+      ? "回到首頁"
     : buttonState.kind === "draw"
       ? "長按開始抽獎"
       : buttonState.reason === "offline" ? "電腦舞台未連線" : "請稍候…";

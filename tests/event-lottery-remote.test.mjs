@@ -191,7 +191,7 @@ test("isHostStatusStale：從未收過或超過 8 秒沒收到都視為逾時", 
   assert.equal(isHostStatusStale(now - 7999, now), false);
 });
 
-test("resolveRemoteButtonState：offline／locked／prepare／draw 四種狀態", () => {
+test("resolveRemoteButtonState：offline／locked／prepare／draw／clear 五種狀態", () => {
   assert.deepEqual(resolveRemoteButtonState(null, true), { kind: "disabled", reason: "offline" });
   const lockedStatus = { type: "HOST_STATUS", revision: 0, phase: "drawing", nextAction: "none", eventTitle: "x", prizeName: "特獎", drawCount: 1, locked: true, sentAt: new Date().toISOString() };
   assert.deepEqual(resolveRemoteButtonState(lockedStatus, false), { kind: "disabled", reason: "locked" });
@@ -199,6 +199,8 @@ test("resolveRemoteButtonState：offline／locked／prepare／draw 四種狀態"
   assert.deepEqual(resolveRemoteButtonState(prepareStatus, false), { kind: "prepare" });
   const drawStatus = { ...lockedStatus, nextAction: "draw", locked: false };
   assert.deepEqual(resolveRemoteButtonState(drawStatus, false), { kind: "draw" });
+  const clearStatus = { ...lockedStatus, nextAction: "clear", locked: false };
+  assert.deepEqual(resolveRemoteButtonState(clearStatus, false), { kind: "clear" });
 });
 
 test("PendingRemoteCommand：2 秒未 ACK 且未達重送上限時應重送，達上限後視為失敗", () => {

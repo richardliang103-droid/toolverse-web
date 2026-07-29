@@ -213,12 +213,15 @@ export function isHostStatusStale(lastHostStatusAt: number | null, now = Date.no
 export type RemoteButtonState =
   | { kind: "disabled"; reason: "offline" | "locked" }
   | { kind: "prepare" }
-  | { kind: "draw" };
+  | { kind: "draw" }
+  | { kind: "clear" };
 
 export function resolveRemoteButtonState(status: (RemoteMessage & { type: "HOST_STATUS" }) | null, isStale: boolean): RemoteButtonState {
   if (isStale || !status) return { kind: "disabled", reason: "offline" };
   if (status.locked || status.nextAction === "none") return { kind: "disabled", reason: "locked" };
-  return status.nextAction === "prepare" ? { kind: "prepare" } : { kind: "draw" };
+  if (status.nextAction === "prepare") return { kind: "prepare" };
+  if (status.nextAction === "clear") return { kind: "clear" };
+  return { kind: "draw" };
 }
 
 export type RemoteHostLock = {

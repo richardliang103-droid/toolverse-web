@@ -564,7 +564,7 @@ test("resolveStageAdvance：simultaneous 一次揭曉在 revealAt 之後就能�
   assert.deepEqual(resolveStageAdvance(nextState, new Date(revealAtMs)), { action: "prepare", prizeId: prizeB.id });
 });
 
-test("resolveStageAdvance：目前獎項已抽完後，準備下一個還有名額的獎項；全部抽完就回傳 none", () => {
+test("resolveStageAdvance：目前獎項已抽完後，準備下一個還有名額的獎項；最後一輪完成後回到首頁", () => {
   const { state, prize } = buildBasicState();
   const prizeA = { ...prize, id: "prize-a", order: 0, totalCount: 1, drawnCount: 0 };
   const prizeB = { ...prize, id: "prize-b", order: 1, totalCount: 1, drawnCount: 0 };
@@ -575,7 +575,8 @@ test("resolveStageAdvance：目前獎項已抽完後，準備下一個還有名�
 
   const { nextState: allDone } = drawEventWinners(nextState, prizeB.id, 1, new Date("2026-01-01T00:00:10.000Z"));
   const afterSecondReveal = new Date(Date.parse(allDone.pendingReveal.revealAt));
-  assert.deepEqual(resolveStageAdvance(allDone, afterSecondReveal), { action: "none" });
+  assert.deepEqual(resolveStageAdvance(allDone, afterSecondReveal), { action: "clear" });
+  assert.deepEqual(resolveStageAdvance({ ...allDone, activePrizeId: null, pendingReveal: null }, afterSecondReveal), { action: "none" });
 });
 
 test("disqualifyWinner：前台先顯示感謝訊息，再回到該獎項的重抽準備畫面", () => {

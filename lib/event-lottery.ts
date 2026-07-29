@@ -786,6 +786,7 @@ export function resolveStageDisplay(state: LotteryEventState, now = new Date()):
 
 export type StageAdvanceAction =
   | { action: "none" }
+  | { action: "clear" }
   | { action: "prepare"; prizeId: string }
   | { action: "draw"; prizeId: string; count: number };
 
@@ -799,6 +800,8 @@ export type StageAdvanceAction =
  *   （依 order 排序，找不到就代表全部抽完了，回傳 none）。
  * - 已經準備好、還有剩餘名額：抽出 state.stageDrawCount（並依剩餘名額、候選人數
  *   與單輪上限收斂）位，而不是一次把整個獎項抽光。
+ * - 所有獎項都完成、目前仍停在最後一輪得獎畫面時，回到首頁提示；已經是空白
+ *   首頁則維持 none。
  */
 export function resolveStageAdvance(state: LotteryEventState, now = new Date()): StageAdvanceAction {
   if (state.stageNotice !== null && now.getTime() < Date.parse(state.stageNotice.until)) {
@@ -825,7 +828,9 @@ export function resolveStageAdvance(state: LotteryEventState, now = new Date()):
     }
   }
 
-  return nextPreparablePrize ? { action: "prepare", prizeId: nextPreparablePrize.id } : { action: "none" };
+  if (nextPreparablePrize) return { action: "prepare", prizeId: nextPreparablePrize.id };
+  if (display.phase === "revealed" || display.phase === "preview") return { action: "clear" };
+  return { action: "none" };
 }
 
 // ---------------------------------------------------------------------------
