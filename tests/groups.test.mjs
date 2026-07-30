@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { groupsToCsv, groupsToText, parseSeparationRules, resolveGroupCount, splitIntoGroups } from "../lib/groups.ts";
+import { groupsToCsv, groupsToText, parsePersonnelRoster, parseSeparationRules, personnelGroupsToCsv, resolveGroupCount, splitIntoGroups } from "../lib/groups.ts";
 
 const NAMES = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"];
 
@@ -58,6 +58,25 @@ test("text and csv exports include every group and member", () => {
   assert.match(csv, /第 1 組,小明/);
   assert.match(csv, /第 2 組,Alex/);
   assert.equal(csv.split("\r\n").length, 4); // 表頭 + 3 位成員
+});
+
+test("personnel roster keeps department columns through grouping export", () => {
+  const roster = parsePersonnelRoster("\uFEFF姓名,部門,員編\r\n小明,行銷,A001\r\n小美,工程,A002");
+  assert.deepEqual(roster.headers, ["姓名", "部門", "員編"]);
+  assert.deepEqual(roster.members.map((member) => [member.name, member.department, member.fields[2]]), [
+    ["小明", "行銷", "A001"],
+    ["小美", "工程", "A002"],
+  ]);
+  const csv = personnelGroupsToCsv([roster.members], roster.headers);
+  assert.match(csv, /組別,姓名,部門,員編/);
+  assert.match(csv, /第 1 組,小明,行銷,A001/);
+});
+
+test("plain name lists export an empty department column for future re-upload", () => {
+  const roster = parsePersonnelRoster("小明\n小美");
+  const csv = personnelGroupsToCsv([roster.members], roster.headers);
+  assert.match(csv, /組別,姓名,部門/);
+  assert.match(csv, /第 1 組,小明,/);
 });
 
 test("separation rules keep listed members in different groups", () => {

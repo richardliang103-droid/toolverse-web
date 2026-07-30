@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import gsap from "gsap";
 import type { Participant } from "@/lib/lottery";
 
@@ -74,6 +74,14 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: Participa
 ) {
   const style = THEME_STYLES[theme];
   const rotorRef = useRef<SVGGElement>(null);
+  const pointerRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const spinTimelineRef = useRef<gsap.core.Timeline | null>(null);
+
+  useEffect(() => () => {
+    spinTimelineRef.current?.kill();
+    spinTimelineRef.current = null;
+  }, []);
 
   useImperativeHandle(
     ref,
@@ -86,6 +94,7 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: Participa
             resolve();
             return;
           }
+          spinTimelineRef.current?.kill();
           const anglePer = 360 / count;
           // Land somewhere within the middle ~70% of the slice, never right on the seam.
           const jitter = anglePer * (0.16 + Math.random() * 0.68);
@@ -96,13 +105,64 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: Participa
           const forwardDelta = ((desiredMod - currentMod) % 360 + 360) % 360;
           const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
           const extraSpins = reduceMotion ? 0 : 6 + Math.floor(Math.random() * 3);
-          gsap.to(node, {
-            rotation: `+=${extraSpins * 360 + forwardDelta}`,
-            duration: reduceMotion ? 0 : duration,
-            ease: "power3.out",
-            transformOrigin: "50% 50%",
-            onComplete: () => resolve(),
+          const totalRotation = extraSpins * 360 + forwardDelta;
+          const targetRotation = currentRotation + totalRotation;
+
+          gsap.set(node, { transformOrigin: "50% 50%" });
+          if (pointerRef.current) gsap.set(pointerRef.current, { "--pointer-bounce": "0px" });
+
+          if (reduceMotion) {
+            gsap.set(node, { rotation: targetRotation });
+            resolve();
+            return;
+          }
+
+          const windupDuration = 0.18;
+          const accelerateDuration = 0.42;
+          const cruiseDuration = Math.min(0.9, Math.max(0.28, duration * 0.24));
+          const settleDuration = Math.max(1.1, duration - windupDuration - accelerateDuration - cruiseDuration);
+          const accelerationStop = currentRotation + totalRotation * 0.28;
+          const cruiseStop = currentRotation + totalRotation * 0.74;
+          // Very large rosters can have sub-degree slices; cap pointer pulses so
+          // a 1,000-person wheel does not schedule thousands of tiny tweens.
+          const pointerTickAngle = Math.max(anglePer, 5);
+          let lastTick = 0;
+
+          shellRef.current?.classList.add("is-spinning");
+          const timeline = gsap.timeline({
+            onUpdate: () => {
+              const rotation = (gsap.getProperty(node, "rotation") as number) || currentRotation;
+              const tick = Math.floor(Math.abs(rotation - currentRotation) / pointerTickAngle);
+              if (tick <= lastTick || !pointerRef.current) return;
+              lastTick = tick;
+              gsap.killTweensOf(pointerRef.current);
+              gsap.timeline()
+                .to(pointerRef.current, { "--pointer-bounce": "-5px", duration: 0.045, ease: "power2.out" })
+                .to(pointerRef.current, { "--pointer-bounce": "0px", duration: 0.09, ease: "back.out(2.4)" });
+            },
+            onComplete: () => {
+              shellRef.current?.classList.remove("is-spinning");
+              if (pointerRef.current) {
+                gsap.killTweensOf(pointerRef.current);
+                gsap.timeline()
+                  .to(pointerRef.current, { "--pointer-bounce": "-6px", duration: 0.07, ease: "power2.out" })
+                  .to(pointerRef.current, { "--pointer-bounce": "0px", duration: 0.14, ease: "back.out(2.6)" });
+              }
+              spinTimelineRef.current = null;
+              resolve();
+            },
           });
+
+          spinTimelineRef.current = timeline;
+          timeline
+            // A short reverse wind-up gives the stop a sense of stored energy.
+            .to(node, { rotation: currentRotation - 6, duration: windupDuration, ease: "power2.out" })
+            // Accelerate through the first quarter of the trip.
+            .to(node, { rotation: accelerationStop, duration: accelerateDuration, ease: "power2.in" })
+            // Hold a brief high-speed cruise before the deceleration becomes visible.
+            .to(node, { rotation: cruiseStop, duration: cruiseDuration, ease: "none" })
+            // Expo easing gives the final slices a deliberate, premium-feeling settle.
+            .to(node, { rotation: targetRotation, duration: settleDuration, ease: "expo.out" });
         });
       },
     }),
@@ -145,8 +205,8 @@ export const LotteryWheel = forwardRef<LotteryWheelHandle, { segments: Participa
   );
 
   return (
-    <div className="lottery-wheel-shell">
-      <div className="lottery-wheel-pointer" aria-hidden="true" />
+    <div ref={shellRef} className="lottery-wheel-shell">
+      <div ref={pointerRef} className="lottery-wheel-pointer" aria-hidden="true" />
       <svg className="lottery-wheel-svg" viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} role="img" aria-label="抽選轉盤">
         <defs>
           <radialGradient id={`wheelHub-${theme}`} cx="50%" cy="50%" r="60%">
