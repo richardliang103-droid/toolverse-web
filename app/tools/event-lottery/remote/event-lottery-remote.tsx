@@ -363,7 +363,9 @@ export function EventLotteryRemote() {
       ? "回到首頁"
     : buttonState.kind === "draw"
       ? "長按開始抽獎"
-      : buttonState.reason === "offline" ? "電腦舞台未連線" : "請稍候…";
+      : buttonState.reason === "offline"
+        ? "電腦舞台未連線"
+        : buttonState.reason === "no-eligible-participants" ? "沒有符合資格的人員" : "請稍候…";
 
   return (
     <main className="event-lottery-remote-page">
@@ -374,6 +376,10 @@ export function EventLotteryRemote() {
         <span className={`event-lottery-remote-connection ${isStale ? "event-lottery-remote-connection-offline" : "event-lottery-remote-connection-online"}`}>
           {isStale ? "電腦舞台未連線" : "已連線"}
         </span>
+
+        {buttonState.kind === "disabled" && buttonState.reason === "no-eligible-participants" && (
+          <p className="event-lottery-remote-message event-lottery-remote-message-error">請檢查名單啟用狀態與獎項適用名單。</p>
+        )}
 
         <button
           type="button"

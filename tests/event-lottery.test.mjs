@@ -92,9 +92,9 @@ test("advanceStateRevision：每次狀態變更都產生遞增版本與新的 up
   assert.equal(before.stateRevision, 0, "版本更新不可改寫原本的 state");
 });
 
-test("sanitizeEventState：stageDrawCount 依 1 到 MAX_DRAW_COUNT_PER_ROUND 夾住", () => {
-  assert.equal(sanitizeEventState({ stageDrawCount: 0 }).stageDrawCount, 1);
-  assert.equal(sanitizeEventState({ stageDrawCount: -5 }).stageDrawCount, 1);
+test("sanitizeEventState：stageDrawCount 依 0 到 MAX_DRAW_COUNT_PER_ROUND 夾住", () => {
+  assert.equal(sanitizeEventState({ stageDrawCount: 0 }).stageDrawCount, 0);
+  assert.equal(sanitizeEventState({ stageDrawCount: -5 }).stageDrawCount, 0);
   assert.equal(sanitizeEventState({ stageDrawCount: "abc" }).stageDrawCount, 1);
   assert.equal(sanitizeEventState({ stageDrawCount: 3.6 }).stageDrawCount, 4);
   assert.equal(sanitizeEventState({ stageDrawCount: MAX_DRAW_COUNT_PER_ROUND + 100 }).stageDrawCount, MAX_DRAW_COUNT_PER_ROUND);
@@ -582,6 +582,26 @@ test("resolveStageAdvance：idle 狀態下，準備 order 最小、還有剩餘�
   assert.deepEqual(resolveStageAdvance(current), { action: "prepare", prizeId: "prize-next" });
 });
 
+test("resolveStageAdvance：跳過有剩餘名額但沒有候選人的獎項，準備下一個可抽獎獎項", () => {
+  const { state, prize } = buildBasicState();
+  const blockedPrize = { ...prize, id: "prize-blocked", order: 0, eligibleRosterIds: ["roster-with-no-members"] };
+  const nextPrize = { ...prize, id: "prize-next", order: 1 };
+  const current = { ...state, prizes: [blockedPrize, nextPrize] };
+  assert.deepEqual(resolveStageAdvance(current), { action: "prepare", prizeId: nextPrize.id });
+
+  const preparedBlocked = { ...current, activePrizeId: blockedPrize.id, stageDrawCount: 1 };
+  assert.deepEqual(resolveStageAdvance(preparedBlocked), { action: "prepare", prizeId: nextPrize.id });
+});
+
+test("resolveStageAdvance：所有未抽完獎項都沒有候選人時不會重複準備同一獎項", () => {
+  const { state, prize } = buildBasicState();
+  const blockedPrize = { ...prize, id: "prize-blocked", eligibleRosterIds: ["roster-with-no-members"] };
+  const current = { ...state, prizes: [blockedPrize], activePrizeId: blockedPrize.id, stageDrawCount: 1 };
+  const prepared = prepareStagePrize(current, blockedPrize.id);
+  assert.equal(prepared.stageDrawCount, 0);
+  assert.deepEqual(resolveStageAdvance(prepared), { action: "none" });
+});
+
 test("prepareStagePrize：預設把 stageDrawCount 重設為這個獎項目前的剩餘名額，一次準備就是抽完整個獎項", () => {
   const { state, prize } = buildBasicState();
   const bigPrize = { ...prize, totalCount: 3, order: 0 };
@@ -671,7 +691,8 @@ test("resolveStageAdvance：sequential 逐一揭曉到達完整完成時間後�
   const { state, prize } = buildBasicState();
   const prizeA = { ...prize, id: "prize-a", order: 0, totalCount: 3, drawnCount: 0 };
   const prizeB = { ...prize, id: "prize-b", order: 1, totalCount: 1, drawnCount: 0 };
-  const current = { ...state, prizes: [prizeA, prizeB], revealMode: "sequential" };
+  const extraParticipant = createParticipant({ name: "小杰", employeeId: "E005", rosterId: state.rosters[0].id });
+  const current = { ...state, participants: [...state.participants, extraParticipant], prizes: [prizeA, prizeB], revealMode: "sequential" };
   const { nextState } = drawEventWinners(current, prizeA.id, 3, new Date("2026-01-01T00:00:00.000Z"));
   const completeAt = pendingRevealCompleteAt(nextState.pendingReveal);
   assert.deepEqual(resolveStageAdvance(nextState, new Date(completeAt)), { action: "prepare", prizeId: prizeB.id });
@@ -681,7 +702,8 @@ test("resolveStageAdvance：simultaneous 一次揭曉會等原版展示緩衝後
   const { state, prize } = buildBasicState();
   const prizeA = { ...prize, id: "prize-a", order: 0, totalCount: 3, drawnCount: 0 };
   const prizeB = { ...prize, id: "prize-b", order: 1, totalCount: 1, drawnCount: 0 };
-  const current = { ...state, prizes: [prizeA, prizeB], revealMode: "simultaneous" };
+  const extraParticipant = createParticipant({ name: "小杰", employeeId: "E005", rosterId: state.rosters[0].id });
+  const current = { ...state, participants: [...state.participants, extraParticipant], prizes: [prizeA, prizeB], revealMode: "simultaneous" };
   const { nextState } = drawEventWinners(current, prizeA.id, 3, new Date("2026-01-01T00:00:00.000Z"));
   const revealAtMs = Date.parse(nextState.pendingReveal.revealAt);
   const completeAt = pendingRevealCompleteAt(nextState.pendingReveal);
