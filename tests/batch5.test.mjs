@@ -57,6 +57,25 @@ test("csv：分隔符偵測、解析、欄數對齊", () => {
   assert.deepEqual(rows[2], ["單欄", ""]);
 });
 
+test("csv：sep=X 宣告列會被當成分隔符指示，不會被解析成資料列", () => {
+  const withSemicolon = "sep=;\n名字;分機\n小明;120\n";
+  assert.equal(detectDelimiter(withSemicolon), ";");
+  const rows = parseDelimited(withSemicolon, detectDelimiter(withSemicolon));
+  assert.deepEqual(rows, [["名字", "分機"], ["小明", "120"]]);
+});
+
+test("csv：BOM＋sep=, 宣告列同時存在時仍正確剝除，不影響後面的資料列", () => {
+  const withBomAndSep = "﻿sep=,\r\n名字,分機\r\n小明,120\r\n";
+  assert.equal(detectDelimiter(withBomAndSep), ",");
+  const rows = parseDelimited(withBomAndSep, ",");
+  assert.deepEqual(rows, [["名字", "分機"], ["小明", "120"]]);
+});
+
+test("csv：沒有 sep= 宣告列時行為不變（純粹用內容啟發式偵測）", () => {
+  assert.equal(detectDelimiter("名字,分機\n小明,120"), ",");
+  assert.deepEqual(parseDelimited("名字,分機\n小明,120", ","), [["名字", "分機"], ["小明", "120"]]);
+});
+
 test("csv：round-trip 與 JSON 匯出", () => {
   const rows = [["名字", "分機"], ["小明,A", "120"], ['引"號', "241"]];
   const text = toDelimitedText(rows);

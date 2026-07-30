@@ -34,6 +34,12 @@ button { color: inherit; }
 ::selection { background: var(--mint); color: var(--ink); }
 
 .page-shell { width: min(1180px, calc(100% - 40px)); margin-inline: auto; }
+/* 活動抽獎控制台：移除 .page-shell 的 1180px 上限，鋪滿到接近版面邊緣（仍保留
+   跟站內其他邊界一致的一小段安全間距），避免寬螢幕出現大片留白的「框框」感。 */
+.event-lottery-full-width.page-shell { width: calc(100% - 40px); }
+@media (max-width: 560px) {
+  .event-lottery-full-width.page-shell { width: calc(100% - 24px); }
+}
 .site-header { height: 76px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
 .brand { display: inline-flex; align-items: center; gap: 11px; font-weight: 850; letter-spacing: -0.03em; }
 .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; background: var(--ink); color: var(--paper); border-radius: 9px; font-size: 17px; }

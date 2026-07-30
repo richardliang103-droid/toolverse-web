@@ -12,6 +12,7 @@ import {
   createParticipant,
   createPrize,
   createRoster,
+  csvRowsToDownloadText,
   disqualifyWinner,
   eventBackupFileName,
   exportEventBackup,
@@ -50,6 +51,7 @@ import {
 } from "@/lib/event-lottery-remote";
 import { connectRemoteChannel, ensureAnonymousSession, type RemoteChannelHandle } from "@/lib/event-lottery-remote-channel";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase-browser";
+import { decodeTextBytes, encodingLabel, type DetectedTextEncoding, type TextEncodingPreference } from "@/lib/text-encoding";
 import { clearStageAction, prepareStage, previewPrizeWinnersAction, startDraw } from "./actions";
 import { loadEventState, saveEventState, useEventLotterySync, type EventLotterySyncMessage } from "./sync";
 
@@ -63,13 +65,19 @@ const DRAW_LOCK_FALLBACK_MARGIN_MS = 8000;
 const PARTICIPANT_CSV_TEMPLATE = "部門,姓名,員工編號\r\n法金資訊部,梁O強,99999\r\n";
 const PRIZE_CSV_TEMPLATE = "抽獎順序,獎項,數量\r\n1,頭獎 台積電1張,1\r\n2,二獎 歐洲機票1張,1\r\n3,參加獎 電影票,10\r\n";
 
-async function readTextWithEncoding(file: File, encoding: "utf-8" | "big5"): Promise<string> {
+/** 讀檔並解碼：優先信任 BOM，沒有 BOM 時先試 UTF-8，失敗才落回 Big5／
+ *  Windows-1252 的啟發式判斷（見 lib/text-encoding.ts，跟 CSV 編輯器／隨機分組
+ *  共用同一套邏輯）。使用者也可以手動指定編碼覆蓋自動判斷。 */
+async function readCsvText(file: File, preference: TextEncodingPreference) {
   const bytes = await file.arrayBuffer();
-  return new TextDecoder(encoding).decode(bytes);
+  return decodeTextBytes(new Uint8Array(bytes), preference);
 }
 
+/** 範例 CSV 開頭加上 Excel 認得的 sep=, 宣告列，避免使用者 Windows 地區設定的
+ *  清單分隔符號不是逗號時，雙擊開啟會整列被塞進同一欄；`lib/csv.ts` 重新上傳
+ *  這份檔案時也認得這一行，不會誤判成一筆資料。 */
 function downloadCsvTemplate(content: string, filename: string) {
-  downloadBlob(new Blob([`﻿${content}`], { type: "text/csv;charset=utf-8" }), filename);
+  downloadBlob(new Blob([`﻿sep=,\r\n${content}`], { type: "text/csv;charset=utf-8" }), filename);
 }
 
 type DecodedUploadImage = {
@@ -478,8 +486,10 @@ export function EventLotteryConsole() {
   const [rosterManualDrafts, setRosterManualDrafts] = useState<Record<string, { department: string; name: string; employeeId: string }>>({});
   const [participantFilterRosterId, setParticipantFilterRosterId] = useState<string>("all");
   const [csvRosterId, setCsvRosterId] = useState("");
-  const [participantCsvEncoding, setParticipantCsvEncoding] = useState<"utf-8" | "big5">("utf-8");
-  const [rosterCsvEncodings, setRosterCsvEncodings] = useState<Record<string, "utf-8" | "big5">>({});
+  const [participantCsvEncoding, setParticipantCsvEncoding] = useState<TextEncodingPreference>("auto");
+  const [participantCsvDetectedEncoding, setParticipantCsvDetectedEncoding] = useState<DetectedTextEncoding | null>(null);
+  const [rosterCsvEncodings, setRosterCsvEncodings] = useState<Record<string, TextEncodingPreference>>({});
+  const [rosterCsvDetectedEncodings, setRosterCsvDetectedEncodings] = useState<Record<string, DetectedTextEncoding | null>>({});
   const [participantCsvFile, setParticipantCsvFile] = useState<File | null>(null);
   const [rosterCsvFiles, setRosterCsvFiles] = useState<Record<string, File | null>>({});
   const [csvText, setCsvText] = useState("");
@@ -558,9 +568,11 @@ export function EventLotteryConsole() {
     setCsvText("");
   }
 
-  async function handleCsvFile(file: File, rosterId = effectiveCsvRosterId, encoding: "utf-8" | "big5" = participantCsvEncoding) {
+  async function handleCsvFile(file: File, rosterId = effectiveCsvRosterId, preference: TextEncodingPreference = participantCsvEncoding) {
     try {
-      applyParticipantCsv(await readTextWithEncoding(file, encoding), rosterId);
+      const decoded = await readCsvText(file, preference);
+      setParticipantCsvDetectedEncoding(decoded.encoding);
+      applyParticipantCsv(decoded.text, rosterId);
     } catch {
       showNotice("讀取 CSV 檔案失敗", "error");
     }
@@ -585,7 +597,13 @@ export function EventLotteryConsole() {
   }
 
   async function handleRosterCsvFile(rosterId: string, file: File) {
-    await handleCsvFile(file, rosterId, rosterCsvEncodings[rosterId] ?? "utf-8");
+    try {
+      const decoded = await readCsvText(file, rosterCsvEncodings[rosterId] ?? "auto");
+      setRosterCsvDetectedEncodings((current) => ({ ...current, [rosterId]: decoded.encoding }));
+      applyParticipantCsv(decoded.text, rosterId);
+    } catch {
+      showNotice("讀取 CSV 檔案失敗", "error");
+    }
   }
 
   async function uploadRosterCsv(rosterId: string) {
@@ -631,7 +649,8 @@ export function EventLotteryConsole() {
   });
   const [prizeInsertAfter, setPrizeInsertAfter] = useState("");
   const [prizeCsvText, setPrizeCsvText] = useState("");
-  const [prizeCsvEncoding, setPrizeCsvEncoding] = useState<"utf-8" | "big5">("utf-8");
+  const [prizeCsvEncoding, setPrizeCsvEncoding] = useState<TextEncodingPreference>("auto");
+  const [prizeCsvDetectedEncoding, setPrizeCsvDetectedEncoding] = useState<DetectedTextEncoding | null>(null);
   const [prizeCsvFile, setPrizeCsvFile] = useState<File | null>(null);
   const [prizeCsvRosterIds, setPrizeCsvRosterIds] = useState<string[]>(() => {
     const defaults = createEmptyEventState().rosters;
@@ -778,7 +797,9 @@ export function EventLotteryConsole() {
 
   async function handlePrizeCsvFile(file: File) {
     try {
-      applyPrizeCsv(await readTextWithEncoding(file, prizeCsvEncoding));
+      const decoded = await readCsvText(file, prizeCsvEncoding);
+      setPrizeCsvDetectedEncoding(decoded.encoding);
+      applyPrizeCsv(decoded.text);
     } catch {
       showNotice("讀取 CSV 檔案失敗", "error");
     }
@@ -889,21 +910,21 @@ export function EventLotteryConsole() {
       participant.department,
       rosterById.get(participant.rosterId)?.name ?? "",
     ])];
-    const csv = `﻿${rows.map((row) => row.map((value) => /["\n\r,]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value).join(",")).join("\r\n")}`;
-    downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `尚可抽人員名單-${Date.now()}.csv`);
+    downloadBlob(new Blob([csvRowsToDownloadText(rows)], { type: "text/csv;charset=utf-8" }), `尚可抽人員名單-${Date.now()}.csv`);
   }
 
   function renderRosterUploadCards() {
     return (
       <div className="event-lottery-subsection">
         <h3>人員名單</h3>
-        <p className="lottery-panel-note">每組名單可獨立上傳 CSV；支援 UTF-8 或 ANSI（Big5），欄位可使用「姓名、員工編號、部門」。</p>
+        <p className="lottery-panel-note">每組名單可獨立上傳 CSV；自動辨識 UTF-8／Big5／Windows-1252 編碼，欄位可使用「姓名、員工編號、部門」。</p>
         {state.rosters.length === 0
           ? <p className="result-empty"><strong>還沒有名單群組</strong>請先建立至少一個群組，才能加入參加者。</p>
           : <div className="event-lottery-roster-upload-grid">
           {state.rosters.map((roster) => {
             const memberCount = state.participants.filter((participant) => participant.rosterId === roster.id).length;
-            const encoding = rosterCsvEncodings[roster.id] ?? "utf-8";
+            const encoding = rosterCsvEncodings[roster.id] ?? "auto";
+            const detected = rosterCsvDetectedEncodings[roster.id] ?? null;
             return (
               <div className="event-lottery-roster-upload-card" key={roster.id}>
                 <div className="event-lottery-roster-upload-heading">
@@ -911,9 +932,11 @@ export function EventLotteryConsole() {
                   <span className="panel-meta">({memberCount}人)</span>
                 </div>
                 <div className="event-lottery-roster-upload-actions">
-                  <select className="key-input" value={encoding} onChange={(event) => setRosterCsvEncodings((current) => ({ ...current, [roster.id]: event.target.value === "big5" ? "big5" : "utf-8" }))} aria-label={`${roster.name} CSV 編碼`}>
+                  <select className="key-input" value={encoding} onChange={(event) => setRosterCsvEncodings((current) => ({ ...current, [roster.id]: event.target.value as TextEncodingPreference }))} aria-label={`${roster.name} CSV 編碼`}>
+                    <option value="auto">自動偵測</option>
                     <option value="utf-8">UTF-8</option>
-                    <option value="big5">ANSI</option>
+                    <option value="big5">Big5／ANSI 繁中</option>
+                    <option value="windows-1252">Windows-1252／ANSI 西文</option>
                   </select>
                   <button className="button button-small button-secondary" type="button" onClick={() => rosterFileInputRefs.current.get(roster.id)?.click()}>選擇 CSV</button>
                   <input ref={(element) => { rosterFileInputRefs.current.set(roster.id, element); }} className="file-input" type="file" accept="text/csv,.csv" aria-label={`選擇 ${roster.name} CSV`} onChange={(event) => { const file = event.target.files?.[0] ?? null; setRosterCsvFiles((current) => ({ ...current, [roster.id]: file })); }} />
@@ -922,6 +945,7 @@ export function EventLotteryConsole() {
                   <button className="button button-small button-danger" type="button" onClick={() => clearRoster(roster.id)}>{rosterConfirm.armedId === `clear:${roster.id}` ? "再按一次清空" : "清空"}</button>
                   <button className="button button-small button-danger" type="button" onClick={() => handleDeleteRoster(roster.id)}>{rosterConfirm.armedId === roster.id ? "再按一次刪除" : "刪除群組"}</button>
                 </div>
+                {detected && <p className="panel-meta">本次讀取：{encodingLabel(detected)}</p>}
                 <details className="event-lottery-manual-add">
                   <summary>＋ 手動新增人員</summary>
                   <div className="event-lottery-manual-add-form">
@@ -941,11 +965,11 @@ export function EventLotteryConsole() {
   }
 
   if (!hydrated) {
-    return <section className="workspace event-lottery-console page-shell" aria-label="活動抽獎控制台"><div className="panel"><p className="result-empty">載入中…</p></div></section>;
+    return <section className="workspace event-lottery-console page-shell event-lottery-full-width" aria-label="活動抽獎控制台"><div className="panel"><p className="result-empty">載入中…</p></div></section>;
   }
 
   return (
-    <section className="workspace event-lottery-console page-shell" aria-label="活動抽獎控制台">
+    <section className="workspace event-lottery-console page-shell event-lottery-full-width" aria-label="活動抽獎控制台">
       <header className="event-lottery-admin-header">
         <h1>抽獎系統控制面板</h1>
         <div className="event-lottery-quick-actions">
@@ -1095,14 +1119,16 @@ export function EventLotteryConsole() {
 
           <div className="event-lottery-subsection">
             <h3>CSV 匯入</h3>
-            <p className="lottery-panel-note">欄位：部門,姓名,員工編號（可含標題列，也支援自訂欄位順序）。重複員工編號會先確認；同一名單會更新，跨名單則依確認結果新增。</p>
+            <p className="lottery-panel-note">欄位：部門,姓名,員工編號（可含標題列，也支援自訂欄位順序）。自動辨識 UTF-8／Big5／Windows-1252 編碼。重複員工編號會先確認；同一名單會更新，跨名單則依確認結果新增。{participantCsvDetectedEncoding && <span>本次讀取：{encodingLabel(participantCsvDetectedEncoding)}</span>}</p>
             <div className="event-lottery-inline-form">
               <select className="key-input" value={effectiveCsvRosterId} onChange={(event) => setCsvRosterId(event.target.value)} aria-label="CSV 匯入到哪個名單群組">
                 {state.rosters.map((roster) => <option key={roster.id} value={roster.id}>{roster.name}</option>)}
               </select>
-              <select className="key-input" value={participantCsvEncoding} onChange={(event) => setParticipantCsvEncoding(event.target.value === "big5" ? "big5" : "utf-8")} aria-label="CSV 編碼">
+              <select className="key-input" value={participantCsvEncoding} onChange={(event) => setParticipantCsvEncoding(event.target.value as TextEncodingPreference)} aria-label="CSV 編碼">
+                <option value="auto">自動偵測</option>
                 <option value="utf-8">UTF-8</option>
-                <option value="big5">ANSI</option>
+                <option value="big5">Big5／ANSI 繁中</option>
+                <option value="windows-1252">Windows-1252／ANSI 西文</option>
               </select>
               <button className="button button-small button-secondary" type="button" onClick={() => csvFileInputRef.current?.click()} disabled={state.rosters.length === 0}>選擇 CSV 檔案</button>
               <input ref={csvFileInputRef} className="file-input" type="file" accept="text/csv,.csv" aria-label="選擇參加者 CSV 檔案" onChange={(event) => setParticipantCsvFile(event.target.files?.[0] ?? null)} />
@@ -1178,11 +1204,13 @@ export function EventLotteryConsole() {
 
           <div className="event-lottery-subsection">
             <h3>批次匯入:</h3>
-            <p className="lottery-panel-note">欄位：抽獎順序,獎項,數量；支援 UTF-8／ANSI。CSV 會套用下方勾選的對象名單。</p>
+            <p className="lottery-panel-note">欄位：抽獎順序,獎項,數量；自動辨識 UTF-8／Big5／Windows-1252 編碼。CSV 會套用下方勾選的對象名單。{prizeCsvDetectedEncoding && <span>本次讀取：{encodingLabel(prizeCsvDetectedEncoding)}</span>}</p>
             <div className="event-lottery-inline-form">
-              <select className="key-input" value={prizeCsvEncoding} onChange={(event) => setPrizeCsvEncoding(event.target.value === "big5" ? "big5" : "utf-8")} aria-label="獎項 CSV 編碼">
+              <select className="key-input" value={prizeCsvEncoding} onChange={(event) => setPrizeCsvEncoding(event.target.value as TextEncodingPreference)} aria-label="獎項 CSV 編碼">
+                <option value="auto">自動偵測</option>
                 <option value="utf-8">UTF-8</option>
-                <option value="big5">ANSI</option>
+                <option value="big5">Big5／ANSI 繁中</option>
+                <option value="windows-1252">Windows-1252／ANSI 西文</option>
               </select>
               <button className="button button-small button-secondary" type="button" onClick={() => prizeCsvFileInputRef.current?.click()}>選擇獎項 CSV</button>
               <input ref={prizeCsvFileInputRef} className="file-input" type="file" accept="text/csv,.csv" aria-label="選擇獎項 CSV 檔案" onChange={(event) => setPrizeCsvFile(event.target.files?.[0] ?? null)} />
