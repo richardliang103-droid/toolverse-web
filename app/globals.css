@@ -1210,10 +1210,13 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 .workspace.event-lottery-console { grid-template-columns: 1fr; }
 .event-lottery-admin-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .event-lottery-admin-header h1 { margin: 0; color: var(--ink); font-size: clamp(22px, 3vw, 30px); }
-.event-lottery-field { display: grid; gap: 6px; margin-bottom: 16px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.event-lottery-field { display: grid; gap: 6px; margin-bottom: 16px; font-size: 13px; font-weight: 700; color: var(--muted); max-width: 640px; }
 .event-lottery-field .key-input { font-weight: 400; color: var(--ink); }
 .event-lottery-title-editor { display: flex; align-items: center; gap: 8px; }
 .event-lottery-title-editor .key-input { flex: 1; min-width: 0; }
+/* 控制台改成全版面之後，設定表單的欄位行不該跟著拉滿 1500px 寬——短欄位鋪
+   太寬中間會出現大段不自然的空隙，收在讀起來舒服的寬度內就好。 */
+.event-lottery-settings-panel .form-controls { max-width: 900px; }
 .event-lottery-background-row, .event-lottery-quick-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
 .event-lottery-stat-badges { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
 .event-lottery-stat-badge { display: inline-flex; align-items: center; padding: 4px 9px; border: 0; border-radius: 999px; background: #e8f4fd; color: #2980b9; font: inherit; font-size: 12px; font-weight: 700; }
@@ -1221,29 +1224,46 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 .event-lottery-stat-badge-clickable:hover { background: #c9e4f9; box-shadow: 0 0 0 2px #3498db; }
 .event-lottery-group-breakdown { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
 .event-lottery-group-badge { padding: 3px 8px; border-radius: 10px; background: #f0f0f0; color: #555; font-size: 11px; font-weight: 700; }
-.event-lottery-section-nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
-.event-lottery-section-nav a { text-decoration: none; }
-.event-lottery-dashboard-grid { display: grid; grid-template-columns: 350px minmax(0, 1fr); gap: 20px; align-items: start; }
-.event-lottery-dashboard-sidebar, .event-lottery-dashboard-main { min-width: 0; }
-.event-lottery-dashboard-sidebar .event-lottery-roster-upload-grid { grid-template-columns: 1fr; }
-.event-lottery-dashboard-grid > * > .panel { margin-bottom: 20px; }
+
+/* 永遠可見的狀態列：不管切到哪個分頁都能一眼看到目前進度、前台鎖定狀態與
+   手機遙控連線情形。 */
+.event-lottery-status-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 16px;
+  margin: 14px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  box-shadow: 0 2px 0 var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.event-lottery-status-item { color: var(--ink); }
+.event-lottery-status-locked { color: #b7791f; }
+.event-lottery-status-ready { color: #1a7a5e; }
+
+/* 分頁切換：同一時間只渲染一個分頁的內容，取代原本全部攤開的長捲動版面。 */
+.event-lottery-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+
 .event-lottery-inline-form { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin: 12px 0; }
 .event-lottery-inline-form .key-input { min-width: 160px; flex: 1 1 160px; }
 .event-lottery-subsection { padding-top: 18px; margin-top: 18px; border-top: 1px solid var(--line); }
 .event-lottery-subsection:first-child { padding-top: 0; margin-top: 0; border-top: none; }
 .event-lottery-subsection h3 { margin: 0 0 8px; font-size: 15px; }
-.event-lottery-roster-upload-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+.event-lottery-roster-upload-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 14px 0; }
 .event-lottery-roster-upload-card { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: #f9fbfb; }
 .event-lottery-roster-upload-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .event-lottery-roster-upload-heading .key-input { min-width: 0; flex: 1; font-weight: 700; }
 .event-lottery-roster-upload-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.event-lottery-roster-upload-actions .key-input { min-width: 0; flex: 1 1 90px; }
-.event-lottery-manual-add { margin-top: 4px; }
-.event-lottery-manual-add summary { cursor: pointer; color: #1a7a5e; font-size: 12px; font-weight: 700; }
-.event-lottery-manual-add-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; padding: 8px; border: 1px dashed #a9dfbf; border-radius: 8px; background: #f0faf4; }
-.event-lottery-manual-add-form .key-input { min-width: 0; grid-column: span 2; }
-.event-lottery-manual-add-form .key-input:first-child { grid-column: span 1; }
-.event-lottery-manual-add-form .button { grid-column: 1 / -1; justify-self: end; }
+
+/* 分頁切換小控制條：參加者表格與尚可抽名單彈窗共用。 */
+.event-lottery-pager { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
 
 .event-lottery-roster-list { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
 .event-lottery-roster-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; background: white; }
@@ -1252,6 +1272,9 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 .event-lottery-roster-checks legend { padding: 0 4px; font-size: 12px; color: var(--muted); }
 
 .event-lottery-remote-panel { display: grid; gap: 10px; }
+/* Supabase 未設定時，手機遙控是完全用不到的選填功能——收成一行文字提示，
+   不佔一整個 panel 的高度。 */
+.event-lottery-remote-panel-collapsed { padding: 10px 16px; }
 .event-lottery-remote-qr { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .event-lottery-remote-qr img { width: 168px; height: 168px; border-radius: 12px; border: 1px solid var(--line); background: white; padding: 8px; }
 .event-lottery-remote-qr-meta { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
@@ -1313,19 +1336,15 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 
 @media (max-width: 860px) {
   .event-lottery-admin-header { align-items: flex-start; flex-direction: column; }
-  .event-lottery-roster-upload-grid { grid-template-columns: 1fr; }
   .event-lottery-prize-list-head { display: none; }
   .event-lottery-prize-row { grid-template-columns: auto auto minmax(0, 1fr) auto; }
   .event-lottery-prize-actions { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: center; }
 }
 
-@media (max-width: 1000px) {
-  .event-lottery-dashboard-grid { grid-template-columns: 1fr; }
-}
-
 @media (max-width: 560px) {
-  .event-lottery-section-nav { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
-  .event-lottery-section-nav .button { flex: 0 0 auto; }
+  .event-lottery-tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+  .event-lottery-tabs .button { flex: 0 0 auto; }
+  .event-lottery-status-bar { position: static; }
 }
 
 /* 舞台採固定深色主題，不隨站台淺／深色模式切換，模擬投影環境。 */
