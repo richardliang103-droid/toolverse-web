@@ -12,6 +12,7 @@
 export type RemoteHostPhase = "offline" | "idle" | "prepared" | "drawing" | "revealing" | "finished";
 
 export type RemoteNextAction = "prepare" | "draw" | "clear" | "none";
+export type RemoteBlockedReason = "no-eligible-participants";
 
 export type RemoteMessage =
   | {
@@ -27,6 +28,7 @@ export type RemoteMessage =
       prizeName: string | null;
       drawCount: number;
       locked: boolean;
+      blockedReason: RemoteBlockedReason | null;
       sentAt: string;
     }
   | {

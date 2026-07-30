@@ -17,6 +17,7 @@ import {
   eventBackupFileName,
   exportEventBackup,
   findDuplicateEmployeeId,
+  findNextDrawablePrize,
   formatLotteryTimestamp,
   MAX_DRAW_COUNT_PER_ROUND,
   MAX_IMAGE_DATA_URL_LENGTH,
@@ -870,7 +871,7 @@ export function EventLotteryConsole() {
   const drawRemaining = drawTargetPrize ? remainingSlots(drawTargetPrize) : 0;
   const remainingPrizes = orderedPrizes.filter((prize) => remainingSlots(prize) > 0);
   const remainingPrizeSlots = remainingPrizes.reduce((sum, prize) => sum + remainingSlots(prize), 0);
-  const nextAvailablePrize = remainingPrizes[0] ?? null;
+  const nextAvailablePrize = findNextDrawablePrize(state);
 
   function handlePrepareStage() {
     if (drawLocked) return;
@@ -1207,7 +1208,7 @@ export function EventLotteryConsole() {
                   <p className="event-lottery-draw-hint event-lottery-draw-hint-warning">
                     👉 下一個預定抽獎：{nextAvailablePrize
                       ? <><span>第 {orderedPrizes.indexOf(nextAvailablePrize) + 1} 個 — {nextAvailablePrize.name}</span>（剩 {remainingSlots(nextAvailablePrize)} 個）<small>※ 您可直接在下方切換其他獎項，或依照系統順序往下抽。</small></>
-                      : "目前所有獎項皆已抽完！"}
+                      : remainingPrizes.length > 0 ? "目前沒有符合資格的人員" : "目前所有獎項皆已抽完！"}
                   </p>
                 </div>
                 <div className="event-lottery-inline-form">

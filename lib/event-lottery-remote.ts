@@ -1,4 +1,4 @@
-import { pendingRevealCompleteAt, resolveStageAdvance, resolveStageDisplay, stagePreviewCompleteAt, type LotteryEventState } from "./event-lottery.ts";
+import { findNextDrawablePrize, pendingRevealCompleteAt, remainingSlots, resolveStageAdvance, resolveStageDisplay, stagePreviewCompleteAt, type LotteryEventState } from "./event-lottery.ts";
 import type { LotteryRemoteSession, RemoteHostPhase, RemoteMessage } from "./event-lottery-remote-types.ts";
 
 export const EVENT_LOTTERY_REMOTE_STORAGE_KEY = "toolverse:event-lottery:remote-session:v1";
@@ -164,6 +164,9 @@ export function buildHostStatus(state: LotteryEventState, revision: number, now 
   else phase = "finished";
 
   const activePrize = state.activePrizeId ? state.prizes.find((prize) => prize.id === state.activePrizeId) ?? null : null;
+  const hasRemainingPrizes = state.prizes.some((prize) => remainingSlots(prize) > 0);
+  const hasDrawablePrize = findNextDrawablePrize(state) !== null;
+  const blockedReason = hasRemainingPrizes && !hasDrawablePrize ? "no-eligible-participants" as const : null;
 
   return {
     type: "HOST_STATUS",
@@ -172,8 +175,9 @@ export function buildHostStatus(state: LotteryEventState, revision: number, now 
     nextAction: advance.action,
     eventTitle: state.eventTitle,
     prizeName: activePrize ? activePrize.name : null,
-    drawCount: state.stageDrawCount,
+    drawCount: blockedReason ? 0 : state.stageDrawCount,
     locked: advance.action === "none",
+    blockedReason,
     sentAt: now.toISOString(),
   };
 }
@@ -216,13 +220,14 @@ export function isHostStatusStale(lastHostStatusAt: number | null, now = Date.no
 
 /** 手機按鈕文案／可否操作，純粹由最新一次 HOST_STATUS＋是否逾時決定。 */
 export type RemoteButtonState =
-  | { kind: "disabled"; reason: "offline" | "locked" }
+  | { kind: "disabled"; reason: "offline" | "locked" | "no-eligible-participants" }
   | { kind: "prepare" }
   | { kind: "draw" }
   | { kind: "clear" };
 
 export function resolveRemoteButtonState(status: (RemoteMessage & { type: "HOST_STATUS" }) | null, isStale: boolean): RemoteButtonState {
   if (isStale || !status) return { kind: "disabled", reason: "offline" };
+  if (status.blockedReason === "no-eligible-participants") return { kind: "disabled", reason: "no-eligible-participants" };
   if (status.locked || status.nextAction === "none") return { kind: "disabled", reason: "locked" };
   if (status.nextAction === "prepare") return { kind: "prepare" };
   if (status.nextAction === "clear") return { kind: "clear" };

@@ -1355,6 +1355,7 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
      .event-lottery-stage-winner-list 自己的 overflow-y 內部捲動，而不是把
      整個舞台頁面撐高，讓固定在畫面底部的抽獎按鈕蓋住捲不到的最後幾張卡片。 */
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1365,8 +1366,10 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
   color: #f5f1e8;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
   text-align: center;
-  cursor: pointer;
+  cursor: default;
 }
+.event-lottery-stage button { cursor: pointer; }
+.event-lottery-stage button:disabled { cursor: default; }
 .event-lottery-stage:fullscreen { background: #05070d; }
 .event-lottery-stage-has-image { background-size: cover; background-position: center; }
 .event-lottery-stage-has-image .event-lottery-stage-scrim { background: rgba(15,23,42,.6); }
@@ -1495,7 +1498,7 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
 
 @media (max-width: 560px) {
   .event-lottery-stage { gap: 0; }
-  .event-lottery-stage-main { width: calc(100% - 28px); min-height: 72vh; }
+  .event-lottery-stage-main { width: calc(100% - 28px); min-height: 0; }
   .event-lottery-inline-form .key-input { min-width: 0; flex-basis: 100%; }
 }
 

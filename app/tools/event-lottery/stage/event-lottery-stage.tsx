@@ -3,7 +3,7 @@
 import confetti from "canvas-confetti";
 import gsap from "gsap";
 import { useEffect, useRef, useState } from "react";
-import { candidatePool, createEmptyEventState, pendingRevealCompleteAt, remainingSlots, resolveStageAdvance, resolveStageDisplay, visibleWinnerCount, type LotteryEventState, type PendingReveal } from "@/lib/event-lottery";
+import { candidatePool, createEmptyEventState, findNextDrawablePrize, pendingRevealCompleteAt, remainingSlots, resolveStageAdvance, resolveStageDisplay, visibleWinnerCount, type LotteryEventState, type PendingReveal } from "@/lib/event-lottery";
 import {
   buildHostStatus,
   commitAcceptedCommand,
@@ -581,6 +581,10 @@ export function EventLotteryStage() {
   const rollingNames = rollingPool.length > 0 ? rollingPool.map((participant) => participant.name) : ["? ? ?", "- - -"];
   const rollingName = rollingNames[Math.floor(nowTick / 50) % rollingNames.length] ?? "? ? ?";
   const stageDrawCount = activePrize ? Math.min(state.stageDrawCount, remainingSlots(activePrize), rollingPool.length) : 0;
+  const nextDrawablePrize = findNextDrawablePrize(state);
+  const hasRemainingPrizes = state.prizes.some((prize) => remainingSlots(prize) > 0);
+  const noEligibleParticipants = hasRemainingPrizes && !nextDrawablePrize;
+  const activePrizeNoEligible = Boolean(activePrize && remainingSlots(activePrize) > 0 && rollingPool.length === 0);
   // 原版會在抽獎開始時就依「本輪總人數」決定版型；逐一揭曉時不能因為
   // 目前只出現第一張卡片，就先套用單人超大版型，否則第二張出現時畫面會跳動。
   const winnerLayoutCount = display.phase === "revealed"
@@ -601,6 +605,8 @@ export function EventLotteryStage() {
         ? "➡️ 下一輪"
         : presentationStillRolling || display.phase === "notice"
           ? "請稍候…"
+          : noEligibleParticipants
+            ? "沒有符合資格的人員"
           : allPrizesDone
             ? "🎉 抽獎已全部完成"
             : "▶ 開始抽獎";
@@ -641,7 +647,7 @@ export function EventLotteryStage() {
             {activePrize.imageDataUrl && <img key={activePrize.id} className="event-lottery-stage-prize-image" src={activePrize.imageDataUrl} alt="" />}
             <h2>
               {display.phase === "prepared"
-                ? `即將抽出：${activePrizeDisplayName} 共 ${stageDrawCount} 名`
+                ? activePrizeNoEligible ? `「${activePrizeDisplayName}」目前沒有符合資格的人員` : `即將抽出：${activePrizeDisplayName} 共 ${stageDrawCount} 名`
                 : presentationStillRolling
                   ? `【${activePrizeDisplayName}】 抽獎進行中...`
                   : `🎉 恭喜【${activePrizeDisplayName}】得獎者 🎉`}
