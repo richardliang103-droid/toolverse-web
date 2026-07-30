@@ -129,6 +129,9 @@ export function EventLotteryStage() {
   // 舞台這一刻該顯示什麼，純粹是「目前狀態 + 現在幾點」的函式；不管是剛收到
   // 廣播、重新整理，還是很久以後才打開分頁，算出來的結果都一樣。
   const display = resolveStageDisplay(state, new Date(nowTick));
+  // 舞台不再讓「點擊畫面任何地方」都觸發抽獎，避免主持人或觀眾不小心點到背景
+  // 就誤觸下一輪；改成一個明確的按鈕，這裡算出按鈕當下該顯示什麼、能不能按。
+  const advanceAction = resolveStageAdvance(state, new Date(nowTick));
   const previewRolling = display.phase === "preview" && display.rolling;
   const sequentialRevealMode = display.phase === "revealed" ? display.pendingReveal.revealMode : null;
   const sequentialRevealTotal = display.phase === "revealed" ? display.pendingReveal.winnerIds.length : 0;
@@ -517,11 +520,13 @@ export function EventLotteryStage() {
   }
 
   /**
-   * 舞台可以直接用簡報筆／鍵盤／點擊畫面控制「抽下一個獎項」，不需要回頭操作
-   * 控制台——每次都重新讀一次 localStorage（不是用 React state），確保簡報筆連續
-   * 按兩下時，第二下看到的一定是第一下剛寫進去的最新狀態，不會因為畫面還沒重新
-   * 渲染就對同一份舊資料重複動作。實際的準備／抽選邏輯跟控制台按鈕共用同一套
-   * （見 ../actions.ts），兩邊操作完全一致。
+   * 舞台可以直接用簡報筆／鍵盤／畫面上明確的按鈕控制「抽下一個獎項」，不需要
+   * 回頭操作控制台——刻意不讓點擊畫面任何地方都觸發，避免主持人或觀眾靠近
+   * 螢幕、誤觸背景就不小心開下一輪。每次都重新讀一次 localStorage（不是用
+   * React state），確保簡報筆連續按兩下時，第二下看到的一定是第一下剛寫進去
+   * 的最新狀態，不會因為畫面還沒重新渲染就對同一份舊資料重複動作。實際的
+   * 準備／抽選邏輯跟控制台按鈕共用同一套（見 ../actions.ts），兩邊操作完全
+   * 一致。
    */
   function handleAdvance() {
     const currentState = loadEventState();
@@ -587,13 +592,25 @@ export function EventLotteryStage() {
   const sequentialStillRolling = display.phase === "revealed" && display.pendingReveal.revealMode === "sequential" && visibleCount < display.pendingReveal.winnerIds.length;
   const presentationStillRolling = previewRolling || display.phase === "drawing" || sequentialStillRolling;
 
+  const allPrizesDone = state.prizes.length > 0 && state.prizes.every((prize) => remainingSlots(prize) === 0);
+  const advanceLabel = advanceAction.action === "draw"
+    ? "🎲 開始抽獎"
+    : advanceAction.action === "prepare"
+      ? "▶ 準備下一個獎項"
+      : advanceAction.action === "clear"
+        ? "➡️ 下一輪"
+        : presentationStillRolling || display.phase === "notice"
+          ? "請稍候…"
+          : allPrizesDone
+            ? "🎉 抽獎已全部完成"
+            : "▶ 開始抽獎";
+
   return (
     <div
       ref={stageRef}
       className={`event-lottery-stage${hasBackground ? " event-lottery-stage-has-image" : ""}`}
       style={hasBackground ? { backgroundImage: `url(${state.backgroundImageDataUrl})` } : undefined}
       aria-label="活動抽獎舞台展示"
-      onClick={handleAdvance}
     >
       <StageParticles />
       <div className="event-lottery-stage-scrim" aria-hidden="true" />
@@ -654,6 +671,15 @@ export function EventLotteryStage() {
           </div>
         )}
       </main>
+
+      <button
+        type="button"
+        className={`event-lottery-stage-advance-button${advanceAction.action === "none" ? " event-lottery-stage-advance-button-disabled" : ""}`}
+        onClick={handleAdvance}
+        disabled={advanceAction.action === "none"}
+      >
+        {advanceLabel}
+      </button>
     </div>
   );
 }

@@ -742,9 +742,18 @@ export function disqualifyWinner(state: LotteryEventState, winnerId: string, now
   };
 }
 
-/** 舞台準備：選定獎項、清空上一輪的揭曉狀態。 */
+/**
+ * 舞台準備：選定獎項、清空上一輪的揭曉狀態。同時把「本輪抽出人數」重設為這個
+ * 獎項目前的剩餘名額（不超過候選人數與單輪上限）——一個獎項預設就是一次全部
+ * 抽完，逐次／一次抽出控制的是「這些人怎麼揭曉」，不是「一次只抽幾個人」；
+ * 需要分批抽選的場次，主持人仍可以在準備好之後於控制台把這個數字改小。
+ */
 export function prepareStagePrize(state: LotteryEventState, prizeId: string, now = new Date()): LotteryEventState {
-  return { ...state, activePrizeId: prizeId, pendingReveal: null, stagePreview: null, stageNotice: null, updatedAt: now.toISOString() };
+  const prize = state.prizes.find((item) => item.id === prizeId);
+  const stageDrawCount = prize
+    ? Math.max(1, Math.min(remainingSlots(prize), candidatePool(state, prizeId).length, MAX_DRAW_COUNT_PER_ROUND))
+    : state.stageDrawCount;
+  return { ...state, activePrizeId: prizeId, pendingReveal: null, stagePreview: null, stageNotice: null, stageDrawCount, updatedAt: now.toISOString() };
 }
 
 /** 顯示既有獎項的歷史得獎名單，不改變抽獎數量，也不建立新的得獎紀錄。 */

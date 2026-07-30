@@ -575,18 +575,52 @@ test("resolveStageAdvance：idle 狀態下，準備 order 最小、還有剩餘�
   assert.deepEqual(resolveStageAdvance(current), { action: "prepare", prizeId: "prize-next" });
 });
 
-test("resolveStageAdvance：prepared 狀態下，預設 stageDrawCount=1 時只抽 1 位，不會一次抽光剩餘名額", () => {
+test("prepareStagePrize：預設把 stageDrawCount 重設為這個獎項目前的剩餘名額，一次準備就是抽完整個獎項", () => {
   const { state, prize } = buildBasicState();
   const bigPrize = { ...prize, totalCount: 3, order: 0 };
-  const current = prepareStagePrize({ ...state, prizes: [bigPrize] }, prize.id);
-  assert.equal(current.stageDrawCount, 1);
-  assert.deepEqual(resolveStageAdvance(current), { action: "draw", prizeId: prize.id, count: 1 });
+  // buildBasicState 裡符合資格的候選人也是 3 位，所以「剩餘名額」跟「候選人數」剛好都是 3。
+  const current = prepareStagePrize({ ...state, prizes: [bigPrize], stageDrawCount: 1 }, prize.id);
+  assert.equal(current.stageDrawCount, 3, "準備獎項時不該沿用舊的 stageDrawCount，而是重設成這個獎項的剩餘名額");
+  assert.deepEqual(resolveStageAdvance(current), { action: "draw", prizeId: prize.id, count: 3 }, "逐次／一次抽出控制的是揭曉方式，不是把一個獎項拆成好幾次抽選");
 });
 
-test("resolveStageAdvance：prepared 狀態下抽出人數＝min(stageDrawCount, 剩餘名額, 候選人數, MAX_DRAW_COUNT_PER_ROUND)", () => {
+test("prepareStagePrize：重設的 stageDrawCount 不能超過候選人數，也不能超過 MAX_DRAW_COUNT_PER_ROUND", () => {
+  const { state, prize } = buildBasicState();
+  // 獎項名額給到很大，但候選人池只有 3 位（buildBasicState），要被候選人數收斂。
+  const hugePrize = { ...prize, totalCount: 100, order: 0 };
+  const current = prepareStagePrize({ ...state, prizes: [hugePrize] }, prize.id);
+  assert.equal(current.stageDrawCount, 3, "不能超過符合資格的候選人數");
+
+  const massivePrize = { ...prize, totalCount: MAX_DRAW_COUNT_PER_ROUND + 100, order: 0 };
+  const manyParticipants = Array.from({ length: MAX_DRAW_COUNT_PER_ROUND + 100 }, (_, index) =>
+    createParticipant({ name: `人員${index}`, employeeId: `E${index}`, rosterId: state.rosters[0].id }));
+  const withManyCandidates = prepareStagePrize({ ...state, participants: manyParticipants, prizes: [massivePrize] }, prize.id);
+  assert.equal(withManyCandidates.stageDrawCount, MAX_DRAW_COUNT_PER_ROUND, "不能超過單輪抽出人數上限");
+});
+
+test("prepareStagePrize：同一個獎項分批抽完後再次準備，重設的數字要反映最新的剩餘名額，不是原始總數", () => {
   const { state, prize } = buildBasicState();
   const bigPrize = { ...prize, totalCount: 3, order: 0 };
-  let current = prepareStagePrize({ ...state, prizes: [bigPrize], stageDrawCount: 2 }, prize.id);
+  let current = prepareStagePrize({ ...state, prizes: [bigPrize] }, prize.id);
+  assert.equal(current.stageDrawCount, 3);
+
+  // 模擬主持人把本輪抽出人數手動改成 1，只抽一位。
+  const { nextState } = drawEventWinners({ ...current, stageDrawCount: 1 }, prize.id, 1);
+  assert.equal(remainingSlots(nextState.prizes[0]), 2);
+
+  // 揭曉完成、清除舞台後再次準備同一個獎項：應該預設抽完「剩下的」2 位，不是原始的 3 位。
+  const cleared = clearStage(nextState);
+  const preparedAgain = prepareStagePrize(cleared, prize.id);
+  assert.equal(preparedAgain.stageDrawCount, 2);
+});
+
+test("resolveStageAdvance：prepared 狀態下抽出人數＝min(stageDrawCount, 剩餘名額, 候選人數, MAX_DRAW_COUNT_PER_ROUND)——純粹測 resolveStageAdvance 本身的收斂邏輯，不透過 prepareStagePrize", () => {
+  const { state, prize } = buildBasicState();
+  const bigPrize = { ...prize, totalCount: 3, order: 0 };
+  // 直接建構「已準備」狀態（不呼叫 prepareStagePrize），這樣才能單獨測試
+  // resolveStageAdvance 怎麼用 state.stageDrawCount，不被 prepareStagePrize
+  // 自己的重設行為干擾。
+  let current = { ...state, prizes: [bigPrize], activePrizeId: prize.id, pendingReveal: null, stageDrawCount: 2 };
   assert.deepEqual(resolveStageAdvance(current), { action: "draw", prizeId: prize.id, count: 2 }, "stageDrawCount 小於剩餘名額與候選人數時，直接用 stageDrawCount");
 
   // 候選人只有 3 位（buildBasicState），stageDrawCount 設得比剩餘名額還大時要被剩餘名額收斂。
@@ -595,7 +629,7 @@ test("resolveStageAdvance：prepared 狀態下抽出人數＝min(stageDrawCount,
 
   // 剩餘名額給到很大，但候選人池只有 3 位，要被候選人數收斂。
   const hugePrize = { ...bigPrize, totalCount: 100 };
-  current = prepareStagePrize({ ...state, prizes: [hugePrize], stageDrawCount: 50 }, prize.id);
+  current = { ...state, prizes: [hugePrize], activePrizeId: prize.id, pendingReveal: null, stageDrawCount: 50 };
   assert.deepEqual(resolveStageAdvance(current), { action: "draw", prizeId: prize.id, count: 3 }, "不能超過符合資格的候選人數");
 });
 
