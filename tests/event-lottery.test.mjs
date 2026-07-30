@@ -100,6 +100,13 @@ test("sanitizeEventState：stageDrawCount 依 1 到 MAX_DRAW_COUNT_PER_ROUND 夾
   assert.equal(sanitizeEventState({ stageDrawCount: MAX_DRAW_COUNT_PER_ROUND + 100 }).stageDrawCount, MAX_DRAW_COUNT_PER_ROUND);
 });
 
+test("sanitizeEventState：stageButtonVisible 預設顯示，只有明確存 false 才會關閉，讓舊資料安全回退", () => {
+  assert.equal(sanitizeEventState({}).stageButtonVisible, true, "舊 localStorage／舊備份沒有這個欄位時要安全回退為顯示");
+  assert.equal(sanitizeEventState({ stageButtonVisible: false }).stageButtonVisible, false);
+  assert.equal(sanitizeEventState({ stageButtonVisible: true }).stageButtonVisible, true);
+  assert.equal(sanitizeEventState({ stageButtonVisible: "no" }).stageButtonVisible, true, "非 false 的髒資料也要安全回退為顯示");
+});
+
 test("normalize：損壞的 pendingReveal（指向不存在的獎項或得獎者、缺 revealAt）一律捨棄", () => {
   const withMissingPrize = sanitizeEventState({
     prizes: [{ id: "prize-1", name: "特獎", totalCount: 1 }],
