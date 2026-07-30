@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { groupsToCsv, groupsToText, normalizeParticipants, parseSeparationRules, resolveGroupCount, splitIntoGroups } from "@/lib/groups";
-import type { GroupingMode } from "@/lib/groups";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { decodeTextBytes, encodingLabel, type DetectedTextEncoding, type TextEncodingPreference } from "@/lib/text-encoding";
+import { parsePersonnelRoster, parseSeparationRules, personnelGroupsToCsv, personnelGroupsToText, resolveGroupCount, splitIntoGroups } from "@/lib/groups";
+import type { GroupingMode, PersonnelMember } from "@/lib/groups";
 import { RosterPicker } from "@/components/roster-picker";
 
 const STORAGE_KEY = "toolverse:groups:v1";
 const TONE_COUNT = 4;
 
-type StoredState = { raw: string; dedupe: boolean; mode: GroupingMode; countValue: number; sizeValue: number; groups: string[][]; separations: string };
+type StoredState = { raw: string; dedupe: boolean; mode: GroupingMode; countValue: number; sizeValue: number; groups: PersonnelMember[][]; separations: string };
 
 function positiveInt(value: unknown, fallback: number) {
   const parsed = Math.round(Number(value));
@@ -20,7 +21,9 @@ function sanitizeStoredState(value: unknown): StoredState {
   const data = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
   const groups = Array.isArray(data.groups)
     ? data.groups
-        .map((group) => (Array.isArray(group) ? group.filter((member): member is string => typeof member === "string") : []))
+        .map((group, groupIndex) => (Array.isArray(group)
+          ? group.map((member, memberIndex) => sanitizeStoredMember(member, groupIndex, memberIndex)).filter((member): member is PersonnelMember => Boolean(member))
+          : []))
         .filter((group) => group.length > 0)
     : [];
   return {
@@ -34,6 +37,23 @@ function sanitizeStoredState(value: unknown): StoredState {
   };
 }
 
+function sanitizeStoredMember(value: unknown, groupIndex: number, memberIndex: number): PersonnelMember | null {
+  if (typeof value === "string" && value.trim()) {
+    return { id: `legacy-${groupIndex}-${memberIndex}-${value}`, name: value.trim(), department: "", fields: [value.trim(), ""] };
+  }
+  if (typeof value !== "object" || value === null) return null;
+  const data = value as Record<string, unknown>;
+  const name = typeof data.name === "string" ? data.name.trim() : "";
+  if (!name) return null;
+  const fields = Array.isArray(data.fields) ? data.fields.filter((field): field is string => typeof field === "string").map((field) => field.trim()) : [name, ""];
+  return {
+    id: typeof data.id === "string" ? data.id : `member-${groupIndex}-${memberIndex}-${name}`,
+    name,
+    department: typeof data.department === "string" ? data.department.trim() : fields[1] ?? "",
+    fields,
+  };
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -44,17 +64,20 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 export function RandomGroupsTool() {
+  const fileRef = useRef<HTMLInputElement>(null);
   const [raw, setRaw] = useState("");
   const [dedupe, setDedupe] = useState(true);
   const [mode, setMode] = useState<GroupingMode>("byCount");
   const [countValue, setCountValue] = useState(2);
   const [sizeValue, setSizeValue] = useState(4);
-  const [groups, setGroups] = useState<string[][]>([]);
+  const [groups, setGroups] = useState<PersonnelMember[][]>([]);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [shuffleRound, setShuffleRound] = useState(0);
   const [separations, setSeparations] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  const [encodingPreference, setEncodingPreference] = useState<TextEncodingPreference>("auto");
+  const [detectedEncoding, setDetectedEncoding] = useState<DetectedTextEncoding | null>(null);
 
   useEffect(() => {
     try {
@@ -76,14 +99,18 @@ export function RandomGroupsTool() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ raw, dedupe, mode, countValue, sizeValue, groups, separations }));
   }, [hydrated, raw, dedupe, mode, countValue, sizeValue, groups, separations]);
 
-  const members = useMemo(() => normalizeParticipants(raw, dedupe), [raw, dedupe]);
+  const roster = useMemo(() => parsePersonnelRoster(raw, dedupe), [raw, dedupe]);
+  const members = roster.members;
   const currentValue = mode === "byCount" ? countValue : sizeValue;
   const expectedCount = resolveGroupCount(members.length, mode, currentValue);
 
   function handleSplit() {
     setError(""); setCopied(false);
     try {
-      const result = splitIntoGroups(members, mode, currentValue, parseSeparationRules(separations, members));
+      const memberByName = new Map(members.map((member) => [member.name, member]));
+      const separationMembers = parseSeparationRules(separations, members.map((member) => member.name))
+        .map((rule) => rule.map((name) => memberByName.get(name)).filter((member): member is PersonnelMember => Boolean(member)));
+      const result = splitIntoGroups(members, mode, currentValue, separationMembers, (member) => member.id);
       setGroups(result.groups);
       setShuffleRound((round) => round + 1); // 換 key 讓進場動畫重新播放
     } catch (caught) {
@@ -93,7 +120,7 @@ export function RandomGroupsTool() {
 
   async function copyGroups() {
     try {
-      await navigator.clipboard.writeText(groupsToText(groups));
+      await navigator.clipboard.writeText(personnelGroupsToText(groups));
       setCopied(true);
     } catch {
       setError("無法複製到剪貼簿，請手動選取結果複製");
@@ -101,11 +128,25 @@ export function RandomGroupsTool() {
   }
 
   function downloadCsv() {
-    downloadBlob(new Blob([groupsToCsv(groups)], { type: "text/csv;charset=utf-8" }), "toolverse-groups.csv");
+    downloadBlob(new Blob([personnelGroupsToCsv(groups, roster.headers)], { type: "text/csv;charset=utf-8" }), "toolverse-groups.csv");
   }
 
   function clearAll() {
-    setRaw(""); setGroups([]); setError(""); setCopied(false);
+    setRaw(""); setGroups([]); setError(""); setCopied(false); setDetectedEncoding(null);
+  }
+
+  function onPickFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { setError("檔案超過 10 MB 上限"); return; }
+    void file.arrayBuffer().then((buffer) => {
+      const decoded = decodeTextBytes(new Uint8Array(buffer), encodingPreference);
+      if (!decoded.text.trim()) throw new Error("檔案是空的，請選擇有人員資料的 CSV／TSV 檔案");
+      setRaw(decoded.text);
+      setDetectedEncoding(decoded.encoding);
+      setError("");
+    }).catch((caught) => setError(caught instanceof Error ? caught.message : "無法讀取人員名單檔案"));
   }
 
   const sizeSummary = useMemo(() => {
@@ -118,9 +159,22 @@ export function RandomGroupsTool() {
 
   return <section className="workspace groups-workspace page-shell" aria-label="隨機分組工具">
     <div className="panel">
-      <div className="panel-header"><h2>名單與規則</h2><span className="panel-meta">共 {members.length} 人</span></div>
+      <div className="panel-header"><h2>人員名單與規則</h2><span className="panel-meta">共 {members.length} 人</span></div>
+      <div className="groups-import-toolbar">
+        <button className="button button-small button-secondary" type="button" onClick={() => fileRef.current?.click()}>開啟人員名單</button>
+        <input ref={fileRef} className="file-input" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={onPickFile} aria-label="選擇人員名單 CSV 檔案" />
+        <label className="encoding-field" htmlFor="groups-encoding">檔案編碼
+          <select id="groups-encoding" value={encodingPreference} onChange={(event) => setEncodingPreference(event.target.value as TextEncodingPreference)}>
+            <option value="auto">自動辨識</option>
+            <option value="utf-8">UTF-8</option>
+            <option value="big5">Big5／ANSI 繁中</option>
+            <option value="windows-1252">ANSI 西文</option>
+          </select>
+        </label>
+      </div>
+      <p className="groups-input-note">可直接貼上姓名，或開啟 CSV／TSV；欄名含「姓名」與「部門」即可保留欄位。下載一律附 UTF-8 BOM，Excel 開啟不易亂碼。{detectedEncoding && <span>本次讀取：{encodingLabel(detectedEncoding)}</span>}</p>
       <label className="sr-only" htmlFor="group-members">參加者名單，一行一位</label>
-      <textarea id="group-members" className="participant-input participant-input-compact" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder={'輸入或貼上名單，每行一位\n例如：\n小明\n小美\nAlex'} />
+      <textarea id="group-members" className="participant-input participant-input-compact" value={raw} onChange={(event) => { setRaw(event.target.value); setDetectedEncoding(null); }} placeholder={'輸入或貼上姓名，或貼上 CSV／TSV\n例如：\n姓名,部門,員編\n小明,行銷,A001\n小美,工程,A002'} spellCheck={false} />
       <RosterPicker currentText={raw} onLoad={setRaw} /><div className="form-controls">
         <label className="check-row"><input type="checkbox" checked={dedupe} onChange={(event) => setDedupe(event.target.checked)} />移除重複名字</label>
       </div>
@@ -163,7 +217,7 @@ export function RandomGroupsTool() {
                   style={{ "--card-index": index } as React.CSSProperties}
                 >
                   <h3>第 {index + 1} 組<span>{group.length} 人</span></h3>
-                  <ol>{group.map((member, memberIndex) => <li className="animated-list-item" style={{ animationDelay: `${index * 70 + 140 + memberIndex * 45}ms` }} key={member}>{member}</li>)}</ol>
+                  <ol>{group.map((member, memberIndex) => <li className="animated-list-item group-member-row" style={{ animationDelay: `${index * 70 + 140 + memberIndex * 45}ms` }} key={member.id}><span>{member.name}</span>{member.department && <small>{member.department}</small>}</li>)}</ol>
                 </article>
               ))}
             </div>

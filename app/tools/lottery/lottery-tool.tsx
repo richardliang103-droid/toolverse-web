@@ -35,14 +35,23 @@ function sanitizeStoredState(value: unknown): StoredState {
 
 function fireConfetti(finale: boolean) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const shared = { spread: 68, ticks: 130, startVelocity: 34, scalar: finale ? 0.95 : 0.75 };
+  const shared = {
+    colors: ["#f3d58a", "#cf7f8d", "#5f83a8", "#7d9a63", "#fff8e6"],
+    disableForReducedMotion: true,
+    resize: true,
+    spread: 68,
+    ticks: 120,
+    startVelocity: finale ? 38 : 32,
+    scalar: finale ? 0.95 : 0.75,
+    useWorker: true,
+  };
   if (!finale) {
-    confetti({ ...shared, particleCount: 46, angle: 90, origin: { x: 0.5, y: 0.4 }, spread: 95 });
+    confetti({ ...shared, particleCount: 42, angle: 90, origin: { x: 0.5, y: 0.42 }, spread: 82 });
     return;
   }
-  confetti({ ...shared, particleCount: 70, angle: 60, origin: { x: 0.15, y: 0.7 } });
-  confetti({ ...shared, particleCount: 70, angle: 120, origin: { x: 0.85, y: 0.7 } });
-  confetti({ ...shared, particleCount: 50, angle: 90, origin: { x: 0.5, y: 0.55 }, spread: 100 });
+  confetti({ ...shared, particleCount: 62, angle: 60, origin: { x: 0.14, y: 0.72 }, spread: 64 });
+  confetti({ ...shared, particleCount: 62, angle: 120, origin: { x: 0.86, y: 0.72 }, spread: 64 });
+  confetti({ ...shared, particleCount: 46, angle: 90, origin: { x: 0.5, y: 0.56 }, spread: 96, scalar: 1 });
 }
 
 function wait(ms: number) {
@@ -98,7 +107,22 @@ export function LotteryTool() {
   useEffect(() => {
     if (revealed.length && winnerListRef.current) {
       const last = winnerListRef.current.lastElementChild;
-      if (last) gsap.fromTo(last, { opacity: 0, y: 20, scale: 0.7, rotate: -6 }, { opacity: 1, y: 0, scale: 1, rotate: 0, duration: 0.6, ease: "back.out(2.2)" });
+      if (!last) return;
+      const ctx = gsap.context(() => {
+        const shine = last.querySelector<HTMLElement>(".winner-item-shine");
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (reduceMotion) {
+          gsap.set(last, { opacity: 1, y: 0, scale: 1, rotate: 0 });
+          return;
+        }
+        const reveal = gsap.timeline();
+        reveal.fromTo(last, { opacity: 0, y: 34, scale: 0.88, rotate: -3 }, { opacity: 1, y: 0, scale: 1, rotate: 0, duration: 0.68, ease: "back.out(1.7)" });
+        if (shine) {
+          reveal.fromTo(shine, { opacity: 0, x: "-135%" }, { opacity: 0.9, x: "135%", duration: 0.62, ease: "power2.inOut" }, "-=0.28");
+          reveal.to(shine, { opacity: 0, duration: 0.16 }, "-=0.08");
+        }
+      }, winnerListRef);
+      return () => ctx.revert();
     }
   }, [revealed]);
 
@@ -108,6 +132,7 @@ export function LotteryTool() {
     try {
       if (!participants.length) throw new Error("請先貼上至少一位參加者");
       const result = drawWinners(eligible, count);
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       setDrawing(true); setWinners([]); setRevealed([]); setJustRevealed("");
       let pool = eligible.length ? [...eligible] : [...result];
       setWheelSegments(pool);
@@ -116,18 +141,21 @@ export function LotteryTool() {
       for (let index = 0; index < result.length; index += 1) {
         const winner = result[index];
         const targetIndex = pool.findIndex((participant) => participant.id === winner.id);
-        const duration = Math.max(1.3, 3.3 - index * 0.3);
+        const duration = Math.max(2.4, 3.6 - index * 0.25);
         await wheelRef.current?.spinTo(targetIndex, duration);
 
+        // Let the wheel breathe for one beat before the winner card and confetti arrive.
+        await wait(reduceMotion ? 0 : 110);
         setRevealed((value) => [...value, winner.label]);
         setJustRevealed(winner.label);
+        await wait(reduceMotion ? 0 : 120);
         fireConfetti(index === result.length - 1);
         if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
         flashTimerRef.current = setTimeout(() => setJustRevealed(""), 1800);
 
         pool = pool.filter((participant) => participant.id !== winner.id);
         setWheelSegments(pool);
-        if (index < result.length - 1) await wait(500);
+        if (index < result.length - 1) await wait(reduceMotion ? 0 : 420);
       }
 
       const winnerLabels = result.map((winner) => winner.label);
@@ -150,18 +178,19 @@ export function LotteryTool() {
     }
   }
 
-  function resetWinners() { setPreviousWinnerIds([]); setWinners([]); setRevealed([]); setHistory([]); setError(""); }
+  function resetWinners() { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); setPreviousWinnerIds([]); setWinners([]); setRevealed([]); setJustRevealed(""); setHistory([]); setError(""); }
 
   return <section className={`workspace ${theme === "neon" ? "lottery-neon" : "lottery-wa"} page-shell`} aria-label="隨機抽名單工具">
     <div className="panel lottery-controls-panel"><div className="panel-header"><h2>參加名單</h2><span className="panel-meta">共 {participants.length} 人 · 可抽 {eligible.length} 人</span></div><p className="lottery-panel-note">每行一位，名單會留在你的裝置中。關閉「移除重複名字」時，每一列都會視為獨立抽選項目。</p><label className="sr-only" htmlFor="participants">參加者名單，一行一位</label><textarea id="participants" className="participant-input participant-input-compact" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder={'輸入或貼上名單，每行一位\n例如：\n小明\n小美\nAlex'} /><RosterPicker currentText={raw} onLoad={setRaw} /><div className="form-controls"><label className="check-row"><input type="checkbox" checked={dedupe} onChange={(event) => setDedupe(event.target.checked)} />移除重複名字</label><label className="check-row"><input type="checkbox" checked={exclude} onChange={(event) => setExclude(event.target.checked)} />排除已抽出者</label><label className="number-field" htmlFor="winner-count">抽出人數<input id="winner-count" className="number-input" type="number" min="1" max={Math.max(1, eligible.length)} value={count} onChange={(event) => setCount(Math.max(1, Math.round(Number(event.target.value)) || 1))} /></label></div><StarBorder className="draw-button-frame"><button className={`button button-blue draw-button${drawing ? " draw-button-busy" : ""}`} type="button" onClick={handleDraw} disabled={drawing}>{drawing ? <><span className="draw-button-spinner" aria-hidden="true" />正在抽選…</> : "開始抽選"}</button></StarBorder>{error && <p className="error-message" role="alert">{error}</p>}</div>
     <div className="panel panel-tinted lottery-stage-panel"><div className="panel-header"><h2>抽選轉盤</h2><span className="lottery-header-tools"><button className="lottery-theme-toggle" type="button" onClick={() => setTheme((current) => current === "wa" ? "neon" : "wa")} aria-label="切換介面主題">{theme === "wa" ? "🌙 霓虹深色" : "☀️ 淺色和風"}</button><span className="lottery-fairness">公平隨機抽選</span></span></div>
       <div className="lottery-wheel-area">
+        {justRevealed && <div className="lottery-reveal-burst" aria-hidden="true" />}
         {justRevealed && <div className="lottery-flash-winner">🎉 {justRevealed}</div>}
         <LotteryWheel ref={wheelRef} segments={displaySegments} theme={theme} />
       </div>
       {drawing && <p className="lottery-spin-hint">正在從名單中隨機抽選…</p>}
       {revealed.length > 0
-        ? <div ref={winnerListRef} className="winner-list">{revealed.map((winner, index) => <div className="winner-item" key={`${winner}-${index}`}>{winner}</div>)}</div>
+        ? <div ref={winnerListRef} className="winner-list" aria-live="polite">{revealed.map((winner, index) => <div className="winner-item" key={`${winner}-${index}`}>{winner}<span className="winner-item-shine" aria-hidden="true" /></div>)}</div>
         : !drawing && <div className="result-empty"><strong>轉盤等待名單</strong>在左側輸入成員後，即可開始公平隨機抽選。</div>}
       {winners.length > 0 && !drawing && <div className="result-actions"><button className="button button-small button-secondary" type="button" onClick={copyResults}>{copied ? "已複製 ✓" : "複製結果"}</button><button className="button button-small button-secondary" type="button" onClick={handleDraw}>再次抽選</button></div>}
       {(previousWinnerIds.length > 0 || history.length > 0) && <div className="history"><div className="panel-header"><h3>抽出紀錄</h3><button className="button button-small button-secondary" type="button" onClick={resetWinners}>全部重設</button></div><ol>{history.map((item, index) => <li className="animated-list-item" key={`${item.join("-")}-${index}`}>{item.join("、")}</li>)}</ol></div>}

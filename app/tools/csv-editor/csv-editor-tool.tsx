@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ChangeEvent } from "react";
 import { detectDelimiter, parseDelimited, sortRows, toDelimitedText, toJsonText, type CsvDelimiter } from "@/lib/csv";
+import { decodeTextBytes, encodingLabel, type DetectedTextEncoding, type TextEncodingPreference } from "@/lib/text-encoding";
 
 const MAX_DISPLAY_ROWS = 300;
 const MAX_SIZE = 10 * 1024 * 1024;
@@ -24,6 +25,8 @@ export function CsvEditorTool() {
   const [sortState, setSortState] = useState<{ column: number; direction: "asc" | "desc" } | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [encodingPreference, setEncodingPreference] = useState<TextEncodingPreference>("auto");
+  const [detectedEncoding, setDetectedEncoding] = useState<DetectedTextEncoding | null>(null);
 
   function loadText(text: string) {
     setError("");
@@ -37,6 +40,7 @@ export function CsvEditorTool() {
 
   function onPaste(text: string) {
     setRaw(text);
+    setDetectedEncoding(null);
     if (text.trim() !== "") loadText(text);
     else setRows([]);
   }
@@ -46,7 +50,12 @@ export function CsvEditorTool() {
     event.target.value = "";
     if (!file) return;
     if (file.size > MAX_SIZE) { setError("檔案超過 10 MB 上限"); return; }
-    void file.text().then((text) => { setRaw(""); loadText(text); });
+    void file.arrayBuffer().then((buffer) => {
+      const decoded = decodeTextBytes(new Uint8Array(buffer), encodingPreference);
+      setDetectedEncoding(decoded.encoding);
+      setRaw("");
+      loadText(decoded.text);
+    }).catch(() => setError("無法讀取檔案，請確認編碼設定或改用 UTF-8 CSV"));
   }
 
   function updateCell(rowIndex: number, colIndex: number, value: string) {
@@ -93,9 +102,18 @@ export function CsvEditorTool() {
         <>
           <label className="sr-only" htmlFor="csv-input">貼上 CSV 內容</label>
           <textarea id="csv-input" className="participant-input csv-paste" value={raw} onChange={(event) => onPaste(event.target.value)} placeholder={"貼上 CSV 或 TSV 內容（會自動偵測逗號、分號、Tab）…\n\n姓名,部門,分機\n小明,行銷,120\n小美,工程,241"} spellCheck={false} />
-          <div className="result-actions">
+          <div className="csv-import-toolbar">
             <button className="button button-small button-blue" type="button" onClick={() => fileRef.current?.click()}>開啟 CSV 檔案</button>
+            <label className="encoding-field" htmlFor="csv-encoding">檔案編碼
+              <select id="csv-encoding" value={encodingPreference} onChange={(event) => setEncodingPreference(event.target.value as TextEncodingPreference)}>
+                <option value="auto">自動辨識</option>
+                <option value="utf-8">UTF-8</option>
+                <option value="big5">Big5／ANSI 繁中</option>
+                <option value="windows-1252">ANSI 西文</option>
+              </select>
+            </label>
           </div>
+          <p className="key-note csv-encoding-note">自動支援 UTF-8 BOM、UTF-16 與常見 Big5／ANSI 繁中檔案。{detectedEncoding && `本次讀取：${encodingLabel(detectedEncoding)}`}</p>
           <input ref={fileRef} className="file-input" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={onPickFile} aria-label="選擇 CSV 檔案" />
         </>
       )}

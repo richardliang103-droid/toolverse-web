@@ -128,7 +128,8 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .result-empty { max-width: 280px; color: var(--muted); line-height: 1.6; }
 .result-empty strong { display: block; margin-bottom: 8px; color: var(--ink); font-size: 20px; }
 .winner-list { width: 100%; display: grid; gap: 10px; }
-.winner-item { padding: 14px 16px; border: 1px solid var(--ink); border-radius: 10px; background: var(--coral); font-size: 18px; font-weight: 800; box-shadow: 3px 3px 0 var(--ink); }
+.winner-item { position: relative; overflow: hidden; isolation: isolate; padding: 14px 16px; border: 1px solid var(--ink); border-radius: 10px; background: var(--coral); font-size: 18px; font-weight: 800; box-shadow: 3px 3px 0 var(--ink); }
+.winner-item-shine { position: absolute; top: -35%; left: -25%; width: 24%; height: 170%; pointer-events: none; opacity: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.72), transparent); transform: rotate(16deg) translateX(-135%); }
 .drawing-stage { display: grid; justify-items: center; gap: 12px; }
 .drawing-word { font-size: 32px; font-weight: 850; min-height: 1.2em; }
 .drawing-hint { color: var(--muted); font-size: 13px; letter-spacing: .04em; }
@@ -183,13 +184,16 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .lottery-stage-panel { display: grid; gap: 16px; justify-items: center; text-align: center; }
 .lottery-fairness { padding: 6px 9px; border: 1px solid rgba(217,177,91,.42); border-radius: 999px; color: #e8ca83; font-size: 11px; font-weight: 720; letter-spacing: .02em; white-space: nowrap; }
 .lottery-wheel-area { position: relative; display: grid; place-items: center; padding: 16px 34px 8px 6px; }
-.lottery-wheel-shell { position: relative; width: min(398px, 82vw); aspect-ratio: 1 / 1; filter: drop-shadow(0 0 30px rgba(183,137,59,.25)); }
+.lottery-wheel-shell { position: relative; z-index: 1; width: min(398px, 82vw); aspect-ratio: 1 / 1; filter: drop-shadow(0 0 30px rgba(183,137,59,.25)); }
 .lottery-wheel-shell::before { content: ""; position: absolute; inset: -13px; z-index: -1; border: 1px solid rgba(231,195,110,.22); border-radius: 50%; box-shadow: inset 0 0 24px rgba(231,195,110,.09), 0 0 34px rgba(106,136,195,.1); }
+.lottery-wheel-shell.is-spinning::before { animation: lottery-wheel-ring-breathe 1.15s ease-in-out infinite; }
 .lottery-wheel-svg { display: block; width: 100%; height: 100%; }
 .lottery-wheel-label { font-size: 16px; font-weight: 800; font-family: Inter, "Noto Sans TC", sans-serif; pointer-events: none; }
 /* At 3 o'clock the pointer must face left, into the wheel. The spin target
    remains 90° (right side), so this visual correction matches the target math. */
-.lottery-wheel-pointer { position: absolute; top: 50%; right: -15px; width: 32px; height: 36px; transform: translateY(-50%) rotate(90deg); z-index: 2; background: linear-gradient(160deg,#fff2cc,#dfb75d 55%,#9e702c); clip-path: polygon(50% 100%, 0 0, 100% 0); filter: drop-shadow(0 0 10px rgba(231,195,110,.7)); }
+.lottery-wheel-pointer { position: absolute; top: 50%; right: -15px; width: 32px; height: 36px; transform: translateY(calc(-50% + var(--pointer-bounce, 0px))) rotate(90deg); z-index: 2; background: linear-gradient(160deg,#fff2cc,#dfb75d 55%,#9e702c); clip-path: polygon(50% 100%, 0 0, 100% 0); filter: drop-shadow(0 0 10px rgba(231,195,110,.7)); }
+.lottery-wheel-shell.is-spinning .lottery-wheel-pointer { filter: drop-shadow(0 0 14px rgba(231,195,110,.92)); }
+.lottery-reveal-burst { position: absolute; top: 50%; left: 50%; width: min(430px, 94vw); aspect-ratio: 1; border: 2px solid rgba(242,193,105,.75); border-radius: 50%; box-shadow: 0 0 0 12px rgba(242,193,105,.08), 0 0 44px rgba(242,193,105,.48); pointer-events: none; z-index: 0; animation: lottery-reveal-ring .92s cubic-bezier(.2,.78,.24,1) forwards; }
 .lottery-spin-hint { margin: 0; color: #dfc27a; font-size: 13px; letter-spacing: .04em; animation: lottery-pulse 1s ease-in-out infinite; }
 @keyframes lottery-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 .lottery-flash-winner { position: absolute; top: -4px; left: 50%; transform: translate(-50%,-100%); padding: 10px 18px; border-radius: 999px; background: linear-gradient(135deg,#f2c169,#c68a2e); color: #1c1408; font-weight: 800; font-size: 15px; white-space: nowrap; box-shadow: 0 8px 20px rgba(198,138,46,.4); animation: lottery-flash-pop 1.8s ease forwards; pointer-events: none; z-index: 3; }
@@ -198,6 +202,13 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
   14% { opacity: 1; transform: translate(-50%,-112%) scale(1); }
   82% { opacity: 1; }
   100% { opacity: 0; transform: translate(-50%,-132%) scale(.92); }
+}
+@keyframes lottery-wheel-ring-breathe { 0%, 100% { opacity: .58; transform: scale(.985); } 50% { opacity: 1; transform: scale(1.018); } }
+@keyframes lottery-reveal-ring { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.38); } 18% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.08); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .lottery-wheel-shell.is-spinning::before, .lottery-reveal-burst, .lottery-spin-hint, .lottery-flash-winner { animation: none; }
+  .lottery-flash-winner { opacity: 1; transform: translate(-50%, -112%) scale(1); }
 }
 
 @media (max-width: 860px) {
@@ -494,6 +505,13 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 }
 
 /* Random groups — 結果卡片沿用日系和色（縹・鴇・松葉・藤）。 */
+.groups-workspace { grid-template-columns: minmax(0,.92fr) minmax(0,1.08fr); }
+.groups-import-toolbar, .csv-import-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; margin-bottom: 10px; }
+.encoding-field { display: grid; gap: 5px; min-width: min(100%, 190px); color: var(--muted); font-size: 12px; font-weight: 650; }
+.encoding-field select { min-height: 38px; padding: 0 30px 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--white); color: var(--ink); font: inherit; outline: none; }
+.encoding-field select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+.groups-input-note, .csv-encoding-note { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.groups-input-note span { display: inline-block; margin-left: 8px; color: var(--blue); font-weight: 700; }
 .groups-value-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-top: 16px; }
 .groups-value-row .number-field { margin-left: 0; }
 .groups-forecast { color: var(--muted); font-size: 13px; }
@@ -509,6 +527,9 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .group-card h3 span { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 600; color: var(--muted); }
 .group-card ol { margin: 0; padding-left: 22px; line-height: 1.9; font-size: 14.5px; font-weight: 600; }
 .group-card ol li::marker { color: var(--muted); font-weight: 400; }
+.group-member-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.group-member-row span { min-width: 0; overflow-wrap: anywhere; }
+.group-member-row small { flex: 0 1 auto; color: var(--muted); font-size: 11px; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
 .group-card-tone-0 { background: #e4ecf3; }
 .group-card-tone-1 { background: #f9e9ec; }
 .group-card-tone-2 { background: #ebf1e2; }
@@ -516,8 +537,14 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .groups-workspace .result-actions { flex-wrap: wrap; }
 
 @media (max-width: 560px) {
-  .groups-result-grid { grid-template-columns: 1fr 1fr; }
+  .groups-result-grid { grid-template-columns: 1fr; }
   .groups-value-row { align-items: flex-start; flex-direction: column; }
+  .groups-import-toolbar, .csv-import-toolbar { align-items: stretch; flex-direction: column; }
+  .groups-import-toolbar .button, .csv-import-toolbar .button, .encoding-field, .encoding-field select { width: 100%; }
+}
+
+@media (max-width: 980px) {
+  .groups-workspace { grid-template-columns: 1fr; }
 }
 
 /* Image compressor */
@@ -797,7 +824,7 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 [data-theme="dark"] .panel { background: #1a2231; }
 [data-theme="dark"] .panel-tinted { background: #1e2739; }
 [data-theme="dark"] .workspace, [data-theme="dark"] .flowchart-workspace, [data-theme="dark"] .gantt-workspace { border-color: #2b3446; box-shadow: 8px 8px 0 rgba(0,0,0,.35); }
-[data-theme="dark"] .participant-input, [data-theme="dark"] .flow-prompt, [data-theme="dark"] .key-input, [data-theme="dark"] .flow-options select, [data-theme="dark"] .number-input, [data-theme="dark"] .qr-color-row input[type="color"] { background: #0e1421; color: var(--ink); }
+[data-theme="dark"] .participant-input, [data-theme="dark"] .flow-prompt, [data-theme="dark"] .key-input, [data-theme="dark"] .flow-options select, [data-theme="dark"] .number-input, [data-theme="dark"] .encoding-field select, [data-theme="dark"] .qr-color-row input[type="color"] { background: #0e1421; color: var(--ink); }
 [data-theme="dark"] .result-stage { background-color: #141b29; background-image: radial-gradient(#33405c 1px, transparent 1px); border-color: #45536f; }
 [data-theme="dark"] .drop-zone, [data-theme="dark"] .qr-template-fields, [data-theme="dark"] .flowchart-empty, [data-theme="dark"] .mermaid-code, [data-theme="dark"] .model-progress, [data-theme="dark"] .compressor-item, [data-theme="dark"] .pdf-merge-list li, [data-theme="dark"] .audio-merge-list li, [data-theme="dark"] .pdf-help code, [data-theme="dark"] .favicon-previews, [data-theme="dark"] .favicon-snippets details { background: #141b29; }
 
