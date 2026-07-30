@@ -10,6 +10,7 @@ import {
   createParticipant,
   createPrize,
   createRoster,
+  csvRowsToDownloadText,
   disqualifyWinner,
   drawEventWinners,
   EventLotteryError,
@@ -39,6 +40,7 @@ import {
   visibleWinnerCount,
   winnersToCsv,
 } from "../lib/event-lottery.ts";
+import { detectDelimiter, parseDelimited } from "../lib/csv.ts";
 
 function buildBasicState() {
   let state = createEmptyEventState();
@@ -705,7 +707,7 @@ test("空白活動不崩潰：所有查詢函式對空狀態都安全", () => {
   const empty = createEmptyEventState();
   assert.deepEqual(candidatePool(empty, "anything"), []);
   assert.equal(validateDraw(empty, "anything", 1).ok, false);
-  assert.equal(winnersToCsv(empty), "﻿抽取時間,獎項,部門,姓名,員工編號,狀態");
+  assert.equal(winnersToCsv(empty), "﻿sep=,\r\n抽取時間,獎項,部門,姓名,員工編號,狀態");
   assert.equal(canDeletePrize(empty, "anything"), true);
 });
 
@@ -723,6 +725,33 @@ test("winnersToCsv：欄位含逗號時正確跳脫", () => {
   const csv = winnersToCsv(nextState);
   assert.match(csv, /得獎/);
   assert.match(csv, new RegExp(nextState.winners[0].participantName));
+});
+
+test("winnersToCsv／csvRowsToDownloadText：帶 sep=, 宣告列，Excel 雙擊開啟不受地區設定影響，且能被自己的 CSV 解析器正確讀回", () => {
+  const { state, prize } = buildBasicState();
+  const bigPrize = { ...prize, totalCount: 3 };
+  const current = { ...state, prizes: [bigPrize] };
+  const { nextState } = drawEventWinners(current, prize.id, 1);
+  const csv = winnersToCsv(nextState);
+  assert.ok(csv.startsWith("﻿sep=,\r\n"), "BOM 後緊接著 sep=, 宣告列");
+
+  // 下載→（模擬使用者用 Excel 開啟並重新存檔，內容不變）→重新上傳這個流程，
+  // 用專案自己的 CSV 解析器讀回，不能把 sep=, 那一列當成資料，欄位也不能被
+  // 誤判合併在一起。
+  const delimiter = detectDelimiter(csv);
+  assert.equal(delimiter, ",");
+  const rows = parseDelimited(csv, delimiter);
+  assert.deepEqual(rows[0], ["抽取時間", "獎項", "部門", "姓名", "員工編號", "狀態"]);
+  assert.equal(rows.length, 2, "sep=, 那一列不該被算成一筆得獎資料");
+  assert.equal(rows[1][3], nextState.winners[0].participantName);
+});
+
+test("csvRowsToDownloadText：任意表格資料都能正確 round-trip", () => {
+  const rows = [["部門", "姓名", "員工編號"], ["法金資訊部", "梁O強", "99999"], ["含,逗號的部門", "小美", "E002"]];
+  const csv = csvRowsToDownloadText(rows);
+  const delimiter = detectDelimiter(csv);
+  assert.equal(delimiter, ",");
+  assert.deepEqual(parseDelimited(csv, delimiter), rows);
 });
 
 test("JSON 備份匯出／匯入：往返後資料一致", () => {

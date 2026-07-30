@@ -1,8 +1,27 @@
 export type CsvDelimiter = "," | ";" | "\t";
 
-/** 從前幾行猜分隔符：逗號、分號、Tab 取出現最穩定的一個。 */
+// Excel 在使用者的 Windows 地區設定「清單分隔符號」不是逗號時，直接雙擊開啟
+// CSV 會整列塞進同一欄——這是造成「下載下來編輯，重新打開欄位全部合併在一起」
+// 最常見的原因，跟檔案內容本身無關。在檔案第一列放一個 Excel 認得的 `sep=X`
+// 宣告列，可以強制 Excel 用指定分隔符號開啟，不受使用者當下的地區設定影響。
+const SEP_DIRECTIVE = /^sep=(.)\r?\n/;
+
+/** 去掉 BOM，並在偵測到 `sep=X` 宣告列時一併去掉那一列，避免它被誤判成資料列；
+ *  宣告的分隔符號一併回傳，讓呼叫端可以直接採用，不需要再用啟發式猜一次。 */
+function stripBomAndSepDirective(text: string): { delimiter: CsvDelimiter | null; rest: string } {
+  const withoutBom = text.replace(/^﻿/, "");
+  const match = withoutBom.match(SEP_DIRECTIVE);
+  if (!match) return { delimiter: null, rest: withoutBom };
+  const char = match[1];
+  const delimiter: CsvDelimiter | null = char === "," || char === ";" || char === "\t" ? char : null;
+  return { delimiter, rest: withoutBom.slice(match[0].length) };
+}
+
+/** 從前幾行猜分隔符：優先採用 `sep=X` 宣告，否則從逗號、分號、Tab 取出現最穩定的一個。 */
 export function detectDelimiter(text: string): CsvDelimiter {
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter((line) => line.trim() !== "").slice(0, 10);
+  const { delimiter: declared, rest } = stripBomAndSepDirective(text);
+  if (declared) return declared;
+  const lines = rest.split(/\r?\n/).filter((line) => line.trim() !== "").slice(0, 10);
   if (lines.length === 0) return ",";
   const candidates: CsvDelimiter[] = [",", ";", "\t"];
   let best: CsvDelimiter = ",";
@@ -15,9 +34,9 @@ export function detectDelimiter(text: string): CsvDelimiter {
   return best;
 }
 
-/** 解析 CSV／TSV：支援引號欄位、欄內分隔符與換行、"" 跳脫、BOM。 */
+/** 解析 CSV／TSV：支援引號欄位、欄內分隔符與換行、"" 跳脫、BOM、`sep=X` 宣告列。 */
 export function parseDelimited(text: string, delimiter: CsvDelimiter = ","): string[][] {
-  const source = text.replace(/^﻿/, "");
+  const { rest: source } = stripBomAndSepDirective(text);
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";

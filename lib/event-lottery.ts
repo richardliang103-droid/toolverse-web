@@ -902,6 +902,19 @@ function csvField(value: string): string {
   return /["\n\r,]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
+/**
+ * BOM＋Excel 認得的 `sep=,` 宣告列＋CRLF 換行。雙擊在 Excel 開啟 CSV 時，Excel
+ * 預設用「目前 Windows 地區設定的清單分隔符號」切欄，不一定是逗號；沒有這行
+ * 宣告的話，地區設定用分號（例如部分歐洲語系或自訂地區格式）的使用者下載、
+ * 編輯、重新開啟後就會整列被塞進同一格，看起來像欄位全部「合併在一起」。這個
+ * 宣告讓 Excel 固定用逗號分欄，不受使用者當下的地區設定影響；`lib/csv.ts` 的
+ * `parseDelimited`／`detectDelimiter` 也認得這一行，重新上傳這份檔案時會正確
+ * 略過它，不會被誤判成一筆資料。
+ */
+export function csvRowsToDownloadText(rows: string[][]): string {
+  return `﻿sep=,\r\n${rows.map((row) => row.map(csvField).join(",")).join("\r\n")}`;
+}
+
 /** 參考專案的歷史紀錄格式：在地時間、年月日與時分秒都補零。 */
 export function formatLotteryTimestamp(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value);
@@ -926,7 +939,7 @@ export function winnersToCsv(state: LotteryEventState): string {
       winner.disqualified ? "已失格" : "得獎",
     ]);
   }
-  return `﻿${rows.map((row) => row.map(csvField).join(",")).join("\r\n")}`;
+  return csvRowsToDownloadText(rows);
 }
 
 export function eventBackupFileName(state: LotteryEventState, date = new Date()): string {
