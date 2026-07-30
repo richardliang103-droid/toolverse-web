@@ -850,6 +850,18 @@ export function EventLotteryConsole() {
     commit({ ...state, stageDrawCount: next });
   }
 
+  /** 選好獎項時把「本輪抽出人數」重設為這個獎項目前的剩餘名額——一個獎項
+   *  預設就是一次全部抽完（跟 prepareStagePrize() 對「同步顯示於前台」的行為
+   *  一致），操作人員直接按「強制開始抽獎」跳過準備步驟也不會漏抽或要手動
+   *  改好幾次數字；需要分批抽選時仍可以在下方欄位自行改小。 */
+  function handleSelectDrawPrize(prizeId: string) {
+    setDrawPrizeId(prizeId);
+    const prize = orderedPrizes.find((item) => item.id === prizeId);
+    if (!prize) return;
+    const fullCount = Math.max(1, Math.min(remainingSlots(prize), candidatePool(state, prize.id).length, MAX_DRAW_COUNT_PER_ROUND));
+    if (fullCount !== state.stageDrawCount) commit({ ...state, stageDrawCount: fullCount });
+  }
+
   // 對齊原後台：控制台初始不預選獎項，主持人必須明確選擇後才能準備或抽獎，
   // 避免剛開頁面就誤觸第一個獎項。
   const effectiveDrawPrizeId = orderedPrizes.some((prize) => prize.id === drawPrizeId) ? drawPrizeId : "";
@@ -1188,7 +1200,7 @@ export function EventLotteryConsole() {
                 </div>
                 <div className="event-lottery-inline-form">
                   <label className="number-field" htmlFor="draw-prize">選擇獎項
-                    <select id="draw-prize" className="key-input" value={effectiveDrawPrizeId} disabled={drawLocked} onChange={(event) => setDrawPrizeId(event.target.value)}>
+                    <select id="draw-prize" className="key-input" value={effectiveDrawPrizeId} disabled={drawLocked} onChange={(event) => handleSelectDrawPrize(event.target.value)}>
                       <option value="">請選擇抽獎獎項...</option>
                       {orderedPrizes.filter((prize) => remainingSlots(prize) > 0).map((prize) => <option key={prize.id} value={prize.id}>{orderedPrizes.indexOf(prize) + 1}. {prize.name}（剩餘 {remainingSlots(prize)}）</option>)}
                     </select>
