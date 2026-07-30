@@ -37,6 +37,8 @@ test("server-renders all tool routes", async () => {
     ["/tools/background-remover", /把圖片拖到這裡/],
     ["/tools/ai-flowchart", /描述你的流程/],
     ["/tools/gantt", /新增任務/],
+    ["/tools/equity-chart", /持股關係/],
+    ["/tools/operations-chart", /上游供應商/],
     ["/tools/random-groups", /開始分組/],
     ["/tools/image-compressor", /開始壓縮/],
     ["/tools/qr-code", /網址或文字/],
@@ -52,12 +54,30 @@ test("server-renders all tool routes", async () => {
     ["/tools/csv-editor", /CSV／TSV 表格/],
     ["/tools/image-converter", /輸出格式/],
     ["/tools/audio-trimmer", /把音訊檔拖到這裡|合併音檔/],
+    ["/tools/calendar", /回到本月/],
+    ["/tools/event-lottery", /活動抽獎控制台/],
   ];
   for (const [pathname, pattern] of routes) {
     const response = await render(pathname);
     assert.equal(response.status, 200, `${pathname} 應回 200`);
     assert.match(await response.text(), pattern, `${pathname} 缺少預期內容`);
   }
+});
+
+test("server-renders the event lottery stage page", async () => {
+  const response = await render("/tools/event-lottery/stage");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /noindex/);
+});
+
+test("server-renders the event lottery mobile remote page without leaking any client-only state", async () => {
+  const response = await render("/tools/event-lottery/remote");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  // 手機遙控頁不該被索引，也不該在伺服器端就洩漏任何 hydration 前的 client 狀態。
+  assert.match(html, /noindex/);
+  assert.doesNotMatch(html, /長按開始抽獎|顯示下一個獎項/);
 });
 
 test("server-renders the workspace page without touching browser storage", async () => {

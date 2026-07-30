@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { MAX_TIMER_MS, clampTimerMs, formatClock, formatStopwatch, isWarningZone } from "@/lib/timer";
+import { useEffect, useRef, useState, type WheelEvent } from "react";
+import { MAX_TIMER_MS, clampTimerMs, computeLaps, formatClock, formatStopwatch, isWarningZone } from "@/lib/timer";
 
 const STORAGE_KEY = "toolverse:countdown-timer:v1";
 const PRESETS = [
@@ -74,7 +74,18 @@ export function CountdownTimerTool() {
   const [mode, setMode] = useState<TimerMode>("countdown");
   const [stopwatchMs, setStopwatchMs] = useState(0);
   const [stopwatchRunning, setStopwatchRunning] = useState(false);
+  const [laps, setLaps] = useState<number[]>([]);
   const [clockNow, setClockNow] = useState({ time: "", date: "" });
+  const [minutesDraft, setMinutesDraft] = useState(() => String(Math.round(totalMs / 60_000)));
+  // 記錄「草稿字串上一次同步時對應的 totalMs」，好在 render 期間比對是否要
+  // 重新同步——這是 React 官方建議「依外部狀態調整某個 state」的寫法：
+  // 直接在 render body 呼叫 setState（React 會在提交前重新渲染，不會閃爍），
+  // 不需要 useEffect（也因此不會觸發 react-hooks/set-state-in-effect）。
+  const [syncedTotalMs, setSyncedTotalMs] = useState(totalMs);
+  if (totalMs !== syncedTotalMs) {
+    setSyncedTotalMs(totalMs);
+    setMinutesDraft(String(Math.round(totalMs / 60_000)));
+  }
   const stageRef = useRef<HTMLDivElement>(null);
   const endAtRef = useRef(0);
   const stopwatchBaseRef = useRef(0);
@@ -126,11 +137,12 @@ export function CountdownTimerTool() {
   }, [phase, soundOn, segments, segmentIndex]);
 
   // 碼表同樣以絕對時間戳累計，interval 只負責重繪，分頁節流不影響準確度。
+  // 顯示到百分之一秒，重繪間隔比倒數計時短，數字才不會卡格跳動。
   useEffect(() => {
     if (mode !== "stopwatch" || !stopwatchRunning) return;
     const tick = () => setStopwatchMs(stopwatchBaseRef.current + Date.now() - stopwatchStartedRef.current);
     tick();
-    const interval = window.setInterval(tick, 200);
+    const interval = window.setInterval(tick, 30);
     const onVisible = () => tick();
     document.addEventListener("visibilitychange", onVisible);
     return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
@@ -226,6 +238,20 @@ export function CountdownTimerTool() {
     applyDuration(clampTimerMs(totalMs + delta * 60_000));
   }
 
+  /** 分鐘輸入框的 blur／Enter 提交：把草稿字串解析成分鐘數，無效輸入就還原顯示。 */
+  function commitMinutesDraft() {
+    const parsed = Math.round(Number(minutesDraft));
+    if (Number.isFinite(parsed) && parsed > 0) applyDuration(parsed * 60_000);
+    else setMinutesDraft(String(Math.round(totalMs / 60_000)));
+  }
+
+  /** 滑鼠滾輪調整分鐘數；停用時放行讓頁面照常捲動。 */
+  function onMinutesWheel(event: WheelEvent<HTMLInputElement>) {
+    if (countdownActive) return;
+    event.preventDefault();
+    adjustMinutes(event.deltaY < 0 ? 1 : -1);
+  }
+
   function stopwatchStart() {
     stopwatchStartedRef.current = Date.now();
     setStopwatchRunning(true);
@@ -240,6 +266,12 @@ export function CountdownTimerTool() {
     stopwatchBaseRef.current = 0;
     setStopwatchRunning(false);
     setStopwatchMs(0);
+    setLaps([]);
+  }
+
+  /** 記一圈：存當下的累計時間，單圈耗時與最快／最慢由 computeLaps 從這份累計清單算出。 */
+  function recordLap() {
+    setLaps((previous) => [...previous, stopwatchMs]);
   }
 
   async function toggleFullscreen() {
@@ -254,8 +286,8 @@ export function CountdownTimerTool() {
   const segmentTotalMs = segments.length > 0 ? segments[Math.min(segmentIndex, segments.length - 1)].minutes * 60_000 : totalMs;
   const warning = phase === "running" && isWarningZone(remainingMs, segmentTotalMs);
   const display = formatClock(phase === "idle" ? (segments.length > 0 ? segments[0].minutes * 60_000 : totalMs) : remainingMs);
-  const minutesTotal = Math.round(totalMs / 60_000);
   const countdownActive = phase === "running" || phase === "paused";
+  const { laps: lapRows, fastestIndex, slowestIndex } = computeLaps(laps);
 
   return <section className="workspace timer-workspace page-shell" aria-label="倒數計時器">
     <div className="panel timer-controls">
@@ -265,7 +297,23 @@ export function CountdownTimerTool() {
           <button key={item.id} type="button" className={`button button-small ${mode === item.id ? "button-blue" : "button-secondary"}`} aria-pressed={mode === item.id} onClick={() => setMode(item.id)} disabled={countdownActive || stopwatchRunning}>{item.label}</button>
         ))}
       </div>
-      {mode === "stopwatch" && <p className="key-note">碼表從 00:00 開始正計時，適合演講、比賽或紀錄工作時間；超過一小時自動顯示小時位。切分頁或螢幕休眠都不影響準確度。</p>}
+      {mode === "stopwatch" && <>
+        <p className="key-note">碼表從 00:00.00 開始正計時，精確到百分之一秒，適合演講、比賽或紀錄工作時間；超過一小時自動顯示小時位。進行中可以按「分圈」多圈累計計時，切分頁或螢幕休眠都不影響準確度。</p>
+        {lapRows.length > 0 && (
+          <ul className="timer-lap-list" aria-label="分圈紀錄">
+            {[...lapRows].reverse().map((lap) => (
+              <li
+                key={lap.index}
+                className={`timer-lap-row${lap.index - 1 === fastestIndex ? " timer-lap-fastest" : ""}${lap.index - 1 === slowestIndex ? " timer-lap-slowest" : ""}`}
+              >
+                <span className="timer-lap-index">第 {lap.index} 圈</span>
+                <span className="timer-lap-split">{formatStopwatch(lap.lapMs)}</span>
+                <span className="timer-lap-total">累計 {formatStopwatch(lap.totalMs)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </>}
       {mode === "clock" && <p className="key-note">全螢幕大字時鐘，適合活動現場或講台上看時間；跟隨你裝置的系統時間，顯示期間螢幕不會自動休眠。</p>}
       {mode === "countdown" && <><div className="timer-presets">
         {PRESETS.map((preset) => (
@@ -274,15 +322,45 @@ export function CountdownTimerTool() {
       </div>
       <div className="timer-custom">
         <button className="button button-small button-secondary" type="button" onClick={() => adjustMinutes(-1)} disabled={countdownActive || totalMs <= 60_000} aria-label="減少一分鐘">−1 分</button>
-        <span className="timer-custom-value">{minutesTotal} 分鐘</span>
+        <input
+          className="number-input timer-custom-input"
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={99}
+          value={minutesDraft}
+          disabled={countdownActive}
+          aria-label="分鐘數，可直接輸入或用滾輪調整"
+          onChange={(event) => setMinutesDraft(event.target.value)}
+          onBlur={commitMinutesDraft}
+          onKeyDown={(event) => { if (event.key === "Enter") { commitMinutesDraft(); event.currentTarget.blur(); } }}
+          onWheel={onMinutesWheel}
+        />
+        <span className="timer-custom-unit">分鐘</span>
         <button className="button button-small button-secondary" type="button" onClick={() => adjustMinutes(1)} disabled={countdownActive || totalMs >= MAX_TIMER_MS - 59_000} aria-label="增加一分鐘">＋1 分</button>
       </div>
+      <p className="key-note timer-input-hint">也可以直接輸入分鐘數，或把滑鼠移到數字上用滾輪調整。</p>
       <details className="timer-segments" open={segments.length > 0}>
         <summary>多段模式{segments.length > 0 ? `（${segments.length} 段）` : "（選用）"}</summary>
         {segments.map((segment, index) => (
           <div className="timer-segment-row" key={index}>
             <input className="key-input" aria-label={`第 ${index + 1} 段名稱`} placeholder={`第 ${index + 1} 段`} maxLength={20} value={segment.label} disabled={countdownActive} onChange={(event) => setSegments((previous) => previous.map((item, at) => (at === index ? { ...item, label: event.target.value } : item)))} />
-            <input className="number-input" aria-label={`第 ${index + 1} 段分鐘數`} type="number" min={1} max={99} value={segment.minutes} disabled={countdownActive} onChange={(event) => setSegments((previous) => previous.map((item, at) => (at === index ? { ...item, minutes: Math.min(Math.max(Math.round(Number(event.target.value)) || 1, 1), 99) } : item)))} />
+            <input
+              className="number-input"
+              aria-label={`第 ${index + 1} 段分鐘數，可直接輸入或用滾輪調整`}
+              type="number"
+              min={1}
+              max={99}
+              value={segment.minutes}
+              disabled={countdownActive}
+              onChange={(event) => setSegments((previous) => previous.map((item, at) => (at === index ? { ...item, minutes: Math.min(Math.max(Math.round(Number(event.target.value)) || 1, 1), 99) } : item)))}
+              onWheel={(event) => {
+                if (countdownActive) return;
+                event.preventDefault();
+                const delta = event.deltaY < 0 ? 1 : -1;
+                setSegments((previous) => previous.map((item, at) => (at === index ? { ...item, minutes: Math.min(Math.max(item.minutes + delta, 1), 99) } : item)));
+              }}
+            />
             <span className="timer-segment-unit">分</span>
             <button className="gantt-row-delete" type="button" aria-label={`刪除第 ${index + 1} 段`} disabled={countdownActive} onClick={() => setSegments((previous) => previous.filter((_, at) => at !== index))}>✕</button>
           </div>
@@ -301,7 +379,8 @@ export function CountdownTimerTool() {
         {mode === "clock" && clockNow.date && <div className="timer-segment-indicator">{clockNow.date}</div>}
         {(() => {
           const stageText = mode === "stopwatch" ? formatStopwatch(stopwatchMs) : mode === "clock" ? (clockNow.time || "--:--:--") : phase === "finished" ? "時間到" : display;
-          // 時鐘／破小時的碼表是 7–8 字（HH:MM:SS），用較小的字級避免爆出舞台。
+          // 時鐘（HH:MM:SS）與碼表（含百分之一秒，MM:SS.cc 起跳）都是 7 字以上，
+          // 用較小的字級避免爆出舞台；倒數的 MM:SS 只有 5 字，維持原本大字級。
           return <output className={`timer-display${stageText.length > 5 ? " timer-display-long" : ""}`} aria-live="polite">{stageText}</output>;
         })()}
         <div className="timer-actions">
@@ -312,6 +391,7 @@ export function CountdownTimerTool() {
           {mode === "stopwatch" && (stopwatchRunning
             ? <button className="button button-coral" type="button" onClick={stopwatchPause}>暫停</button>
             : <button className="button button-blue" type="button" onClick={stopwatchStart}>{stopwatchMs > 0 ? "繼續" : "開始"}</button>)}
+          {mode === "stopwatch" && stopwatchRunning && <button className="button button-secondary" type="button" onClick={recordLap}>分圈</button>}
           {mode === "stopwatch" && stopwatchMs > 0 && !stopwatchRunning && <button className="button button-secondary" type="button" onClick={stopwatchReset}>歸零</button>}
           <button className="button button-secondary" type="button" onClick={toggleFullscreen}>全螢幕</button>
         </div>

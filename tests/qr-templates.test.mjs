@@ -47,8 +47,8 @@ test("qrTextForTemplate：切換模板不沿用上一份內容", () => {
 });
 
 test("formatStopwatch：分秒與小時進位", () => {
-  assert.equal(formatStopwatch(0), "00:00");
-  assert.equal(formatStopwatch(65_000), "01:05");
-  assert.equal(formatStopwatch(3_600_000), "1:00:00");
-  assert.equal(formatStopwatch(3_725_000), "1:02:05");
+  assert.equal(formatStopwatch(0), "00:00.00");
+  assert.equal(formatStopwatch(65_000), "01:05.00");
+  assert.equal(formatStopwatch(3_600_000), "1:00:00.00");
+  assert.equal(formatStopwatch(3_725_000), "1:02:05.00");
 });
