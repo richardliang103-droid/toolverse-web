@@ -765,7 +765,7 @@ export function EventLotteryConsole() {
 
   function handleDeletePrize(id: string) {
     if (!canDeletePrize(state, id)) {
-      showNotice("這個獎項已經有得獎紀錄（含失格），無法刪除，避免紀錄出現懸空引用", "error");
+      showNotice("這個獎項已經有得獎紀錄（含已取消重抽的紀錄），無法刪除，避免紀錄出現懸空引用", "error");
       return;
     }
     prizeConfirm.confirm(id, () => {
@@ -917,6 +917,13 @@ export function EventLotteryConsole() {
   }
 
   function handleShowPrizeWinners(prizeId: string) {
+    if (state.stagePreview?.prizeId === prizeId) {
+      const result = clearStageAction(state, post);
+      if (!result.ok) { showNotice(result.reason, "error"); return; }
+      setState(result.state);
+      showNotice("已停止顯示這個獎項的名單");
+      return;
+    }
     const result = previewPrizeWinnersAction(state, prizeId, post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setState(result.state);
@@ -928,10 +935,10 @@ export function EventLotteryConsole() {
   }
 
   function handleExportRemainingCsv() {
-    const rows = [["員工編號", "姓名", "部門", "名單組別"], ...remainingParticipants.map((participant) => [
-      participant.employeeId,
-      participant.name,
+    const rows = [["部門", "姓名", "員工編號", "名單組別"], ...remainingParticipants.map((participant) => [
       participant.department,
+      participant.name,
+      participant.employeeId,
       rosterById.get(participant.rosterId)?.name ?? "",
     ])];
     downloadBlob(new Blob([csvRowsToDownloadText(rows)], { type: "text/csv;charset=utf-8" }), `尚可抽人員名單-${Date.now()}.csv`);
@@ -1058,6 +1065,11 @@ export function EventLotteryConsole() {
             <span>音效開關</span>
             <label className="check-row"><input type="checkbox" checked={state.soundEnabled} onChange={(event) => commit({ ...state, soundEnabled: event.target.checked })} />開啟音效</label>
           </div>
+          <div className="event-lottery-sound-control">
+            <span>前台抽獎按鈕</span>
+            <label className="check-row"><input type="checkbox" checked={state.stageButtonVisible} onChange={(event) => commit({ ...state, stageButtonVisible: event.target.checked })} />在舞台畫面顯示</label>
+            <span className="panel-meta">關閉後仍可用鍵盤、簡報筆或手機遙控操作</span>
+          </div>
         </div>
         <div className="event-lottery-background-row">
           <span className="panel-meta">前台背景</span>
@@ -1117,9 +1129,9 @@ export function EventLotteryConsole() {
           <div className="event-lottery-subsection">
             <h3>手動新增參加者</h3>
             <div className="event-lottery-inline-form">
+              <input className="key-input" type="text" placeholder="部門（可空白）" value={manualDepartment} maxLength={MAX_NAME_LENGTH} onChange={(event) => setManualDepartment(event.target.value)} />
               <input className="key-input" type="text" placeholder="姓名 *" value={manualName} maxLength={MAX_NAME_LENGTH} onChange={(event) => setManualName(event.target.value)} />
               <input className="key-input" type="text" placeholder="員工編號 *" value={manualEmployeeId} maxLength={MAX_NAME_LENGTH} onChange={(event) => setManualEmployeeId(event.target.value)} />
-              <input className="key-input" type="text" placeholder="部門（可空白）" value={manualDepartment} maxLength={MAX_NAME_LENGTH} onChange={(event) => setManualDepartment(event.target.value)} />
               <select className="key-input" value={effectiveManualRosterId} onChange={(event) => setManualRosterId(event.target.value)} aria-label="加入名單群組">
                 {state.rosters.map((roster) => <option key={roster.id} value={roster.id}>{roster.name}</option>)}
               </select>
@@ -1163,13 +1175,13 @@ export function EventLotteryConsole() {
               ? <p className="result-empty"><strong>還沒有參加者</strong>用上方表單新增，或匯入 CSV。</p>
               : <>
                 <div className="csv-table-scroll"><table className="csv-table event-lottery-table">
-                  <thead><tr><th>姓名</th><th>員工編號</th><th>部門</th><th>名單群組</th><th>狀態</th><th></th></tr></thead>
+                  <thead><tr><th>部門</th><th>姓名</th><th>員工編號</th><th>名單群組</th><th>狀態</th><th></th></tr></thead>
                   <tbody>
                     {paginatedParticipants.map((participant: EventParticipant) => (
                       <tr key={participant.id}>
+                        <td>{participant.department}</td>
                         <td>{participant.name}</td>
                         <td>{participant.employeeId}</td>
-                        <td>{participant.department}</td>
                         <td>{rosterById.get(participant.rosterId)?.name ?? "—"}</td>
                         <td><button className="button button-small button-secondary" type="button" onClick={() => handleToggleActive(participant.id)}>{participant.active ? "有效" : "已停用"}</button></td>
                         <td><button className="button button-small button-danger" type="button" onClick={() => handleDeleteParticipant(participant.id)}>{participantConfirm.armedId === participant.id ? "確定？" : "刪除"}</button></td>
@@ -1351,7 +1363,16 @@ export function EventLotteryConsole() {
                     <div className="event-lottery-prize-actions">
                       <button className="gantt-row-delete" type="button" aria-label="往上移" disabled={index === 0} onClick={() => movePrize(prize.id, -1)}>↑</button>
                       <button className="gantt-row-delete" type="button" aria-label="往下移" disabled={index === orderedPrizes.length - 1} onClick={() => movePrize(prize.id, 1)}>↓</button>
-                      <button className="button button-small button-secondary" type="button" title="顯示前台名單" aria-label={`顯示「${prize.name}」的前台名單`} onClick={() => handleShowPrizeWinners(prize.id)} disabled={!state.winners.some((winner) => winner.prizeId === prize.id)}>👁️</button>
+                      <button
+                        className={`button button-small ${state.stagePreview?.prizeId === prize.id ? "button-blue" : "button-secondary"}`}
+                        type="button"
+                        title={state.stagePreview?.prizeId === prize.id ? "停止顯示前台名單" : "顯示前台名單"}
+                        aria-label={state.stagePreview?.prizeId === prize.id ? `停止顯示「${prize.name}」的前台名單` : `顯示「${prize.name}」的前台名單`}
+                        onClick={() => handleShowPrizeWinners(prize.id)}
+                        disabled={state.stagePreview?.prizeId !== prize.id && !state.winners.some((winner) => winner.prizeId === prize.id)}
+                      >
+                        {state.stagePreview?.prizeId === prize.id ? "🛑" : "👁️"}
+                      </button>
                       <button className="button button-small button-secondary" type="button" onClick={() => openPrizeEditor(prize)}>編輯</button>
                       <button className="button button-small button-secondary" type="button" onClick={() => prizeImageInputRefs.current.get(prize.id)?.click()}>{prize.imageDataUrl ? "更換圖片" : "上傳圖片"}</button>
                       <input ref={(element) => { prizeImageInputRefs.current.set(prize.id, element); }} className="file-input" type="file" accept="image/*" aria-label={`上傳「${prize.name}」的圖片`} onChange={(event) => { const file = event.target.files?.[0]; if (file) void handlePrizeImage(prize.id, file); event.target.value = ""; }} />
@@ -1383,7 +1404,7 @@ export function EventLotteryConsole() {
                       <td>{winner.department}</td>
                       <td>{winner.participantName}</td>
                       <td>{winner.employeeId}</td>
-                      <td>{winner.disqualified ? "已失格" : "得獎"}</td>
+                      <td>{winner.disqualified ? "已取消重抽" : "得獎"}</td>
                       <td>{showDisqualify && !winner.disqualified && <button className="button button-small button-danger" type="button" onClick={() => handleDisqualify(winner.id)}>{winnerConfirm.armedId === winner.id ? "確定？" : "取消重抽"}</button>}</td>
                     </tr>
                   ))}
@@ -1410,13 +1431,13 @@ export function EventLotteryConsole() {
             <p className="panel-meta">顯示 {remainingParticipants.length} 人</p>
             <div className="csv-table-scroll">
               <table className="csv-table event-lottery-table">
-                <thead><tr><th>員工編號</th><th>姓名</th><th>部門</th><th>名單組別</th></tr></thead>
+                <thead><tr><th>部門</th><th>姓名</th><th>員工編號</th><th>名單組別</th></tr></thead>
                 <tbody>
                   {paginatedRemainingParticipants.map((participant) => (
                     <tr key={participant.id}>
-                      <td>{participant.employeeId}</td>
-                      <td>{participant.name}</td>
                       <td>{participant.department}</td>
+                      <td>{participant.name}</td>
+                      <td>{participant.employeeId}</td>
                       <td>{rosterById.get(participant.rosterId)?.name ?? ""}</td>
                     </tr>
                   ))}
@@ -1487,9 +1508,9 @@ export function EventLotteryConsole() {
             <h3>二、抽獎設定與同步</h3>
             <p>1. <strong>選擇抽獎模式</strong>：在上方控制列選擇「逐次抽出」（動畫一張一張翻出）或「一次抽出」（依據設定的<strong>抽獎動畫時間</strong>滾動後一次全開）。有音效需求也可在此開啟。</p>
             <p>2. <strong>準備畫面</strong>：確認控制視窗有選到前台的視窗，會看到最上方前台大標題在閃爍，代表已可進行抽獎，系統即會按照匯入獎項名單順序抽出。若有要臨時改抽後續某個獎項，可在「抽獎控制」選擇獎項並點擊<strong>同步顯示於前台</strong>；若前台螢幕有開啟，此時會切換至該獎項的「即將抽出」預備畫面，上方的黃底提示也會即時更新目前的預定進度。</p>
-            <p>3. <strong>前台快捷操控</strong>：可以直接在擁有前台大螢幕的電腦上按下<strong>空白鍵 / PageDown / 鍵盤方向鍵右鍵</strong>來觸發開獎（也支援 Enter、滑鼠、投影筆與手機遙控）。前台支援<strong>智慧順序記憶</strong>，即使中途從後台跳著開獎，也會自動找到下一個尚未開出的獎項。</p>
+            <p>3. <strong>前台快捷操控</strong>：可以直接在擁有前台大螢幕的電腦上按下<strong>空白鍵 / PageDown / 鍵盤方向鍵右鍵</strong>來觸發開獎（也支援 Enter、畫面下方的<strong>開始抽獎按鈕</strong>、投影筆與手機遙控）。前台畫面不會因為點擊背景其他地方而誤觸，只有按鈕、鍵盤、投影筆與手機遙控才會觸發下一步。前台支援<strong>智慧順序記憶</strong>，即使中途從後台跳著開獎，也會自動找到下一個尚未開出的獎項。</p>
             <h3>三、突發狀況與歷史紀錄</h3>
-            <p>1. <strong>取消資格與重抽</strong>：若有人不在現場或要捐出來重抽，請在「歷史中獎紀錄」點選<strong>顯示/關閉 取消重抽按鈕</strong>後，點擊該名旁邊的<strong>取消重抽</strong>。前台會顯示「感謝無私奉獻」3 秒，保留失格歷史紀錄並歸還一個獎項名額，隨後自動切換至重抽 1 人的畫面！</p>
+            <p>1. <strong>取消重抽</strong>：若有人不在現場或要捐出來重抽，請在「歷史中獎紀錄」點選<strong>顯示/關閉 取消重抽按鈕</strong>後，點擊該名旁邊的<strong>取消重抽</strong>。前台會顯示「感謝無私奉獻」3 秒，保留取消重抽的歷史紀錄並歸還一個獎項名額，隨後自動切換至重抽 1 人的畫面！</p>
             <p>2. <strong>重新顯示名單</strong>：若不小心切到了其他畫面，可隨時在「獎項管理」分頁的獎項表格點擊<strong>👁️</strong>（顯示名單）按鈕，前台將立即調閱並切回該獎項的歷史中獎名單。</p>
             <p>3. <strong>極端大量名單展示</strong>：系統自帶智慧縮排，可將大量中獎卡片集中於同一畫面。當您一次抽出超過預設排版數量時，前台螢幕會在 1 秒後<strong>自動啟動平滑來回捲動 (Auto-Scroll)</strong>，確保所有的名單能自動播放被看見。</p>
             <h3>四、系統備份與還原</h3>

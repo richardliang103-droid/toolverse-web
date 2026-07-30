@@ -94,6 +94,8 @@ export type LotteryEventState = {
   revealMode: RevealMode;
   animationDurationMs: number;
   soundEnabled: boolean;
+  /** 舞台畫面上那顆固定的「開始抽獎」按鈕是否顯示；關閉後只能用鍵盤／簡報筆／手機遙控前進。 */
+  stageButtonVisible: boolean;
   backgroundImageDataUrl: string | null;
   activePrizeId: string | null;
   /** 舞台目前這一輪的揭曉狀態；null 代表沒有正在進行或剛結束的抽選。 */
@@ -159,6 +161,7 @@ export function createEmptyEventState(now = new Date()): LotteryEventState {
     revealMode: "sequential",
     animationDurationMs: 3000,
     soundEnabled: true,
+    stageButtonVisible: true,
     backgroundImageDataUrl: null,
     activePrizeId: null,
     pendingReveal: null,
@@ -376,6 +379,8 @@ export function sanitizeEventState(value: unknown, now = new Date()): LotteryEve
     revealMode: data.revealMode === "simultaneous" ? "simultaneous" : "sequential",
     animationDurationMs: clampInt(data.animationDurationMs, 1_000, 60_000, 3_000),
     soundEnabled: data.soundEnabled !== false,
+    // 舊 localStorage／舊備份沒有這個欄位時安全回退為顯示（true）。
+    stageButtonVisible: data.stageButtonVisible !== false,
     backgroundImageDataUrl: isValidImageDataUrl(data.backgroundImageDataUrl) ? data.backgroundImageDataUrl : null,
     activePrizeId,
     // pendingReveal 指向的獎項若跟 activePrizeId 對不上（例如手改壞的資料），
@@ -945,7 +950,7 @@ export function winnersToCsv(state: LotteryEventState): string {
       winner.department,
       winner.participantName,
       winner.employeeId,
-      winner.disqualified ? "已失格" : "得獎",
+      winner.disqualified ? "已取消重抽" : "得獎",
     ]);
   }
   return csvRowsToDownloadText(rows);

@@ -621,7 +621,15 @@ export function EventLotteryStage() {
         onClick={(event) => { event.stopPropagation(); void toggleFullscreen(); }}
         aria-label={isFullscreen ? "離開全螢幕" : "全螢幕顯示"}
       >
-        {isFullscreen ? "⤡" : "⤢"}
+        {isFullscreen ? (
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M9 3v4a2 2 0 0 1-2 2H3M15 3v4a2 2 0 0 0 2 2h4M9 21v-4a2 2 0 0 0-2-2H3M15 21v-4a2 2 0 0 1 2-2h4" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 9V5a2 2 0 0 1 2-2h4M21 9V5a2 2 0 0 0-2-2h-4M3 15v4a2 2 0 0 0 2 2h4M21 15v4a2 2 0 0 1-2 2h-4" />
+          </svg>
+        )}
       </button>
 
       <header className="event-lottery-stage-header">
@@ -663,7 +671,7 @@ export function EventLotteryStage() {
                   <span className="event-lottery-stage-winner-dept">{winner.department || "---"}</span>
                   <span className="event-lottery-stage-winner-name">{winner.participantName}</span>
                   <span className="event-lottery-stage-winner-emp">{winner.employeeId || "---"}</span>
-                  {winner.disqualified && <span className="event-lottery-stage-winner-tag">已失格</span>}
+                  {winner.disqualified && <span className="event-lottery-stage-winner-tag">已取消重抽</span>}
                 </div>
               ))}
               {sequentialStillRolling && <div className="event-lottery-stage-winner-card event-lottery-stage-rolling-card"><span>{rollingName}</span></div>}
@@ -672,14 +680,16 @@ export function EventLotteryStage() {
         )}
       </main>
 
-      <button
-        type="button"
-        className={`event-lottery-stage-advance-button${advanceAction.action === "none" ? " event-lottery-stage-advance-button-disabled" : ""}`}
-        onClick={handleAdvance}
-        disabled={advanceAction.action === "none"}
-      >
-        {advanceLabel}
-      </button>
+      {state.stageButtonVisible && (
+        <button
+          type="button"
+          className={`event-lottery-stage-advance-button${advanceAction.action === "none" ? " event-lottery-stage-advance-button-disabled" : ""}`}
+          onClick={handleAdvance}
+          disabled={advanceAction.action === "none"}
+        >
+          {advanceLabel}
+        </button>
+      )}
     </div>
   );
 }
