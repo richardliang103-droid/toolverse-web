@@ -255,12 +255,19 @@ export function EventLotteryConsole() {
   /** 儲存失敗（例如 localStorage 容量不足）時整個操作要中止：不更新畫面、不廣播，
    *  避免其他分頁被通知了一個其實沒有真的落地的變更。 */
   function commit(next: LotteryEventState, message: EventLotterySyncMessage = { type: "STATE_UPDATED" }) {
-    // 以 storage 中最新版本為基準，避免另一個分頁剛完成變更時把 revision 倒退。
+    // next 是以目前這個元件手上的 state 為底改出來的；如果另一個分頁已經在
+    // 我們拿到這份快照之後寫入新的變更（例如舞台剛抽出的得獎紀錄），這裡的
+    // next 其實是根據舊資料算出來的，直接寫進去會把那筆更新悄悄蓋掉，只留下
+    // 一個往前跳的 revision 製造出「有同步」的假象。偵測到版本對不上就放棄
+    // 這次寫入、換成最新狀態，讓使用者看得到發生了什麼事、可以重新操作一次，
+    // 而不是無聲無息遺失資料。
     const latest = loadEventState();
-    const versioned = advanceStateRevision({
-      ...next,
-      stateRevision: Math.max(next.stateRevision, latest.stateRevision),
-    });
+    if (latest.stateRevision !== state.stateRevision) {
+      setState(latest);
+      showNotice("偵測到另一個分頁剛更新了狀態，這次變更未套用，畫面已同步成最新狀態，請重新操作一次", "error");
+      return;
+    }
+    const versioned = advanceStateRevision(next);
     if (!saveEventState(versioned)) {
       showNotice("儲存失敗，可能是瀏覽器儲存空間不足，這次變更未套用，請刪減圖片或紀錄後再試", "error");
       return;
@@ -876,7 +883,7 @@ export function EventLotteryConsole() {
   function handlePrepareStage() {
     if (drawLocked) return;
     if (!drawTargetPrize) { showNotice("請先選擇獎項", "error"); return; }
-    const result = prepareStage(state, drawTargetPrize.id, post);
+    const result = prepareStage(drawTargetPrize.id, post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setState(result.state);
     showNotice(`舞台已準備顯示「${drawTargetPrize.name}」`);
@@ -885,14 +892,14 @@ export function EventLotteryConsole() {
   function handleStartDraw() {
     if (drawLocked) return;
     if (!drawTargetPrize) { showNotice("請先選擇獎項", "error"); return; }
-    const result = startDraw(state, drawTargetPrize.id, state.stageDrawCount, post);
+    const result = startDraw(drawTargetPrize.id, state.stageDrawCount, post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setNotice(null);
     setState(result.state);
   }
 
   function handleClearStage() {
-    const result = clearStageAction(state, post);
+    const result = clearStageAction(post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setState(result.state);
   }
@@ -919,13 +926,13 @@ export function EventLotteryConsole() {
 
   function handleShowPrizeWinners(prizeId: string) {
     if (state.stagePreview?.prizeId === prizeId) {
-      const result = clearStageAction(state, post);
+      const result = clearStageAction(post);
       if (!result.ok) { showNotice(result.reason, "error"); return; }
       setState(result.state);
       showNotice("已停止顯示這個獎項的名單");
       return;
     }
-    const result = previewPrizeWinnersAction(state, prizeId, post);
+    const result = previewPrizeWinnersAction(prizeId, post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setState(result.state);
     showNotice("已將這個獎項的歷史得獎名單重新顯示於舞台");

@@ -31,7 +31,15 @@ function readableTextScore(text: string) {
   const cjkCount = (text.match(/[\u3400-\u9fff]/g) ?? []).length;
   const replacementPenalty = replacementCount(text) * 12;
   const controlPenalty = (text.match(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g) ?? []).length * 3;
-  return cjkCount * 3 - replacementPenalty - controlPenalty;
+  // Big5 的非嚴格解碼幾乎不會因為亂碼而失敗（ASCII 字母本身就是合法的 Big5
+  // 後位元組），所以把西歐語系「ANSI」文字誤判成 Big5 時常常一個替代字元
+  // 都不會出現，光看 replacementPenalty 判斷不出來。真正的中文文字裡，中文
+  // 字不會直接黏在英文字母兩側（CSV 欄位之間一定有逗號、Tab 或空白分隔）；
+  // 反過來，「英文字母—中文字—英文字母」正是把重音字母誤解成 Big5 雙位元組
+  // 字時的典型特徵（例如 "Löwe" 被誤解成 "L饖e"），重罰這種樣式可以把它推
+  // 回 Windows-1252 那一邊，不影響真正中文文字的判斷。
+  const latinAdjacentCjkPenalty = (text.match(/[A-Za-z][\u3400-\u9fff]|[\u3400-\u9fff][A-Za-z]/g) ?? []).length * 20;
+  return cjkCount * 3 - replacementPenalty - controlPenalty - latinAdjacentCjkPenalty;
 }
 
 /**

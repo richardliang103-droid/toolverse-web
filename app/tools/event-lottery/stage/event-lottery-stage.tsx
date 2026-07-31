@@ -256,10 +256,10 @@ export function EventLotteryStage() {
       return;
     }
     const result = action.action === "clear"
-      ? clearStageAction(currentState, post)
+      ? clearStageAction(post)
       : action.action === "prepare"
-        ? prepareStage(currentState, action.prizeId, post)
-        : startDraw(currentState, action.prizeId, action.count, post);
+        ? prepareStage(action.prizeId, post)
+        : startDraw(action.prizeId, action.count, post);
 
     if (!result.ok) {
       sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: remoteCommandLogRef.current.revision, reason: result.reason });
@@ -537,17 +537,16 @@ export function EventLotteryStage() {
       return;
     }
     const result = action.action === "clear"
-      ? clearStageAction(currentState, post)
+      ? clearStageAction(post)
       : action.action === "prepare"
-        ? prepareStage(currentState, action.prizeId, post)
-        : startDraw(currentState, action.prizeId, action.count, post);
+        ? prepareStage(action.prizeId, post)
+        : startDraw(action.prizeId, action.count, post);
     if (result.ok) setState(result.state);
     else showTransientError(result.reason);
   }
 
   function handleBack() {
-    const currentState = loadEventState();
-    const result = clearStageAction(currentState, post);
+    const result = clearStageAction(post);
     if (result.ok) setState(result.state);
     else showTransientError(result.reason);
   }
