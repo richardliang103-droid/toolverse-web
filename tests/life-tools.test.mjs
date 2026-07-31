@@ -23,6 +23,19 @@ test("Markdown 連結只允許安全協定", () => {
   assert.equal(safeMarkdownUrl("data:text/html,hello", "image"), null);
 });
 
+test("Markdown 連結：空白只在開頭結尾修剪，網址中間的空白要保留不能被弄壞", () => {
+  assert.equal(safeMarkdownUrl("https://example.com/my file.pdf"), "https://example.com/my file.pdf");
+  assert.equal(safeMarkdownUrl("  https://example.com/a  "), "https://example.com/a");
+  // tab／換行不管出現在哪裡都要被拿掉，瀏覽器解析 URL 時本來就會忽略它們，
+  // 這是防止用這幾個字元把 javascript: 拆開來騙過字串比對的關鍵。
+  assert.equal(safeMarkdownUrl("java\tscript:alert(1)"), null);
+});
+
+test("Markdown 連結：protocol-relative 網址（//host/path）不算站內相對路徑，要擋下來", () => {
+  assert.equal(safeMarkdownUrl("//evil.example.com/phish"), null);
+  assert.equal(safeMarkdownUrl("/help"), "/help");
+});
+
 test("Markdown renderer 不輸出 javascript URL", async () => {
   const html = await marked.parse("[危險](javascript:alert(1))\n\n![危險](data:text/html,hello)", { renderer: createSafeMarkdownRenderer() });
   assert.doesNotMatch(html, /javascript:|data:text\/html/i);

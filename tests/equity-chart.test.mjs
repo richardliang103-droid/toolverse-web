@@ -144,6 +144,30 @@ test("computeEquityLayout still places entities disconnected from the subject", 
   assert.ok(layout.nodes.every((node) => Number.isFinite(node.x) && Number.isFinite(node.y)));
 });
 
+test("computeEquityLayout：connected 只標記真正跟受查公司連通的節點，跟受查公司無關的獨立分支要標成 false", () => {
+  const a = createEntity({ id: "a", name: "A", isSubject: true });
+  const b = createEntity({ id: "b", name: "B" }); // a 持有 b，跟受查公司連通
+  const c = createEntity({ id: "c", name: "C" });
+  const d = createEntity({ id: "d", name: "D" }); // c 持有 d，這條分支跟受查公司完全無關
+  const chart = chartOf([a, b, c, d], [
+    { id: "h1", holderId: "a", ownedId: "b", percentage: 10 },
+    { id: "h2", holderId: "c", ownedId: "d", percentage: 10 },
+  ]);
+  const layout = computeEquityLayout(chart);
+  const byId = new Map(layout.nodes.map((node) => [node.id, node]));
+  assert.equal(byId.get("a").connected, true);
+  assert.equal(byId.get("b").connected, true);
+  assert.equal(byId.get("c").connected, false);
+  assert.equal(byId.get("d").connected, false);
+});
+
+test("computeEquityLayout：沒有受查公司時，所有節點一律視為 connected（沒有基準點可以比較誰不連通）", () => {
+  const a = createEntity({ id: "a", name: "A" });
+  const b = createEntity({ id: "b", name: "B" });
+  const layout = computeEquityLayout(chartOf([a, b], []));
+  assert.ok(layout.nodes.every((node) => node.connected === true));
+});
+
 test("computeEquityLayout handles an empty chart without throwing", () => {
   const layout = computeEquityLayout(chartOf([], []));
   assert.deepEqual(layout.nodes, []);

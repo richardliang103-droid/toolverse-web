@@ -132,6 +132,17 @@ test("normalize：損壞的 pendingReveal（指向不存在的獎項或得獎者
   assert.equal(withoutRevealAt.pendingReveal, null);
 });
 
+test("normalize：pendingReveal.winnerIds 裡重複的 id（手改壞的資料／舊備份）要去重，不能讓同一位得獎者顯示兩張卡片", () => {
+  const winner = { id: "winner-1", prizeId: "prize-1", participantId: "p1", participantName: "小明", drawnAt: new Date().toISOString() };
+  const state = sanitizeEventState({
+    prizes: [{ id: "prize-1", name: "特獎", totalCount: 1 }],
+    winners: [winner],
+    activePrizeId: "prize-1",
+    pendingReveal: { prizeId: "prize-1", winnerIds: ["winner-1", "winner-1"], revealAt: new Date().toISOString() },
+  });
+  assert.deepEqual(state.pendingReveal?.winnerIds, ["winner-1"]);
+});
+
 test("normalize：名單群組遺失時，參加者改掛第一個可用群組而不是整筆消失", () => {
   const roster = { id: "roster-1", name: "現存名單" };
   const state = sanitizeEventState({

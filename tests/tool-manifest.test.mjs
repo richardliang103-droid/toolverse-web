@@ -136,6 +136,19 @@ test("驗證會抓到 supportsBatch 與 maxFiles 不一致", () => {
   assert.ok(many.some((problem) => problem.includes("supportsBatch")), many.join("\n"));
 });
 
+test("驗證會抓到 file 能力省略 maxFiles（依文件語意代表沒有上限）卻宣告 supportsBatch 為 false 的矛盾", () => {
+  const omitted = validateToolManifests([
+    sample({ inputs: [{ kind: "file", mimeTypes: ["text/csv"] }], supportsBatch: false }),
+  ]);
+  assert.ok(omitted.some((problem) => problem.includes("maxFiles")), omitted.join("\n"));
+
+  // 明確標上 maxFiles（即使是 1）就不算矛盾，只有「省略」才代表宣告不上限。
+  const explicit = validateToolManifests([
+    sample({ inputs: [{ kind: "file", mimeTypes: ["text/csv"], maxFiles: 1 }], supportsBatch: false }),
+  ]);
+  assert.deepEqual(explicit, []);
+});
+
 test("驗證會抓到沒有宣告格式的檔案輸入", () => {
   const problems = validateToolManifests([sample({ inputs: [{ kind: "file" }] })]);
   assert.ok(problems.some((problem) => problem.includes("mimeTypes")), problems.join("\n"));

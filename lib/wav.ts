@@ -48,9 +48,15 @@ export function formatSeconds(seconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${rest.toFixed(1).padStart(4, "0")}`;
 }
 
-/** 修剪範圍防呆：0 ≤ start < end ≤ duration，保留至少 0.1 秒。 */
+/** 修剪範圍防呆：0 ≤ start < end ≤ duration，保留至少 0.1 秒（整段不到 0.1
+ *  秒的極短音檔則保留整段，不能為了湊滿 0.1 秒而讓 end 超過 duration）。
+ *  duration 一律先四捨五入到跟回傳值一樣的 0.1 秒精度再做夾限運算，確保
+ *  回傳的 end 經過 toFixed(1) 之後不會因為進位而蓋過畫面上顯示／輸入框
+ *  的 max（兩者用的都是同一個四捨五入後的 duration）。 */
 export function clampTrimRange(start: number, end: number, duration: number): { start: number; end: number } {
-  const safeStart = Math.min(Math.max(0, start), Math.max(0, duration - 0.1));
-  const safeEnd = Math.max(safeStart + 0.1, Math.min(end, duration));
+  const safeDuration = Math.max(0, Math.round(duration * 10) / 10);
+  const minWindow = Math.min(0.1, safeDuration);
+  const safeStart = Math.min(Math.max(0, start), Math.max(0, safeDuration - minWindow));
+  const safeEnd = Math.max(safeStart + minWindow, Math.min(end, safeDuration));
   return { start: Number(safeStart.toFixed(1)), end: Number(safeEnd.toFixed(1)) };
 }
