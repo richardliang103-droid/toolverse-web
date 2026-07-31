@@ -107,9 +107,17 @@ export function RandomGroupsTool() {
   function handleSplit() {
     setError(""); setCopied(false);
     try {
-      const memberByName = new Map(members.map((member) => [member.name, member]));
+      // 用 Map<name, member> 只會留下同名者的最後一筆，另一位同名的人就悄悄
+      // 不受任何「不同組」約束。名單允許同名但不同列的人（部門不同，或關閉
+      // 「移除重複名字」時逐字重複的名字），所以要把同一個名字底下的所有
+      // 成員都收進來，規則才會涵蓋每一位符合名字的人，不會漏掉其中一位。
+      const membersByName = new Map<string, PersonnelMember[]>();
+      for (const member of members) {
+        const list = membersByName.get(member.name);
+        if (list) list.push(member); else membersByName.set(member.name, [member]);
+      }
       const separationMembers = parseSeparationRules(separations, members.map((member) => member.name))
-        .map((rule) => rule.map((name) => memberByName.get(name)).filter((member): member is PersonnelMember => Boolean(member)));
+        .map((rule) => rule.flatMap((name) => membersByName.get(name) ?? []));
       const result = splitIntoGroups(members, mode, currentValue, separationMembers, (member) => member.id);
       setGroups(result.groups);
       setShuffleRound((round) => round + 1); // 換 key 讓進場動畫重新播放

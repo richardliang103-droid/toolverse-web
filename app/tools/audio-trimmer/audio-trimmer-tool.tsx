@@ -128,6 +128,7 @@ export function AudioTrimmerTool() {
   }
 
   async function loadFile(file: File | undefined) {
+    if (busy) return;
     setError("");
     stopPreview();
     if (!file) return;
@@ -294,7 +295,7 @@ export function AudioTrimmerTool() {
             <p className="key-note">支援 MP3、WAV、M4A、OGG · 上限 30 MB</p>
           </div>
         )}
-        <input ref={inputRef} className="file-input" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg" onChange={(event: ChangeEvent<HTMLInputElement>) => { void loadFile(event.target.files?.[0]); event.currentTarget.value = ""; }} aria-label="選擇剪輯音訊檔" />
+        <input ref={inputRef} className="file-input" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg" disabled={busy} onChange={(event: ChangeEvent<HTMLInputElement>) => { void loadFile(event.target.files?.[0]); event.currentTarget.value = ""; }} aria-label="選擇剪輯音訊檔" />
         {hasAudio && <>
           <p className="audio-file-line"><strong>{fileName}</strong><span className="panel-meta">總長 {formatSeconds(duration)}</span></p>
           <div className="audio-range-fields">

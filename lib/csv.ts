@@ -54,14 +54,17 @@ export function parseDelimited(text: string, delimiter: CsvDelimiter = ","): str
     if (char === "\n" || char === "\r") {
       if (char === "\r" && source[i + 1] === "\n") i += 1;
       row.push(field); field = "";
-      if (row.some((item) => item !== "")) rows.push(row);
+      // 只跳過真正的空白行（沒看到任何分隔符，只有一個空欄位）；只要出現過
+      // 分隔符，代表使用者明確寫了這麼多欄，即使每一欄都是空的也是一筆真實
+      // 資料（例如「,,,」），不能跟單純的空白行用同一種判斷法而被誤刪。
+      if (row.length > 1 || row[0] !== "") rows.push(row);
       row = [];
       continue;
     }
     field += char;
   }
   row.push(field);
-  if (row.some((item) => item !== "")) rows.push(row);
+  if (row.length > 1 || row[0] !== "") rows.push(row);
   // 對齊欄數：短列補空字串
   const width = Math.max(0, ...rows.map((item) => item.length));
   return rows.map((item) => [...item, ...Array.from({ length: width - item.length }, () => "")]);

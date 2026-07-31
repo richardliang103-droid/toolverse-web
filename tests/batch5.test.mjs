@@ -57,6 +57,12 @@ test("csv：分隔符偵測、解析、欄數對齊", () => {
   assert.deepEqual(rows[2], ["單欄", ""]);
 });
 
+test("csv：每欄都是空字串但確實有分隔符的資料列要保留，不能跟空白行用同一種判斷法誤刪", () => {
+  assert.deepEqual(parseDelimited("a,b\n1,2\n,\n3,4\n", ","), [["a", "b"], ["1", "2"], ["", ""], ["3", "4"]]);
+  // 真正沒有任何分隔符的空白行仍視為空白行跳過，跟 Excel／多數 CSV 工具的慣例一致。
+  assert.deepEqual(parseDelimited("name\nAlice\n\nBob\n", ","), [["name"], ["Alice"], ["Bob"]]);
+});
+
 test("csv：sep=X 宣告列會被當成分隔符指示，不會被解析成資料列", () => {
   const withSemicolon = "sep=;\n名字;分機\n小明;120\n";
   assert.equal(detectDelimiter(withSemicolon), ";");
