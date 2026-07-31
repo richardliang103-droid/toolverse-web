@@ -599,7 +599,7 @@ export const toolManifests: readonly ToolManifest[] = [
       kind: "file",
       mimeTypes: ["audio/mpeg", "audio/wav", "audio/mp4", "audio/ogg"],
       extensions: [".mp3", ".wav", ".m4a", ".ogg"],
-      maxFiles: 12,
+      maxFiles: 8,
       maxSizeBytes: 30 * MB,
     }],
     outputs: [{ kind: "file", mimeTypes: ["audio/wav"], extensions: [".wav"] }],
@@ -645,7 +645,7 @@ export const toolManifests: readonly ToolManifest[] = [
     engines: ["native"],
     inputs: [
       { kind: "structured-data" },
-      { kind: "file", mimeTypes: ["text/csv"], extensions: [".csv"] },
+      { kind: "file", mimeTypes: ["text/csv"], extensions: [".csv"], maxFiles: 1 },
       { kind: "file", mimeTypes: ["application/json"], extensions: [".json"], maxFiles: 1 },
       { kind: "file", mimeTypes: ["image/png", "image/jpeg", "image/webp"], maxFiles: 1, maxSizeBytes: 15 * MB },
     ],
@@ -777,6 +777,14 @@ export function validateToolManifests(manifests: readonly ToolManifest[] = toolM
     for (const input of manifest.inputs) {
       if (input.maxFiles !== undefined && input.maxFiles < 1) problems.push(`${at} inputs 的 maxFiles 必須 ≥ 1`);
       if (input.maxSizeBytes !== undefined && input.maxSizeBytes <= 0) problems.push(`${at} inputs 的 maxSizeBytes 必須 > 0`);
+      // maxFiles 省略依欄位文件語意代表「沒有明確上限」；file 能力省略它卻同時
+      // 宣告 supportsBatch 為 false，等於自稱「檔案數量沒上限」又「不支援批
+      // 次」，是自相矛盾的宣告。下面 acceptsMultiple 的 `?? 1` 只看得出
+      // maxFiles > 1 的情況，抓不到「省略」這種本身就有問題的宣告，這裡另外
+      // 補上。
+      if (input.kind === "file" && input.maxFiles === undefined && !manifest.supportsBatch) {
+        problems.push(`${at} file 能力省略 maxFiles（依文件語意代表沒有上限），但 supportsBatch 是 false，請明確標上 maxFiles 或改成 supportsBatch: true`);
+      }
     }
 
     const acceptsMultiple = manifest.inputs.some((input) => (input.maxFiles ?? 1) > 1);

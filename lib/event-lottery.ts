@@ -320,7 +320,7 @@ function sanitizePendingReveal(value: unknown, prizeIds: Set<string>, winnerIds:
   if (!isRecord(value)) return null;
   const prizeId = typeof value.prizeId === "string" && prizeIds.has(value.prizeId) ? value.prizeId : null;
   const winnerIdList = Array.isArray(value.winnerIds)
-    ? value.winnerIds.filter((id): id is string => typeof id === "string" && winnerIds.has(id))
+    ? [...new Set(value.winnerIds.filter((id): id is string => typeof id === "string" && winnerIds.has(id)))]
     : [];
   const revealAt = validIsoDate(value.revealAt);
   if (!prizeId || winnerIdList.length === 0 || !revealAt) return null;

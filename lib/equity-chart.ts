@@ -287,6 +287,9 @@ export function computeEquityLayout(chart: EquityChart): EquityLayout {
   }
 
   if (subject) bfsFrom(subject.id);
+  // 只有受查公司這棵 BFS 樹走訪到的實體才算「連通」；下面補的其他獨立分支
+  // 各自的走訪範圍不算，用來標記 EquityLayoutNode.connected。
+  const subjectConnectedIds = new Set(visited);
   // 沒有受查公司，或圖中有跟受查公司不連通的實體：各自當作一棵獨立的樹，
   // 依序接在最深一層之後，確保每個實體都畫得出來。
   for (const entity of chart.entities) {
@@ -330,7 +333,7 @@ export function computeEquityLayout(chart: EquityChart): EquityLayout {
       const x = startX + column * (EQUITY_BOX_WIDTH + COLUMN_GAP);
       nodePosition.set(id, { x, y });
       const entity = entityById.get(id);
-      if (entity) nodes.push({ id, entity, layer: l, column, x, y, connected: subject ? id === subject.id || treeEdgeIds.size > 0 : true });
+      if (entity) nodes.push({ id, entity, layer: l, column, x, y, connected: !subject || subjectConnectedIds.has(id) });
     });
   }
 

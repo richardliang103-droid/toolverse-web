@@ -121,4 +121,8 @@ test("wav：秒數格式與範圍防呆", () => {
   assert.equal(formatSeconds(75.2), "01:15.2");
   assert.deepEqual(clampTrimRange(-5, 999, 30), { start: 0, end: 30 });
   assert.deepEqual(clampTrimRange(10, 10, 30), { start: 10, end: 10.1 });
+  // 整段音檔比 0.1 秒的最小視窗還短時，end 不能為了湊滿 0.1 秒而超過 duration
+  // 四捨五入到 0.1 秒精度後的值（跟畫面上輸入框／滑桿的 max 用同一個精度）。
+  assert.deepEqual(clampTrimRange(0, 5, 0.03), { start: 0, end: 0 });
+  assert.deepEqual(clampTrimRange(0, 5, 0.07), { start: 0, end: 0.1 });
 });
