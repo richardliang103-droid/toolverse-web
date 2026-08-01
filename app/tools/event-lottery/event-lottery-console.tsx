@@ -33,10 +33,11 @@ import {
 import { downloadBlob } from "@/lib/download";
 import { encodingLabel, type DetectedTextEncoding, type TextEncodingPreference } from "@/lib/text-encoding";
 import { clearStageAction, prepareStage, previewPrizeWinnersAction, startDraw } from "./actions";
-import { downloadCsvTemplate, PARTICIPANT_CSV_TEMPLATE, readCsvText, resizeImageToDataUrl, type Notice } from "./console-shared";
+import { downloadCsvTemplate, PARTICIPANT_CSV_TEMPLATE, readCsvText, type Notice } from "./console-shared";
 import { DrawTab } from "./draw-tab";
 import { HistoryTab } from "./history-tab";
 import { PrizesTab } from "./prizes-tab";
+import { SettingsTab } from "./settings-tab";
 import { loadEventState, saveEventState, useEventLotterySync, withEventLotteryLock, type EventLotterySyncMessage } from "./sync";
 import { useArmedConfirm } from "./use-armed-confirm";
 import { useRemoteSession } from "./use-remote-session";
@@ -157,17 +158,14 @@ export function EventLotteryConsole() {
   }
 
   // ---- 手機遙控（optional enhancement，Supabase 沒設定或連不上都不影響上面的本機抽獎） ----
-  // 整段配對邏輯抽到 ./use-remote-session；它跟抽獎狀態零耦合，這裡只取畫面要用的值。
+  // 整段配對邏輯在 ./use-remote-session，面板 UI 在 ./settings-tab（直接吃整個
+  // remote 物件）；控制台這裡只取狀態列與「重置系統資料」會用到的幾個值。
   const remote = useRemoteSession();
   const {
     supabaseConfigured,
     session: remoteSession,
-    qrDataUrl: remoteQrDataUrl,
-    busy: remoteBusy,
-    notice: remoteNotice,
     paired: remotePaired,
     pairedStale: remotePairedStale,
-    enable: handleEnableRemote,
     revoke: handleRevokeRemote,
   } = remote;
 
@@ -200,12 +198,9 @@ export function EventLotteryConsole() {
   const participantConfirm = useArmedConfirm();
   const resetConfirm = useArmedConfirm();
   const clearAllConfirm = useArmedConfirm();
-  const backgroundConfirm = useArmedConfirm();
 
   // ---- 活動設定 ----
   const backupInputRef = useRef<HTMLInputElement>(null);
-  const backgroundInputRef = useRef<HTMLInputElement>(null);
-
   function handleExportBackup() {
     downloadBlob(new Blob([exportEventBackup(state)], { type: "application/json;charset=utf-8" }), eventBackupFileName(state));
   }
@@ -229,19 +224,6 @@ export function EventLotteryConsole() {
       commit(createEmptyEventState());
       showNotice("已清除所有資料");
     });
-  }
-
-  async function handleBackgroundImage(file: File) {
-    try {
-      const dataUrl = await resizeImageToDataUrl(file, 800, 0.7);
-      commit({ ...state, backgroundImageDataUrl: dataUrl });
-    } catch (error) {
-      showNotice(error instanceof Error ? error.message : "圖片處理失敗", "error");
-    }
-  }
-
-  function handleResetBackground() {
-    backgroundConfirm.confirm("reset-background", () => commit({ ...state, backgroundImageDataUrl: null }));
   }
 
   // ---- 名單群組 ----
@@ -622,75 +604,17 @@ export function EventLotteryConsole() {
         ))}
       </div>
 
-      {activeTab === "settings" && (
-      <>
-      <div className="panel event-lottery-settings-panel">
-        <div className="panel-header"><h2>活動設定</h2><span className="panel-meta">共 {totalParticipantCount(state.participants)} 人 · 可抽 {availableParticipants.length} 人</span></div>
-        <label className="event-lottery-field" htmlFor="event-title">前台大標題
-          <div className="event-lottery-title-editor">
-            <input id="event-title" className="key-input" type="text" value={eventTitleDraft} maxLength={MAX_TITLE_LENGTH} onChange={(event) => setEventTitleDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") handleUpdateEventTitle(); }} />
-            <button className="button button-small button-blue" type="button" onClick={handleUpdateEventTitle}>更新</button>
-          </div>
-        </label>
-        <div className="form-controls">
-          <label className="number-field" htmlFor="reveal-mode">抽獎模式
-            <select id="reveal-mode" className="key-input" value={state.revealMode} onChange={(event) => commit({ ...state, revealMode: event.target.value === "simultaneous" ? "simultaneous" : "sequential" })}>
-              <option value="sequential">逐次抽出</option>
-              <option value="simultaneous">一次抽出</option>
-            </select>
-          </label>
-          <label className="number-field" htmlFor="animation-duration">抽獎動畫時間
-            <input id="animation-duration" className="number-input" type="number" min={1} max={60} step={1} value={Math.round(state.animationDurationMs / 1000)} onChange={(event) => commit({ ...state, animationDurationMs: Math.min(60000, Math.max(1000, (Math.round(Number(event.target.value)) || 3) * 1000)) })} />
-            <span className="field-suffix">秒</span>
-          </label>
-          <div className="event-lottery-sound-control">
-            <span>音效開關</span>
-            <label className="check-row"><input type="checkbox" checked={state.soundEnabled} onChange={(event) => commit({ ...state, soundEnabled: event.target.checked })} />開啟音效</label>
-          </div>
-          <div className="event-lottery-sound-control">
-            <span>前台抽獎按鈕</span>
-            <label className="check-row"><input type="checkbox" checked={state.stageButtonVisible} onChange={(event) => commit({ ...state, stageButtonVisible: event.target.checked })} />在舞台畫面顯示</label>
-            <span className="panel-meta">關閉後仍可用鍵盤、簡報筆或手機遙控操作</span>
-          </div>
-        </div>
-        <div className="event-lottery-background-row">
-          <span className="panel-meta">前台背景</span>
-          <button className="button button-small button-secondary" type="button" onClick={() => backgroundInputRef.current?.click()}>{state.backgroundImageDataUrl ? "更換背景圖片" : "上傳背景圖片"}</button>
-          <button className="button button-small button-secondary" type="button" onClick={handleResetBackground}>{backgroundConfirm.armedId === "reset-background" ? "再按一次還原預設" : "還原預設"}</button>
-          <input ref={backgroundInputRef} className="file-input" type="file" accept="image/*" aria-label="上傳舞台背景圖片" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleBackgroundImage(file); event.target.value = ""; }} />
-        </div>
-      </div>
-
-      {!supabaseConfigured ? (
-        <div className="panel event-lottery-remote-panel event-lottery-remote-panel-collapsed" aria-label="手機遙控">
-          <span className="panel-meta">📱 手機遙控（選填功能，不影響本機抽獎）：尚未設定手機遙控服務</span>
-        </div>
-      ) : (
-      <div className="panel event-lottery-remote-panel" aria-label="手機遙控">
-        <div className="panel-header"><h2>手機遙控</h2><span className="panel-meta">選填功能，不影響本機抽獎</span></div>
-        {!remoteSession && (
-          <div className="event-lottery-quick-actions">
-            <button className="button button-blue" type="button" onClick={handleEnableRemote} disabled={remoteBusy}>{remoteBusy ? "啟用中…" : "啟用手機遙控"}</button>
-          </div>
-        )}
-        {remoteSession && (
-          <div className="event-lottery-remote-qr">
-            {remoteQrDataUrl && !remotePaired && <img src={remoteQrDataUrl} alt="手機遙控配對 QR Code，用手機相機掃描後直接進入遙控頁" />}
-            <div className="event-lottery-remote-qr-meta">
-              {!remotePaired && <p>{remoteQrDataUrl ? "等待手機掃描…" : "已建立 session；控制台重新整理過就無法再顯示 QR Code，請撤銷後重新啟用"}</p>}
-              {remotePaired && <p><strong>{remotePairedStale ? "手機可能已離線" : "已配對"}</strong></p>}
-              <p>Session 到期時間：{new Date(remoteSession.expiresAt).toLocaleString("zh-TW", { hour12: false })}</p>
-              <div className="event-lottery-quick-actions">
-                <button className="button button-small button-danger" type="button" onClick={handleRevokeRemote} disabled={remoteBusy}>撤銷手機遙控</button>
-              </div>
-            </div>
-          </div>
-        )}
-        {remoteNotice && <p className={`gantt-notice gantt-notice-${remoteNotice.tone}`} role={remoteNotice.tone === "error" ? "alert" : "status"}>{remoteNotice.text}</p>}
-      </div>
-      )}
-      </>
-      )}
+      <SettingsTab
+        active={activeTab === "settings"}
+        state={state}
+        commit={commit}
+        showNotice={showNotice}
+        eventTitleDraft={eventTitleDraft}
+        onEventTitleDraftChange={setEventTitleDraft}
+        onUpdateEventTitle={handleUpdateEventTitle}
+        availableCount={availableParticipants.length}
+        remote={remote}
+      />
 
       {activeTab === "roster" && (
           <section id="event-lottery-rosters" className="panel" aria-label="名單與參加者">
