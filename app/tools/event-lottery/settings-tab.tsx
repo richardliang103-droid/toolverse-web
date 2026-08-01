@@ -63,7 +63,7 @@ export function SettingsTab({
           </label>
           <label className="number-field" htmlFor="animation-duration">抽獎動畫時間
             <input id="animation-duration" className="number-input" type="number" min={1} max={60} step={1} value={Math.round(state.animationDurationMs / 1000)} onChange={(event) => commit({ ...state, animationDurationMs: Math.min(60000, Math.max(1000, (Math.round(Number(event.target.value)) || 3) * 1000)) })} />
-            <span className="field-suffix">秒</span>
+            <span className="event-lottery-field-suffix">秒</span>
           </label>
           <div className="event-lottery-sound-control">
             <span>音效開關</span>

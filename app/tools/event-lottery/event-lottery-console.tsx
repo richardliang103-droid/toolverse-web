@@ -456,14 +456,18 @@ export function EventLotteryConsole() {
   // ---- 抽獎控制 ----
   // 抽獎控制分頁自己管理「選了哪個獎項」與相關衍生值（見 ./draw-tab）；控制台
   // 只保留真正需要 post／setState 的三個動作，因為那些要同步到其他分頁。
+  // DrawTab 的 disabled 與 guard 是 UX；控制台 callback 才是跨入口共用的操作邊界。
   async function handlePrepareStage(prize: EventPrize) {
+    if (drawLocked) return;
     const result = await prepareStage(prize.id, post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setState(result.state);
     showNotice(`舞台已準備顯示「${prize.name}」`);
   }
 
+  // 未來若新增快捷鍵或其他控制元件直接呼叫這個 callback，也不能繞過播放中的鎖定。
   async function handleStartDraw(prize: EventPrize) {
+    if (drawLocked) return;
     const result = await startDraw(prize.id, state.stageDrawCount, post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setNotice(null);
