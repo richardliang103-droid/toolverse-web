@@ -54,7 +54,7 @@ import { connectRemoteChannel, ensureAnonymousSession, type RemoteChannelHandle 
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase-browser";
 import { decodeTextBytes, encodingLabel, type DetectedTextEncoding, type TextEncodingPreference } from "@/lib/text-encoding";
 import { clearStageAction, prepareStage, previewPrizeWinnersAction, startDraw } from "./actions";
-import { loadEventState, saveEventState, useEventLotterySync, type EventLotterySyncMessage } from "./sync";
+import { loadEventState, saveEventState, useEventLotterySync, withEventLotteryLock, type EventLotterySyncMessage } from "./sync";
 
 type Notice = { text: string; tone: "info" | "error" };
 
@@ -260,20 +260,24 @@ export function EventLotteryConsole() {
     // next 其實是根據舊資料算出來的，直接寫進去會把那筆更新悄悄蓋掉，只留下
     // 一個往前跳的 revision 製造出「有同步」的假象。偵測到版本對不上就放棄
     // 這次寫入、換成最新狀態，讓使用者看得到發生了什麼事、可以重新操作一次，
-    // 而不是無聲無息遺失資料。
-    const latest = loadEventState();
-    if (latest.stateRevision !== state.stateRevision) {
-      setState(latest);
-      showNotice("偵測到另一個分頁剛更新了狀態，這次變更未套用，畫面已同步成最新狀態，請重新操作一次", "error");
-      return;
-    }
-    const versioned = advanceStateRevision(next);
-    if (!saveEventState(versioned)) {
-      showNotice("儲存失敗，可能是瀏覽器儲存空間不足，這次變更未套用，請刪減圖片或紀錄後再試", "error");
-      return;
-    }
-    setState(versioned);
-    post(message);
+    // 而不是無聲無息遺失資料。讀取版本、比對、寫入這整段包進
+    // withEventLotteryLock，確保跟另一個分頁的讀改寫不會交錯——呼叫端不需要
+    // await 這個函式，UI 更新一樣透過 setState 反應，不影響既有的呼叫方式。
+    void withEventLotteryLock(() => {
+      const latest = loadEventState();
+      if (latest.stateRevision !== state.stateRevision) {
+        setState(latest);
+        showNotice("偵測到另一個分頁剛更新了狀態，這次變更未套用，畫面已同步成最新狀態，請重新操作一次", "error");
+        return;
+      }
+      const versioned = advanceStateRevision(next);
+      if (!saveEventState(versioned)) {
+        showNotice("儲存失敗，可能是瀏覽器儲存空間不足，這次變更未套用，請刪減圖片或紀錄後再試", "error");
+        return;
+      }
+      setState(versioned);
+      post(message);
+    });
   }
 
   // ---- 手機遙控（optional enhancement，Supabase 沒設定或連不上都不影響上面的本機抽獎） ----
@@ -880,26 +884,26 @@ export function EventLotteryConsole() {
   const remainingPrizeSlots = remainingPrizes.reduce((sum, prize) => sum + remainingSlots(prize), 0);
   const nextAvailablePrize = findNextDrawablePrize(state);
 
-  function handlePrepareStage() {
+  async function handlePrepareStage() {
     if (drawLocked) return;
     if (!drawTargetPrize) { showNotice("請先選擇獎項", "error"); return; }
-    const result = prepareStage(drawTargetPrize.id, post);
+    const result = await prepareStage(drawTargetPrize.id, post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setState(result.state);
     showNotice(`舞台已準備顯示「${drawTargetPrize.name}」`);
   }
 
-  function handleStartDraw() {
+  async function handleStartDraw() {
     if (drawLocked) return;
     if (!drawTargetPrize) { showNotice("請先選擇獎項", "error"); return; }
-    const result = startDraw(drawTargetPrize.id, state.stageDrawCount, post);
+    const result = await startDraw(drawTargetPrize.id, state.stageDrawCount, post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setNotice(null);
     setState(result.state);
   }
 
-  function handleClearStage() {
-    const result = clearStageAction(post);
+  async function handleClearStage() {
+    const result = await clearStageAction(post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setState(result.state);
   }
@@ -924,15 +928,15 @@ export function EventLotteryConsole() {
     });
   }
 
-  function handleShowPrizeWinners(prizeId: string) {
+  async function handleShowPrizeWinners(prizeId: string) {
     if (state.stagePreview?.prizeId === prizeId) {
-      const result = clearStageAction(post);
+      const result = await clearStageAction(post);
       if (!result.ok) { showNotice(result.reason, "error"); return; }
       setState(result.state);
       showNotice("已停止顯示這個獎項的名單");
       return;
     }
-    const result = previewPrizeWinnersAction(prizeId, post);
+    const result = await previewPrizeWinnersAction(prizeId, post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setState(result.state);
     showNotice("已將這個獎項的歷史得獎名單重新顯示於舞台");

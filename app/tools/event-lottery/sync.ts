@@ -40,6 +40,23 @@ export function loadEventState(): LotteryEventState {
   }
 }
 
+const EVENT_LOTTERY_LOCK_NAME = "toolverse:event-lottery:write";
+
+/**
+ * 讀取－修改－寫入 localStorage 這三步本身不是原子操作：兩個分頁都可能先
+ * 各自讀到同一份舊資料，都通過自己的 revision 檢查後才動手寫入，後寫的一方
+ * 會把先寫的一方（例如舞台剛抽出的得獎者）蓋掉。單一分頁內這三步之間雖然
+ * 沒有 await、不會被同一份 JS 執行緒插隊，但跨分頁沒有 JS 語意保證兩個分頁
+ * 的執行緒不會在這幾行之間交錯。用 Web Locks API 把整段讀改寫包起來，取得
+ * 同一把鎖之前另一個分頁的讀改寫一定已經完整落地，才是真正跨分頁互斥；沒有
+ * Web Locks 支援的瀏覽器（極少數舊版本）就直接執行，退回舊的（大幅縮小過
+ * 但仍非嚴格原子）best-effort 行為，不因為缺乏這個 API 就整個功能不能用。
+ */
+export function withEventLotteryLock<T>(run: () => T): Promise<T> {
+  if (typeof navigator === "undefined" || !navigator.locks) return Promise.resolve(run());
+  return navigator.locks.request(EVENT_LOTTERY_LOCK_NAME, () => run());
+}
+
 /** 寫入失敗（例如 localStorage 容量不足）回傳 false，呼叫端負責顯示訊息，不拋例外。 */
 export function saveEventState(state: LotteryEventState): boolean {
   if (typeof window === "undefined") return false;

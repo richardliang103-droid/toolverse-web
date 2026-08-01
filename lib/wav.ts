@@ -50,13 +50,18 @@ export function formatSeconds(seconds: number): string {
 
 /** 修剪範圍防呆：0 ≤ start < end ≤ duration，保留至少 0.1 秒（整段不到 0.1
  *  秒的極短音檔則保留整段，不能為了湊滿 0.1 秒而讓 end 超過 duration）。
- *  duration 一律先四捨五入到跟回傳值一樣的 0.1 秒精度再做夾限運算，確保
- *  回傳的 end 經過 toFixed(1) 之後不會因為進位而蓋過畫面上顯示／輸入框
- *  的 max（兩者用的都是同一個四捨五入後的 duration）。 */
+ *  畫面上的輸入框／滑桿一律用未四捨五入的原始 duration 當 max，所以這裡
+ *  的夾限運算也對原始 duration 做，不能先把 duration 本身四捨五入掉——
+ *  否則極短音檔（例如 0.03 秒）會被四捨五入成 0.0，start 與 end 一起被壓成
+ *  同一個數字，變成「長度 0」的裁切範圍，違反 start < end 這個不變量。
+ *  一般情況維持跟畫面 mm:ss.s 顯示一致的 1 位小數；只有整段音檔短於 0.1 秒
+ *  這個 1 位小數本身就不夠表示的極端情況，才改用更細的精度確保 start < end
+ *  仍然成立。 */
 export function clampTrimRange(start: number, end: number, duration: number): { start: number; end: number } {
-  const safeDuration = Math.max(0, Math.round(duration * 10) / 10);
+  const safeDuration = Math.max(0, duration);
   const minWindow = Math.min(0.1, safeDuration);
   const safeStart = Math.min(Math.max(0, start), Math.max(0, safeDuration - minWindow));
   const safeEnd = Math.max(safeStart + minWindow, Math.min(end, safeDuration));
-  return { start: Number(safeStart.toFixed(1)), end: Number(safeEnd.toFixed(1)) };
+  const precision = safeDuration < 0.1 ? 3 : 1;
+  return { start: Number(safeStart.toFixed(precision)), end: Number(safeEnd.toFixed(precision)) };
 }

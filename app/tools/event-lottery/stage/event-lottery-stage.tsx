@@ -256,10 +256,10 @@ export function EventLotteryStage() {
       return;
     }
     const result = action.action === "clear"
-      ? clearStageAction(post)
+      ? await clearStageAction(post)
       : action.action === "prepare"
-        ? prepareStage(action.prizeId, post)
-        : startDraw(action.prizeId, action.count, post);
+        ? await prepareStage(action.prizeId, post)
+        : await startDraw(action.prizeId, action.count, post);
 
     if (!result.ok) {
       sendRemote({ type: "COMMAND_ACK", commandId: message.commandId, accepted: false, revision: remoteCommandLogRef.current.revision, reason: result.reason });
@@ -528,7 +528,7 @@ export function EventLotteryStage() {
    * 準備／抽選邏輯跟控制台按鈕共用同一套（見 ../actions.ts），兩邊操作完全
    * 一致。
    */
-  function handleAdvance() {
+  async function handleAdvance() {
     const currentState = loadEventState();
     const action = resolveStageAdvance(currentState, new Date());
     if (action.action === "none") {
@@ -537,16 +537,16 @@ export function EventLotteryStage() {
       return;
     }
     const result = action.action === "clear"
-      ? clearStageAction(post)
+      ? await clearStageAction(post)
       : action.action === "prepare"
-        ? prepareStage(action.prizeId, post)
-        : startDraw(action.prizeId, action.count, post);
+        ? await prepareStage(action.prizeId, post)
+        : await startDraw(action.prizeId, action.count, post);
     if (result.ok) setState(result.state);
     else showTransientError(result.reason);
   }
 
-  function handleBack() {
-    const result = clearStageAction(post);
+  async function handleBack() {
+    const result = await clearStageAction(post);
     if (result.ok) setState(result.state);
     else showTransientError(result.reason);
   }

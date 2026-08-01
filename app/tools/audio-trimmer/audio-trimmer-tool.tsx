@@ -27,6 +27,10 @@ export function AudioTrimmerTool() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const bufferRef = useRef<AudioBuffer | null>(null);
   const playbackRef = useRef<{ context: AudioContext; source: AudioBufferSourceNode } | null>(null);
+  // loadFile 中間有 await，`busy` state 要等 React 重新渲染才會反映到下一次
+  // 事件的 closure 裡；用 ref 同步讀寫，才能在還沒重新渲染前就擋掉緊接著
+  // 又選一次檔案的第二個 change 事件，不留下比 render 週期還小的競速窗口。
+  const busyRef = useRef(false);
   const [mode, setMode] = useState<Mode>("trim");
   const [fileName, setFileName] = useState("");
   const [duration, setDuration] = useState(0);
@@ -128,10 +132,10 @@ export function AudioTrimmerTool() {
   }
 
   async function loadFile(file: File | undefined) {
-    if (busy) return;
+    if (busyRef.current || !file) return;
+    busyRef.current = true;
     setError("");
     stopPreview();
-    if (!file) return;
     setBusy(true);
     try {
       const buffer = await decodeFile(file);
@@ -145,6 +149,7 @@ export function AudioTrimmerTool() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "無法解碼這個音訊檔 — 檔案可能損壞或格式不支援");
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
