@@ -23,6 +23,8 @@ type PrizesTabProps = {
   state: LotteryEventState;
   commit: (next: LotteryEventState) => void;
   showNotice: (text: string, tone?: Notice["tone"]) => void;
+  /** 揭曉動畫進行中不可開始新的歷史名單預覽；停止目前預覽仍可作為逃生操作。 */
+  drawLocked: boolean;
   /** 逐項編輯的 modal 由控制台統一渲染（跟其他 modal 放在一起，維持既有的 DOM 順序）。 */
   onEditPrize: (prize: EventPrize) => void;
   /** 更新單一獎項；跟編輯 modal 的儲存共用同一個實作，避免兩邊邏輯分岔。 */
@@ -31,7 +33,7 @@ type PrizesTabProps = {
   onShowPrizeWinners: (prizeId: string) => void;
 };
 
-export function PrizesTab({ active, state, commit, showNotice, onEditPrize, onUpdatePrize, onShowPrizeWinners }: PrizesTabProps) {
+export function PrizesTab({ active, state, commit, showNotice, drawLocked, onEditPrize, onUpdatePrize, onShowPrizeWinners }: PrizesTabProps) {
   const [prizeName, setPrizeName] = useState("");
   const [prizeCount, setPrizeCount] = useState(1);
   const [prizeAllowRepeat, setPrizeAllowRepeat] = useState(false);
@@ -320,7 +322,7 @@ export function PrizesTab({ active, state, commit, showNotice, onEditPrize, onUp
                     title={state.stagePreview?.prizeId === prize.id ? "停止顯示前台名單" : "顯示前台名單"}
                     aria-label={state.stagePreview?.prizeId === prize.id ? `停止顯示「${prize.name}」的前台名單` : `顯示「${prize.name}」的前台名單`}
                     onClick={() => onShowPrizeWinners(prize.id)}
-                    disabled={state.stagePreview?.prizeId !== prize.id && !state.winners.some((winner) => winner.prizeId === prize.id)}
+                    disabled={state.stagePreview?.prizeId !== prize.id && (drawLocked || !state.winners.some((winner) => winner.prizeId === prize.id))}
                   >
                     {state.stagePreview?.prizeId === prize.id ? "🛑" : "👁️"}
                   </button>
