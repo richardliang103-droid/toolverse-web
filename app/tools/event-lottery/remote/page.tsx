@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { EventLotteryRemote } from "./event-lottery-remote";
+import "../event-lottery.css";
 
 export const metadata: Metadata = {
   title: "活動抽獎手機遙控",

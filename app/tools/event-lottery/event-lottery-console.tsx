@@ -41,20 +41,11 @@ import {
   type LotteryEventState,
 } from "@/lib/event-lottery";
 import { downloadBlob } from "@/lib/download";
-import {
-  buildPairingUrl,
-  EVENT_LOTTERY_REMOTE_STORAGE_KEY,
-  EVENT_LOTTERY_REMOTE_PAIRING_TOKEN_KEY,
-  generatePairingToken,
-  isRemoteSessionUsable,
-  sanitizeStoredRemoteSessionPointer,
-  type StoredRemoteSessionPointer,
-} from "@/lib/event-lottery-remote";
-import { connectRemoteChannel, ensureAnonymousSession, type RemoteChannelHandle } from "@/lib/event-lottery-remote-channel";
-import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase-browser";
 import { decodeTextBytes, encodingLabel, type DetectedTextEncoding, type TextEncodingPreference } from "@/lib/text-encoding";
 import { clearStageAction, prepareStage, previewPrizeWinnersAction, startDraw } from "./actions";
 import { loadEventState, saveEventState, useEventLotterySync, withEventLotteryLock, type EventLotterySyncMessage } from "./sync";
+import { useArmedConfirm } from "./use-armed-confirm";
+import { useRemoteSession } from "./use-remote-session";
 
 type Notice = { text: string; tone: "info" | "error" };
 
@@ -167,25 +158,6 @@ async function resizeImageToDataUrl(file: File, maxWidth = 800, quality = 0.7): 
   }
 }
 
-/** 兩段式確認：第一次點擊只是「武裝」，幾秒內沒有第二次點擊就自動解除，避免手滑誤刪。 */
-function useArmedConfirm(timeoutMs = 4000) {
-  const [armedId, setArmedId] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
-  function confirm(id: string, action: () => void) {
-    if (armedId === id) {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      setArmedId(null);
-      action();
-      return;
-    }
-    setArmedId(id);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setArmedId(null), timeoutMs);
-  }
-  return { armedId, confirm };
-}
-
 export function EventLotteryConsole() {
   const [state, setState] = useState<LotteryEventState>(() => createEmptyEventState());
   const [hydrated, setHydrated] = useState(false);
@@ -281,136 +253,19 @@ export function EventLotteryConsole() {
   }
 
   // ---- 手機遙控（optional enhancement，Supabase 沒設定或連不上都不影響上面的本機抽獎） ----
-  const supabaseConfigured = useMemo(() => isSupabaseConfigured(), []);
-  const [remoteSession, setRemoteSession] = useState<StoredRemoteSessionPointer | null>(null);
-  const [remoteQrDataUrl, setRemoteQrDataUrl] = useState("");
-  const [remoteBusy, setRemoteBusy] = useState(false);
-  const [remoteNotice, setRemoteNotice] = useState<Notice | null>(null);
-  const [remotePairedAt, setRemotePairedAt] = useState<number | null>(null);
-  const remoteChannelRef = useRef<RemoteChannelHandle | null>(null);
-
-  function showRemoteNotice(text: string, tone: Notice["tone"] = "info") {
-    setRemoteNotice({ text, tone });
-  }
-
-  async function subscribeRemoteChannel(sessionId: string) {
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
-    remoteChannelRef.current?.close();
-    remoteChannelRef.current = null;
-    const handle = await connectRemoteChannel(supabase, sessionId, (message) => {
-      // 控制台只被動觀察配對狀態（手機連上時會送 REMOTE_HELLO），實際指令一律由
-      // 舞台處理，避免控制台與舞台同時處理同一個手機命令。
-      if (message.type === "REMOTE_HELLO") {
-        setRemotePairedAt(Date.now());
-        try { window.sessionStorage.removeItem(EVENT_LOTTERY_REMOTE_PAIRING_TOKEN_KEY); } catch { /* sessionStorage 不可用不影響配對 */ }
-        setRemoteQrDataUrl("");
-      }
-    });
-    remoteChannelRef.current = handle;
-  }
-
-  useEffect(() => {
-    if (!supabaseConfigured || typeof window === "undefined") return;
-    let cancelled = false;
-    try {
-      const raw = window.localStorage.getItem(EVENT_LOTTERY_REMOTE_STORAGE_KEY);
-      const pointer = raw ? sanitizeStoredRemoteSessionPointer(JSON.parse(raw)) : null;
-      if (pointer && isRemoteSessionUsable({ expiresAt: pointer.expiresAt, revokedAt: null })) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setRemoteSession(pointer);
-        let pairingToken: string | null = null;
-        try { pairingToken = window.sessionStorage.getItem(EVENT_LOTTERY_REMOTE_PAIRING_TOKEN_KEY); } catch { /* sessionStorage 不可用仍要繼續訂閱既有 session */ }
-        if (pairingToken && /^[0-9a-f]{64}$/i.test(pairingToken)) {
-          void import("qrcode").then(({ default: QRCode }) => QRCode.toDataURL(
-            buildPairingUrl(window.location.origin, pointer.sessionId, pairingToken),
-            { errorCorrectionLevel: "M", margin: 2, width: 320 },
-          )).then((dataUrl) => { if (!cancelled) setRemoteQrDataUrl(dataUrl); }).catch(() => undefined);
-        }
-        void subscribeRemoteChannel(pointer.sessionId).then(() => { if (cancelled) remoteChannelRef.current?.close(); });
-      } else if (raw) {
-        window.localStorage.removeItem(EVENT_LOTTERY_REMOTE_STORAGE_KEY);
-      }
-    } catch {
-      /* localStorage 損壞就當作沒有先前的 session */
-    }
-    return () => {
-      cancelled = true;
-      remoteChannelRef.current?.close();
-      remoteChannelRef.current = null;
-    };
-  }, [supabaseConfigured]);
-
-  async function handleEnableRemote() {
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) { showRemoteNotice("尚未設定手機遙控服務", "error"); return; }
-    setRemoteBusy(true);
-    setRemoteNotice(null);
-    try {
-      await ensureAnonymousSession(supabase);
-      const token = generatePairingToken();
-      const { data, error } = await supabase.rpc("create_lottery_remote_session", { pairing_token: token });
-      if (error) throw error;
-      const row = Array.isArray(data) ? data[0] : data;
-      if (!row) throw new Error("建立遙控 session 失敗");
-      const pointer: StoredRemoteSessionPointer = { sessionId: row.id, topic: row.topic, expiresAt: row.expires_at };
-      window.localStorage.setItem(EVENT_LOTTERY_REMOTE_STORAGE_KEY, JSON.stringify(pointer));
-      try { window.sessionStorage.setItem(EVENT_LOTTERY_REMOTE_PAIRING_TOKEN_KEY, token); } catch { /* 沒有 sessionStorage 仍可在目前畫面顯示 QR */ }
-      setRemoteSession(pointer);
-      setRemotePairedAt(null);
-
-      const pairingUrl = buildPairingUrl(window.location.origin, pointer.sessionId, token);
-      const QRCode = (await import("qrcode")).default;
-      const dataUrl = await QRCode.toDataURL(pairingUrl, { errorCorrectionLevel: "M", margin: 2, width: 320 });
-      setRemoteQrDataUrl(dataUrl);
-      await subscribeRemoteChannel(pointer.sessionId);
-    } catch (error) {
-      showRemoteNotice(error instanceof Error ? error.message : "啟用手機遙控失敗，請稍後再試", "error");
-    } finally {
-      setRemoteBusy(false);
-    }
-  }
-
-  async function handleRevokeRemote() {
-    const supabase = getSupabaseBrowserClient();
-    if (!remoteSession) return;
-    setRemoteBusy(true);
-    try {
-      if (!supabase) throw new Error("尚未設定手機遙控服務");
-      const { error } = await supabase.rpc("revoke_lottery_remote_session", { session_id: remoteSession.sessionId });
-      if (error) throw error;
-      try {
-        await remoteChannelRef.current?.send({ type: "SESSION_REVOKED" });
-      } catch {
-        /* DB 已完成撤銷；即時通知只是加速讓手機離線，失敗不影響權限撤銷。 */
-      }
-      showRemoteNotice("已撤銷手機遙控");
-      remoteChannelRef.current?.close();
-      remoteChannelRef.current = null;
-      window.localStorage.removeItem(EVENT_LOTTERY_REMOTE_STORAGE_KEY);
-      try { window.sessionStorage.removeItem(EVENT_LOTTERY_REMOTE_PAIRING_TOKEN_KEY); } catch { /* ignore */ }
-      setRemoteSession(null);
-      setRemoteQrDataUrl("");
-      setRemotePairedAt(null);
-    } catch (error) {
-      // RPC 失敗時保留 session 指標與控制項，讓使用者可以重試；不能讓
-      // 資料庫仍有效的 session 失去撤銷入口。
-      showRemoteNotice(error instanceof Error ? error.message : "撤銷失敗，請稍後再試", "error");
-    } finally {
-      setRemoteBusy(false);
-    }
-  }
-
-  // 純粹驅動「配對是否還算在線」的畫面更新；沒有配對紀錄時完全不需要跑計時器。
-  const [remoteNowTick, setRemoteNowTick] = useState(() => Date.now());
-  useEffect(() => {
-    if (remotePairedAt === null) return;
-    const interval = setInterval(() => setRemoteNowTick(Date.now()), 5000);
-    return () => clearInterval(interval);
-  }, [remotePairedAt]);
-
-  const remotePaired = remotePairedAt !== null;
-  const remotePairedStale = remotePairedAt !== null && remoteNowTick - remotePairedAt > 30_000;
+  // 整段配對邏輯抽到 ./use-remote-session；它跟抽獎狀態零耦合，這裡只取畫面要用的值。
+  const remote = useRemoteSession();
+  const {
+    supabaseConfigured,
+    session: remoteSession,
+    qrDataUrl: remoteQrDataUrl,
+    busy: remoteBusy,
+    notice: remoteNotice,
+    paired: remotePaired,
+    pairedStale: remotePairedStale,
+    enable: handleEnableRemote,
+    revoke: handleRevokeRemote,
+  } = remote;
 
   // 抽選揭曉時間到了之前，畫面需要每隔一小段時間重新算一次「現在是否該解鎖」；
   // 沒有進行中的揭曉、或這一輪已經被舞台回報播完時，完全不跑計時器。
