@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { EventLotteryStage } from "./event-lottery-stage";
-import "../event-lottery.css";
 
 export const metadata: Metadata = {
   title: "公司尾牙幸運抽獎",

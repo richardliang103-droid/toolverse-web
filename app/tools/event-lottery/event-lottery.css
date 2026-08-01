@@ -6,8 +6,10 @@
  * 舞台外層用 `min-height` 導致內部捲動失效）。集中在這裡之後，改舞台版面時
  * 相關規則都在同一個檔案裡看得到。
  *
- * 由三個 page.tsx 各自 import；Next.js 會把它排在 globals.css 之後載入，
- * 維持跟原本相同的串接順序。
+ * 由這個 route segment 的 layout.tsx 統一 import，一次涵蓋控制台、投影舞台與
+ * 手機遙控頁。這能避免三個 entry 重複把同一份 global stylesheet 放進 import
+ * graph；規則本身仍以 .event-lottery-* 根節點為界，不依賴離開 route 時 stylesheet
+ * 是否被移除。
  */
 
 /* --- 控制台頁面版面（覆寫全站 .page-shell 的寬度上限） --- */
@@ -147,7 +149,7 @@
 .event-lottery-edit-actions { justify-content: flex-end; }
 .event-lottery-help-modal h3 { margin: 20px 0 8px; padding-left: 10px; border-left: 4px solid var(--blue); color: var(--blue); }
 .event-lottery-help-modal h3:first-of-type { margin-top: 0; }
-.field-suffix { color: var(--muted); font-size: 13px; }
+.event-lottery-field-suffix { color: var(--muted); font-size: 13px; }
 
 @media (max-width: 860px) {
   .event-lottery-admin-header { align-items: flex-start; flex-direction: column; }
