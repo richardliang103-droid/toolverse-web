@@ -4,20 +4,16 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   advanceStateRevision,
-  candidatePool,
   canDeleteParticipant,
   canDeleteRoster,
   createEmptyEventState,
   createParticipant,
   createRoster,
   csvRowsToDownloadText,
-  disqualifyWinner,
   eventBackupFileName,
   exportEventBackup,
   findDuplicateEmployeeId,
   findNextDrawablePrize,
-  formatLotteryTimestamp,
-  MAX_DRAW_COUNT_PER_ROUND,
   MAX_NAME_LENGTH,
   MAX_TITLE_LENGTH,
   MAX_PARTICIPANTS,
@@ -30,7 +26,6 @@ import {
   resetEventDraws,
   stagePreviewCompleteAt,
   totalParticipantCount,
-  winnersToCsv,
   type EventParticipant,
   type EventPrize,
   type LotteryEventState,
@@ -39,6 +34,8 @@ import { downloadBlob } from "@/lib/download";
 import { encodingLabel, type DetectedTextEncoding, type TextEncodingPreference } from "@/lib/text-encoding";
 import { clearStageAction, prepareStage, previewPrizeWinnersAction, startDraw } from "./actions";
 import { downloadCsvTemplate, PARTICIPANT_CSV_TEMPLATE, readCsvText, resizeImageToDataUrl, type Notice } from "./console-shared";
+import { DrawTab } from "./draw-tab";
+import { HistoryTab } from "./history-tab";
 import { PrizesTab } from "./prizes-tab";
 import { loadEventState, saveEventState, useEventLotterySync, withEventLotteryLock, type EventLotterySyncMessage } from "./sync";
 import { useArmedConfirm } from "./use-armed-confirm";
@@ -201,7 +198,6 @@ export function EventLotteryConsole() {
 
   const rosterConfirm = useArmedConfirm();
   const participantConfirm = useArmedConfirm();
-  const winnerConfirm = useArmedConfirm();
   const resetConfirm = useArmedConfirm();
   const clearAllConfirm = useArmedConfirm();
   const backgroundConfirm = useArmedConfirm();
@@ -406,7 +402,6 @@ export function EventLotteryConsole() {
   const [remainingPage, setRemainingPage] = useState(1);
   const [showRemainingRoster, setShowRemainingRoster] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [showDisqualify, setShowDisqualify] = useState(false);
   const availableParticipants = useMemo(
     () => state.participants.filter((participant) => participant.active && !state.winners.some((winner) => !winner.disqualified && winner.participantId === participant.id)),
     [state.participants, state.winners],
@@ -433,6 +428,12 @@ export function EventLotteryConsole() {
   const orderedPrizes = useMemo(() => [...state.prizes].sort((a, b) => a.order - b.order), [state.prizes]);
   const editingPrize = editingPrizeId ? state.prizes.find((prize) => prize.id === editingPrizeId) ?? null : null;
   const allRosterIds = useMemo(() => state.rosters.map((roster) => roster.id), [state.rosters]);
+  // 這三個是「一直顯示在分頁上方的狀態列」要用的，跟抽獎控制分頁各自算各自的
+  // （都是從 state 直接推導的純函式，不是共享狀態），所以分頁拆出去之後這裡
+  // 仍然要保留一份。
+  const remainingPrizes = orderedPrizes.filter((prize) => remainingSlots(prize) > 0);
+  const remainingPrizeSlots = remainingPrizes.reduce((sum, prize) => sum + remainingSlots(prize), 0);
+  const nextAvailablePrize = findNextDrawablePrize(state);
 
   function handleUpdatePrize(id: string, patch: Partial<EventPrize>) {
     commit({ ...state, prizes: state.prizes.map((prize) => (prize.id === id ? { ...prize, ...patch } : prize)) });
@@ -471,52 +472,17 @@ export function EventLotteryConsole() {
   }
 
   // ---- 抽獎控制 ----
-  const [drawPrizeId, setDrawPrizeId] = useState("");
-
-  // 「本輪抽出人數」是活動狀態的一部分（stageDrawCount），不是控制台自己的 local
-  // state：手機遙控、舞台鍵盤／滑鼠／簡報筆與控制台都要讀同一份數字，改一處
-  // 全部同步，不會各自維護不同人數。
-  function handleStageDrawCountChange(value: number) {
-    const next = Math.min(MAX_DRAW_COUNT_PER_ROUND, Math.max(1, Math.round(value) || 1));
-    if (next === state.stageDrawCount) return;
-    commit({ ...state, stageDrawCount: next });
-  }
-
-  /** 選好獎項時把「本輪抽出人數」重設為這個獎項目前的剩餘名額——一個獎項
-   *  預設就是一次全部抽完（跟 prepareStagePrize() 對「同步顯示於前台」的行為
-   *  一致），操作人員直接按「強制開始抽獎」跳過準備步驟也不會漏抽或要手動
-   *  改好幾次數字；需要分批抽選時仍可以在下方欄位自行改小。 */
-  function handleSelectDrawPrize(prizeId: string) {
-    setDrawPrizeId(prizeId);
-    const prize = orderedPrizes.find((item) => item.id === prizeId);
-    if (!prize) return;
-    const fullCount = Math.max(1, Math.min(remainingSlots(prize), candidatePool(state, prize.id).length, MAX_DRAW_COUNT_PER_ROUND));
-    if (fullCount !== state.stageDrawCount) commit({ ...state, stageDrawCount: fullCount });
-  }
-
-  // 對齊原後台：控制台初始不預選獎項，主持人必須明確選擇後才能準備或抽獎，
-  // 避免剛開頁面就誤觸第一個獎項。
-  const effectiveDrawPrizeId = orderedPrizes.some((prize) => prize.id === drawPrizeId) ? drawPrizeId : "";
-  const drawTargetPrize = orderedPrizes.find((prize) => prize.id === effectiveDrawPrizeId) ?? null;
-  const drawCandidates = drawTargetPrize ? candidatePool(state, drawTargetPrize.id) : [];
-  const drawRemaining = drawTargetPrize ? remainingSlots(drawTargetPrize) : 0;
-  const remainingPrizes = orderedPrizes.filter((prize) => remainingSlots(prize) > 0);
-  const remainingPrizeSlots = remainingPrizes.reduce((sum, prize) => sum + remainingSlots(prize), 0);
-  const nextAvailablePrize = findNextDrawablePrize(state);
-
-  async function handlePrepareStage() {
-    if (drawLocked) return;
-    if (!drawTargetPrize) { showNotice("請先選擇獎項", "error"); return; }
-    const result = await prepareStage(drawTargetPrize.id, post);
+  // 抽獎控制分頁自己管理「選了哪個獎項」與相關衍生值（見 ./draw-tab）；控制台
+  // 只保留真正需要 post／setState 的三個動作，因為那些要同步到其他分頁。
+  async function handlePrepareStage(prize: EventPrize) {
+    const result = await prepareStage(prize.id, post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setState(result.state);
-    showNotice(`舞台已準備顯示「${drawTargetPrize.name}」`);
+    showNotice(`舞台已準備顯示「${prize.name}」`);
   }
 
-  async function handleStartDraw() {
-    if (drawLocked) return;
-    if (!drawTargetPrize) { showNotice("請先選擇獎項", "error"); return; }
-    const result = await startDraw(drawTargetPrize.id, state.stageDrawCount, post);
+  async function handleStartDraw(prize: EventPrize) {
+    const result = await startDraw(prize.id, state.stageDrawCount, post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setNotice(null);
     setState(result.state);
@@ -535,19 +501,7 @@ export function EventLotteryConsole() {
   }
 
   // ---- 得獎紀錄 ----
-  const prizeNameById = useMemo(() => new Map(state.prizes.map((prize) => [prize.id, prize.name])), [state.prizes]);
-  const sortedWinners = useMemo(() => [...state.winners].sort((a, b) => b.drawnAt.localeCompare(a.drawnAt)), [state.winners]);
-
-  function handleDisqualify(winnerId: string) {
-    winnerConfirm.confirm(winnerId, () => {
-      try {
-        commit(disqualifyWinner(state, winnerId), { type: "DISQUALIFY_WINNER", winnerId });
-      } catch (error) {
-        showNotice(error instanceof Error ? error.message : "操作失敗", "error");
-      }
-    });
-  }
-
+  // 清單、匯出與「取消重抽」都在 ./history-tab；這裡只留跨分頁共用的舞台預覽切換。
   async function handleShowPrizeWinners(prizeId: string) {
     if (state.stagePreview?.prizeId === prizeId) {
       const result = await clearStageAction(post);
@@ -560,10 +514,6 @@ export function EventLotteryConsole() {
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setState(result.state);
     showNotice("已將這個獎項的歷史得獎名單重新顯示於舞台");
-  }
-
-  function handleExportWinnersCsv() {
-    downloadBlob(new Blob([winnersToCsv(state)], { type: "text/csv;charset=utf-8" }), `歷史中獎名單_${Date.now()}.csv`);
   }
 
   function handleExportRemainingCsv() {
@@ -827,42 +777,20 @@ export function EventLotteryConsole() {
           </section>
       )}
 
-      {activeTab === "draw" && (
-          <section id="event-lottery-draw" className="panel panel-tinted" aria-label="控制面板">
-          <div className="panel-header"><h2>控制面板</h2></div>
-          {orderedPrizes.length === 0
-            ? <p className="result-empty"><strong>還沒有獎項</strong>請先到「獎項管理」新增至少一個獎項。</p>
-            : <>
-                {drawLocked && <p className="gantt-notice gantt-notice-info">{noticeLocked ? "前台正在顯示重抽提示，請稍候…" : previewLocked ? "前台正在播放歷史得獎名單，請稍候…" : "上一輪還在舞台上揭曉中，請稍候再開始下一輪（可以按「清除舞台顯示」提前中止）"}</p>}
-                <div className="event-lottery-draw-hints">
-                  <p className="event-lottery-draw-hint event-lottery-draw-hint-success">🎁 {remainingPrizes.length > 0 ? <>剩餘 <strong>{remainingPrizes.length}</strong> 個獎項，共 <strong>{remainingPrizeSlots}</strong> 個名額未抽出</> : "所有獎項皆已抽完！"}</p>
-                  <p className="event-lottery-draw-hint event-lottery-draw-hint-warning">
-                    👉 下一個預定抽獎：{nextAvailablePrize
-                      ? <><span>第 {orderedPrizes.indexOf(nextAvailablePrize) + 1} 個 — {nextAvailablePrize.name}</span>（剩 {remainingSlots(nextAvailablePrize)} 個）<small>※ 您可直接在下方切換其他獎項，或依照系統順序往下抽。</small></>
-                      : remainingPrizes.length > 0 ? "目前沒有符合資格的人員" : "目前所有獎項皆已抽完！"}
-                  </p>
-                </div>
-                <div className="event-lottery-inline-form">
-                  <label className="number-field" htmlFor="draw-prize">選擇獎項
-                    <select id="draw-prize" className="key-input" value={effectiveDrawPrizeId} disabled={drawLocked} onChange={(event) => handleSelectDrawPrize(event.target.value)}>
-                      <option value="">請選擇抽獎獎項...</option>
-                      {orderedPrizes.filter((prize) => remainingSlots(prize) > 0).map((prize) => <option key={prize.id} value={prize.id}>{orderedPrizes.indexOf(prize) + 1}. {prize.name}（剩餘 {remainingSlots(prize)}）</option>)}
-                    </select>
-                  </label>
-                  <label className="number-field" htmlFor="draw-count">本輪抽出人數
-                    <input id="draw-count" className="number-input" type="number" min={1} max={Math.max(1, drawRemaining)} value={state.stageDrawCount} disabled={drawLocked} onChange={(event) => handleStageDrawCountChange(Number(event.target.value))} />
-                  </label>
-                </div>
-                {drawTargetPrize && <p className="panel-meta">符合資格的候選人：{drawCandidates.length} 位 · 獎項剩餘名額：{drawRemaining} 個</p>}
-                <div className="event-lottery-quick-actions">
-                  <button className="button button-secondary" type="button" onClick={handlePrepareStage} disabled={drawLocked || !drawTargetPrize}>同步顯示於前台</button>
-                  <button className="button button-blue draw-button" type="button" onClick={handleStartDraw} disabled={drawLocked || !drawTargetPrize || drawRemaining === 0}>{drawLocked ? "抽選中…" : "強制開始抽獎"}</button>
-                  <button className="button button-secondary" type="button" onClick={handleClearStage}>清除舞台顯示</button>
-                  <button className="button button-danger" type="button" onClick={handleResetEvent}>{resetConfirm.armedId === "reset" ? "再按一次確定重置" : "重置抽獎進度"}</button>
-                </div>
-              </>}
-          </section>
-      )}
+      <DrawTab
+        active={activeTab === "draw"}
+        state={state}
+        commit={commit}
+        showNotice={showNotice}
+        drawLocked={drawLocked}
+        noticeLocked={noticeLocked}
+        previewLocked={previewLocked}
+        onPrepareStage={handlePrepareStage}
+        onStartDraw={handleStartDraw}
+        onClearStage={handleClearStage}
+        onResetEvent={handleResetEvent}
+        resetArmed={resetConfirm.armedId === "reset"}
+      />
 
       <PrizesTab
         active={activeTab === "prizes"}
@@ -874,33 +802,12 @@ export function EventLotteryConsole() {
         onShowPrizeWinners={handleShowPrizeWinners}
       />
 
-      {activeTab === "history" && (
-          <section id="event-lottery-history" className="panel" aria-label="得獎紀錄">
-          <div className="panel-header"><h2>歷史中獎紀錄</h2><span className="panel-meta">共 {state.winners.length} 筆</span></div>
-          <div className="event-lottery-quick-actions">
-            <button className="button button-small button-secondary" type="button" onClick={() => setShowDisqualify((current) => !current)}>顯示/關閉 取消重抽按鈕</button>
-            <button className="button button-small button-secondary" type="button" onClick={handleExportWinnersCsv} disabled={state.winners.length === 0}>匯出 Excel (CSV)</button>
-          </div>
-          {sortedWinners.length === 0
-            ? <p className="result-empty"><strong>還沒有得獎紀錄</strong>到「抽獎控制」開始第一輪抽選。</p>
-            : <div className="csv-table-scroll"><table className="csv-table event-lottery-table">
-                <thead><tr><th>抽取時間</th><th>獎項</th><th>部門</th><th>姓名</th><th>員工編號</th><th>狀態</th><th></th></tr></thead>
-                <tbody>
-                  {sortedWinners.map((winner) => (
-                    <tr key={winner.id} className={winner.disqualified ? "event-lottery-row-disqualified" : undefined}>
-                      <td>{formatLotteryTimestamp(winner.drawnAt)}</td>
-                      <td>{prizeNameById.get(winner.prizeId) ?? "（已刪除的獎項）"}</td>
-                      <td>{winner.department}</td>
-                      <td>{winner.participantName}</td>
-                      <td>{winner.employeeId}</td>
-                      <td>{winner.disqualified ? "已取消重抽" : "得獎"}</td>
-                      <td>{showDisqualify && !winner.disqualified && <button className="button button-small button-danger" type="button" onClick={() => handleDisqualify(winner.id)}>{winnerConfirm.armedId === winner.id ? "確定？" : "取消重抽"}</button>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table></div>}
-          </section>
-      )}
+      <HistoryTab
+        active={activeTab === "history"}
+        state={state}
+        commit={commit}
+        showNotice={showNotice}
+      />
 
       {showRemainingRoster && (
         <div className="event-lottery-modal-backdrop" role="presentation" onClick={() => setShowRemainingRoster(false)}>
