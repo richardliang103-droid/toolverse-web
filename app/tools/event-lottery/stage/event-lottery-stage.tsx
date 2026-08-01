@@ -3,7 +3,7 @@
 import confetti from "canvas-confetti";
 import gsap from "gsap";
 import { useEffect, useRef, useState } from "react";
-import { candidatePool, createEmptyEventState, findNextDrawablePrize, pendingRevealCompleteAt, remainingSlots, resolveStageAdvance, resolveStageDisplay, visibleWinnerCount, type LotteryEventState, type PendingReveal } from "@/lib/event-lottery";
+import { candidatePool, createEmptyEventState, findNextDrawablePrize, pendingRevealCompleteAt, remainingSlots, resolveStageAdvance, resolveStageDisplay, stagePreviewCompleteAt, visibleWinnerCount, type LotteryEventState, type PendingReveal } from "@/lib/event-lottery";
 import {
   buildHostStatus,
   commitAcceptedCommand,
@@ -362,9 +362,9 @@ export function EventLotteryStage() {
   useEffect(() => {
     const pending = state.pendingReveal;
     const noticeUntil = state.stageNotice ? Date.parse(state.stageNotice.until) : 0;
-    const previewRevealAt = state.stagePreview ? Date.parse(state.stagePreview.revealAt) : 0;
-    if (!pending && !noticeUntil && !previewRevealAt) return;
-    const completeAt = pending ? pendingRevealCompleteAt(pending) : noticeUntil || previewRevealAt;
+    const previewCompleteAt = state.stagePreview ? stagePreviewCompleteAt(state.stagePreview) : 0;
+    if (!pending && !noticeUntil && !previewCompleteAt) return;
+    const completeAt = pending ? pendingRevealCompleteAt(pending) : noticeUntil || previewCompleteAt;
     if (Date.now() >= completeAt) return;
     const interval = setInterval(() => {
       const now = Date.now();
@@ -372,10 +372,10 @@ export function EventLotteryStage() {
       if (now >= completeAt) clearInterval(interval);
     }, 200);
     return () => clearInterval(interval);
-    // 刻意只依賴 drawId／revealAt／noticeUntil 這些原始值，不用整個 state 物件：其他跟
+    // 刻意只依賴 drawId／revealAt／noticeUntil／previewRevealAt 這些原始值，不用整個 state 物件：其他跟
     // 這一輪無關的狀態變更（例如收到 STATE_UPDATED 重新讀取）不該讓計時器重開。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.pendingReveal?.drawId, state.pendingReveal?.revealAt, state.stageNotice?.until]);
+  }, [state.pendingReveal?.drawId, state.pendingReveal?.revealAt, state.stageNotice?.until, state.stagePreview?.revealAt]);
 
   useEffect(() => {
     if (display.phase === "drawing") liveDrawIdsRef.current.add(display.pendingReveal.drawId);

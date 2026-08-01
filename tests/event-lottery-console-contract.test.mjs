@@ -29,7 +29,11 @@ test("event lottery loads its stylesheet once from the route layout and keeps it
 });
 
 test("event lottery keeps tab state mounted and guards draw operations at the controller boundary", async () => {
-  const consoleSource = await source("app/tools/event-lottery/event-lottery-console.tsx");
+  const [consoleSource, stageSource, prizesSource] = await Promise.all([
+    source("app/tools/event-lottery/event-lottery-console.tsx"),
+    source("app/tools/event-lottery/stage/event-lottery-stage.tsx"),
+    source("app/tools/event-lottery/prizes-tab.tsx"),
+  ]);
   const children = [
     ["settings", "SettingsTab", "app/tools/event-lottery/settings-tab.tsx"],
     ["prizes", "PrizesTab", "app/tools/event-lottery/prizes-tab.tsx"],
@@ -48,4 +52,18 @@ test("event lottery keeps tab state mounted and guards draw operations at the co
   for (const handler of ["handlePrepareStage", "handleStartDraw"]) {
     assert.match(consoleSource, new RegExp(`async function ${handler}\\(prize: EventPrize\\) \\{\\n    if \\(drawLocked\\) return;`));
   }
+
+  const previewHandlerStart = consoleSource.indexOf("async function handleShowPrizeWinners");
+  const previewHandlerEnd = consoleSource.indexOf("\n  }\n\n  function handleExportRemainingCsv", previewHandlerStart);
+  const previewHandler = consoleSource.slice(previewHandlerStart, previewHandlerEnd);
+  const stopPreview = previewHandler.indexOf("if (state.stagePreview?.prizeId === prizeId)");
+  const lockGuard = previewHandler.indexOf("if (drawLocked) return;");
+  const startPreview = previewHandler.indexOf("previewPrizeWinnersAction");
+  assert.ok(stopPreview >= 0 && lockGuard > stopPreview && startPreview > lockGuard, "stopping an active preview must remain available, while starting one is lock-guarded");
+  assert.match(prizesSource, /drawLocked: boolean;/);
+  assert.match(prizesSource, /disabled=\{state\.stagePreview\?\.prizeId !== prize\.id && \(drawLocked \|\| !state\.winners\.some/);
+
+  assert.match(stageSource, /stagePreviewCompleteAt\(state\.stagePreview\)/);
+  assert.match(stageSource, /state\.stagePreview\?\.revealAt/);
+  assert.match(stageSource, /const completeAt = pending \? pendingRevealCompleteAt\(pending\) : noticeUntil \|\| previewCompleteAt;/);
 });

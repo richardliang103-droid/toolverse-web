@@ -496,6 +496,7 @@ export function EventLotteryConsole() {
       showNotice("已停止顯示這個獎項的名單");
       return;
     }
+    if (drawLocked) return;
     const result = await previewPrizeWinnersAction(prizeId, post);
     if (!result.ok) { showNotice(result.reason, "error"); return; }
     setState(result.state);
@@ -725,6 +726,7 @@ export function EventLotteryConsole() {
         state={state}
         commit={commit}
         showNotice={showNotice}
+        drawLocked={drawLocked}
         onEditPrize={openPrizeEditor}
         onUpdatePrize={handleUpdatePrize}
         onShowPrizeWinners={handleShowPrizeWinners}
