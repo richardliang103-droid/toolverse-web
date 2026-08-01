@@ -92,6 +92,11 @@ test("每個隱私層級都有給使用者看的說法", () => {
   }
 });
 
+test("股權架構圖與營運架構圖互相推薦，方便完成企業徵信的兩種視角", () => {
+  assert.deepEqual(getToolManifest("equity-chart")?.suggestedNextTools, ["operations-chart"]);
+  assert.deepEqual(getToolManifest("operations-chart")?.suggestedNextTools, ["equity-chart"]);
+});
+
 test("驗證會抓到重複的 slug", () => {
   const problems = validateToolManifests([sample(), sample({ name: "另一個" })]);
   assert.ok(problems.some((problem) => problem.includes("slug 重複")), problems.join("\n"));
