@@ -31,15 +31,14 @@ function readableTextScore(text: string) {
   const cjkCount = (text.match(/[\u3400-\u9fff]/g) ?? []).length;
   const replacementPenalty = replacementCount(text) * 12;
   const controlPenalty = (text.match(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g) ?? []).length * 3;
-  // Big5 的非嚴格解碼幾乎不會因為亂碼而失敗（ASCII 字母本身就是合法的 Big5
-  // 後位元組），所以把西歐語系「ANSI」文字誤判成 Big5 時常常一個替代字元
-  // 都不會出現，光看 replacementPenalty 判斷不出來。真正的中文文字裡，中文
-  // 字不會直接黏在英文字母兩側（CSV 欄位之間一定有逗號、Tab 或空白分隔）；
-  // 反過來，「英文字母—中文字—英文字母」正是把重音字母誤解成 Big5 雙位元組
-  // 字時的典型特徵（例如 "Löwe" 被誤解成 "L饖e"），重罰這種樣式可以把它推
-  // 回 Windows-1252 那一邊，不影響真正中文文字的判斷。
-  const latinAdjacentCjkPenalty = (text.match(/[A-Za-z][\u3400-\u9fff]|[\u3400-\u9fff][A-Za-z]/g) ?? []).length * 20;
-  return cjkCount * 3 - replacementPenalty - controlPenalty - latinAdjacentCjkPenalty;
+  // 曾經試過「英文字母緊貼中文字」當懲罰訊號，理論上能抓到重音字母被誤解成
+  // Big5 雙位元組字的情況（例如 "Löwe" → "L饖e"）；但這在台灣實際的 CSV／
+  // 名單資料裡誤傷太廣——「A組」「B棟」「AI部門」這類部門代號、棟別、單位
+  // 縮寫直接接中文字極為常見，會被同一個規則誤判成 windows-1252 造成中文
+  // 亂碼，而且沒有可靠的局部樣式能區分兩者。這個工具的預設情境是台灣使用者
+  // 的繁體中文匯出檔，寧可在少數西歐語系「ANSI」文字這種更罕見的情況下猜錯
+  // （使用者仍可手動切換到 Windows-1252），也不要在常見的中文內容上出錯。
+  return cjkCount * 3 - replacementPenalty - controlPenalty;
 }
 
 /**
