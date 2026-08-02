@@ -19,6 +19,9 @@ const eslintConfig = defineConfig([
     // Vendored, minified PDF.js worker. It is served as a static asset rather
     // than maintained source code, so linting it produces false positives.
     "public/pdf.worker.min.mjs",
+    // AI 助理的 git worktree 會建在 repo 內，裡面是整包原始碼與 node_modules 的
+    // 另一份拷貝。不排除的話 `eslint .` 會把每個 worktree 再掃一遍。
+    ".claude/worktrees/**",
   ]),
 ]);
 
