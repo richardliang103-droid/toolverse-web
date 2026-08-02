@@ -734,6 +734,27 @@ export const toolManifests: readonly ToolManifest[] = [
     privacy: "local-only",
     privacyNote: "背景、留白、圓角與陰影都用 Canvas 在本機合成，截圖不會離開瀏覽器。",
   },
+  {
+    slug: "expense-splitter",
+    name: "分帳結算",
+    description: "記下誰先付款、哪些人要分，將多人支出整理成清楚的轉帳建議。",
+    category: "utility",
+    symbol: "分",
+    accent: "matsuba",
+    status: "active",
+    processing: "local",
+    engines: ["native"],
+    inputs: [{ kind: "structured-data" }],
+    outputs: [{ kind: "text", mimeTypes: ["text/plain"] }],
+    supportsBatch: false,
+    supportsWorkspace: false,
+    supportsRecipe: false,
+    supportsOffline: true,
+    handoff: { canSend: true, canReceive: false, kinds: ["text"] },
+    suggestedNextTools: ["text-cleaner", "markdown-editor"],
+    privacy: "local-only",
+    privacyNote: "人名、支出與結算草稿只存在這台裝置的 localStorage，轉帳建議也在瀏覽器本機計算。",
+  },
 ];
 
 const BY_SLUG = new Map<string, ToolManifest>(toolManifests.map((manifest) => [manifest.slug, manifest]));

@@ -59,6 +59,7 @@ test("server-renders all tool routes", async () => {
     ["/tools/subtitle-editor", /開啟字幕檔/],
     ["/tools/quote-builder", /外加 5% 營業稅/],
     ["/tools/screenshot-beautifier", /把截圖拖到這裡/],
+    ["/tools/expense-splitter", /輸入名字，例如：小安/],
   ];
   for (const [pathname, pattern] of routes) {
     const response = await render(pathname);
