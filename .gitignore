@@ -44,3 +44,6 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+
+# AI 助理的 git worktree（整包原始碼拷貝，不進版控）
+/.claude/worktrees/
