@@ -56,6 +56,7 @@ test("server-renders all tool routes", async () => {
     ["/tools/audio-trimmer", /把音訊檔拖到這裡|合併音檔/],
     ["/tools/calendar", /回到本月/],
     ["/tools/event-lottery", /活動抽獎控制台/],
+    ["/tools/subtitle-editor", /開啟字幕檔/],
   ];
   for (const [pathname, pattern] of routes) {
     const response = await render(pathname);

@@ -662,6 +662,33 @@ export const toolManifests: readonly ToolManifest[] = [
     privacy: "local-only",
     privacyNote: "未啟用手機遙控時，活動設定、名單、獎項與得獎紀錄只留在這台裝置的 localStorage；若主動啟用手機遙控，只會傳送短期配對 session 與不含個資的狀態摘要。",
   },
+  {
+    slug: "subtitle-editor",
+    name: "字幕編輯器",
+    description: "SRT／VTT 互轉、時間碼整體偏移與倍率校正，逐條編輯後輸出字幕或逐字稿。",
+    category: "text",
+    symbol: "幕",
+    accent: "toki",
+    status: "active",
+    processing: "local",
+    engines: ["native"],
+    inputs: [
+      { kind: "text" },
+      { kind: "file", mimeTypes: ["text/vtt", "application/x-subrip"], extensions: [".srt", ".vtt"], maxFiles: 1, maxSizeBytes: 5 * MB },
+    ],
+    outputs: [
+      { kind: "text" },
+      { kind: "file", mimeTypes: ["application/x-subrip", "text/vtt", "text/plain"], extensions: [".srt", ".vtt", ".txt"] },
+    ],
+    supportsBatch: false,
+    supportsWorkspace: true,
+    supportsRecipe: false,
+    supportsOffline: true,
+    handoff: { canSend: true, canReceive: true, kinds: ["text"] },
+    suggestedNextTools: ["text-cleaner", "chinese-converter", "text-compare"],
+    privacy: "local-only",
+    privacyNote: "字幕檔在瀏覽器裡解析、調整與輸出，內容不會上傳。",
+  },
 ];
 
 const BY_SLUG = new Map<string, ToolManifest>(toolManifests.map((manifest) => [manifest.slug, manifest]));
