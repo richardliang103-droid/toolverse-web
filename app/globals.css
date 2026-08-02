@@ -1232,3 +1232,33 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
   .subtitle-control-row .button { width: 100%; }
 }
 
+/* 報價單產生器 */
+.quote-workspace { grid-template-columns: minmax(0, 1fr) minmax(360px, .86fr); align-items: start; }
+.quote-field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px 14px; margin-bottom: 14px; }
+.quote-textarea { min-height: 84px; max-height: 220px; padding: 11px 12px; font-size: 14px; line-height: 1.6; }
+.quote-workspace .field-label + .field-label { margin-top: 12px; }
+.quote-items-table .csv-cell { min-width: 92px; }
+.quote-cell-number { min-width: 78px; text-align: right; font-variant-numeric: tabular-nums; }
+.quote-cell-amount { padding: 8px 10px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; white-space: nowrap; }
+.quote-item-actions { margin: 12px 0 0; }
+.quote-tax-modes { display: grid; gap: 9px; margin: 0 0 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.quote-tax-modes .check-row { color: var(--ink); font-weight: 600; }
+.quote-preview-panel { position: relative; }
+.quote-summary { display: grid; gap: 6px; margin: 0 0 8px; }
+.quote-summary > div { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; font-size: 13.5px; }
+.quote-summary dt { color: var(--muted); }
+.quote-summary dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 650; }
+.quote-summary-total { padding-top: 8px; border-top: 1px solid var(--line); }
+.quote-summary-total dt { color: var(--ink); font-weight: 750; }
+.quote-summary-total dd { font-size: 19px; font-weight: 850; letter-spacing: -.02em; }
+.quote-verify-note { margin: 0 0 14px; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.quote-canvas { max-height: 560px; overflow-y: auto; border-radius: 12px; }
+.quote-canvas svg { width: 100%; height: auto; }
+
+[data-theme="dark"] .quote-tax-modes { border-color: #2b3446; background: #141b29; }
+[data-theme="dark"] .quote-summary-total { border-top-color: #2b3446; }
+
+@media (max-width: 860px) {
+  .quote-workspace { grid-template-columns: 1fr; }
+  .quote-canvas { max-height: none; }
+}

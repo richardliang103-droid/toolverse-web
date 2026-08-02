@@ -689,6 +689,30 @@ export const toolManifests: readonly ToolManifest[] = [
     privacy: "local-only",
     privacyNote: "字幕檔在瀏覽器裡解析、調整與輸出，內容不會上傳。",
   },
+  {
+    slug: "quote-builder",
+    name: "報價單產生器",
+    description: "填品項與單價自動算 5% 營業稅，支援未稅（外加稅）與含稅（內含稅）兩種報價，輸出可寄給客戶的 PNG、SVG。",
+    category: "utility",
+    symbol: "▧",
+    accent: "fuji",
+    status: "beta",
+    processing: "local",
+    engines: ["native"],
+    inputs: [
+      { kind: "file", mimeTypes: ["application/json"], extensions: [".json"], maxFiles: 1 },
+      { kind: "structured-data" },
+    ],
+    outputs: [{ kind: "file", mimeTypes: ["image/png", "image/svg+xml", "application/json"], extensions: [".png", ".svg", ".json"] }],
+    supportsBatch: false,
+    supportsWorkspace: false,
+    supportsRecipe: false,
+    supportsOffline: true,
+    handoff: { canSend: false, canReceive: false, kinds: [] },
+    suggestedNextTools: ["image-converter", "calendar"],
+    privacy: "local-only",
+    privacyNote: "抬頭、客戶、品項與金額只留在這台裝置的 localStorage，PNG／SVG／JSON 也都在本機產生。",
+  },
 ];
 
 const BY_SLUG = new Map<string, ToolManifest>(toolManifests.map((manifest) => [manifest.slug, manifest]));

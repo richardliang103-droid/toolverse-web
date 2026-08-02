@@ -57,6 +57,7 @@ test("server-renders all tool routes", async () => {
     ["/tools/calendar", /回到本月/],
     ["/tools/event-lottery", /活動抽獎控制台/],
     ["/tools/subtitle-editor", /開啟字幕檔/],
+    ["/tools/quote-builder", /外加 5% 營業稅/],
   ];
   for (const [pathname, pattern] of routes) {
     const response = await render(pathname);
