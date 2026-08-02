@@ -1198,6 +1198,61 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
   .calendar-month-picker { flex-basis: 100%; order: 3; }
 }
 
+/* 分帳結算 */
+.split-workspace { grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr); align-items: start; }
+.split-add-person { display: flex; gap: 10px; }
+.split-add-person .key-input { flex: 1; min-width: 0; }
+.split-people-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 22px; padding: 0; list-style: none; }
+.split-people-list li { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 5px 8px 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: white; font-size: 13px; font-weight: 700; }
+.split-people-list .gantt-row-delete { min-width: 22px; min-height: 22px; border-radius: 50%; font-size: 16px; line-height: 1; }
+.split-expense-header { margin-top: 28px; }
+.split-empty-expense { display: grid; gap: 5px; padding: 16px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 13px; }
+.split-empty-expense strong { color: var(--ink); }
+.split-expense-list { display: grid; gap: 12px; }
+.split-expense-card { padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: white; }
+.split-expense-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.split-expense-heading h3 { margin: 0; font-size: 14px; }
+.split-expense-fields { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(108px, .65fr) minmax(108px, .75fr); gap: 10px; margin-top: 10px; }
+.split-expense-fields .field-label { margin: 0; font-size: 12px; }
+.split-expense-fields .key-input { width: 100%; margin-top: 5px; min-height: 39px; }
+.split-shares { margin: 13px 0 0; padding: 10px 0 0; border: 0; border-top: 1px solid var(--line); }
+.split-shares legend { padding: 0; color: var(--muted); font-size: 12px; font-weight: 700; }
+.split-shares > div { display: flex; flex-wrap: wrap; gap: 7px 14px; margin-top: 8px; }
+.split-shares .check-row { min-height: 28px; font-size: 13px; }
+.split-inline-warning { margin: 10px 0 0; color: #9f4f5a; font-size: 12.5px; font-weight: 650; }
+.split-actions { margin-top: 15px; }
+.split-result-section + .split-result-section { margin-top: 21px; padding-top: 19px; border-top: 1px solid var(--line); }
+.split-result-section h3 { margin: 0 0 10px; font-size: 14px; }
+.split-settlement-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: settlement; }
+.split-settlement-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 11px 12px; border: 1px solid rgba(95,131,168,.35); border-radius: 10px; background: rgba(255,255,255,.8); font-size: 13px; counter-increment: settlement; }
+.split-settlement-list li::before { content: counter(settlement); display: none; }
+.split-settlement-list li span { color: var(--muted); font-size: 12px; }
+.split-settlement-list li b { color: var(--blue); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.split-balanced { margin: 0; padding: 12px; border-radius: 10px; background: rgba(125,154,99,.13); color: #50673d; font-size: 13px; font-weight: 700; }
+.split-balance-list { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.split-balance-list li { display: flex; justify-content: space-between; gap: 14px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+.split-balance-list b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.split-positive { color: #507c3d; }
+.split-negative { color: #b04f5d; }
+.split-result-actions { align-items: center; margin-top: 19px; }
+.split-result-actions .send-to-tools { margin: 0; }
+
+[data-theme="dark"] .split-people-list li, [data-theme="dark"] .split-expense-card { border-color: #2b3446; background: #141b29; }
+[data-theme="dark"] .split-empty-expense, [data-theme="dark"] .split-shares, [data-theme="dark"] .split-result-section + .split-result-section, [data-theme="dark"] .split-balance-list li { border-color: #2b3446; }
+[data-theme="dark"] .split-settlement-list li { border-color: rgba(132,166,202,.4); background: #141b29; }
+[data-theme="dark"] .split-balanced { background: rgba(125,154,99,.2); color: #b5d998; }
+
+@media (max-width: 860px) {
+  .split-workspace { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .split-expense-fields { grid-template-columns: 1fr; }
+  .split-settlement-list li { grid-template-columns: minmax(0, 1fr) auto; }
+  .split-settlement-list li b { grid-column: 2; grid-row: 1 / span 2; }
+  .split-settlement-list li span { grid-column: 1 / span 2; }
+}
+
 /* 字幕編輯器。逐條列表要吃滿寬度才看得下時間碼與內容，所以單欄排版；
    顏色一律走既有變數，深色模式只補寫死淺色的那幾處。 */
 .subtitle-workspace { grid-template-columns: 1fr; }
