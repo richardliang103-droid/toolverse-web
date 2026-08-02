@@ -105,7 +105,7 @@ test("接力目標由 manifest 推導，且都是已註冊的工具 slug", async
   const { tools } = await import("../lib/tools.ts");
   const slugs = new Set(tools.map((tool) => tool.slug));
   assert.deepEqual(IMAGE_TOOL_SLUGS, ["background-remover", "image-compressor", "exif-cleaner", "image-crop", "image-converter"]);
-  assert.deepEqual(TEXT_TOOL_SLUGS, ["text-cleaner", "chinese-converter", "text-compare", "markdown-editor"]);
+  assert.deepEqual(TEXT_TOOL_SLUGS, ["text-cleaner", "chinese-converter", "text-compare", "markdown-editor", "subtitle-editor"]);
   for (const slug of [...IMAGE_TOOL_SLUGS, ...TEXT_TOOL_SLUGS]) assert.ok(slugs.has(slug), `${slug} 不在工具註冊表`);
 });
 
@@ -178,7 +178,7 @@ test("首頁最近輸出：文字可接到文字工具，一般 Workspace 檔案
   assert.ok(textItem);
   assert.deepEqual(
     workspaceContinuationTargets(textItem, await workspace.list()).map((manifest) => manifest.slug),
-    ["chinese-converter", "text-compare", "markdown-editor"],
+    ["chinese-converter", "text-compare", "markdown-editor", "subtitle-editor"],
   );
 
   const pdfItem = await workspace.save({

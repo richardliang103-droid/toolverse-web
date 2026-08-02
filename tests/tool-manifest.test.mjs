@@ -219,6 +219,6 @@ test("接力目標由 manifest 的 canReceive 與 kind 推導", () => {
   );
   assert.deepEqual(
     toolsAcceptingHandoff("text").map((manifest) => manifest.slug),
-    ["text-cleaner", "chinese-converter", "text-compare", "markdown-editor"],
+    ["text-cleaner", "chinese-converter", "text-compare", "markdown-editor", "subtitle-editor"],
   );
 });

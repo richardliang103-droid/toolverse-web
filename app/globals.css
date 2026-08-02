@@ -1198,3 +1198,37 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
   .calendar-month-picker { flex-basis: 100%; order: 3; }
 }
 
+/* 字幕編輯器。逐條列表要吃滿寬度才看得下時間碼與內容，所以單欄排版；
+   顏色一律走既有變數，深色模式只補寫死淺色的那幾處。 */
+.subtitle-workspace { grid-template-columns: 1fr; }
+.subtitle-panel { min-width: 0; }
+.subtitle-input { min-height: 220px; font-family: "SFMono-Regular", Consolas, Menlo, monospace; font-size: 13px; }
+.subtitle-import-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 14px; }
+.subtitle-import-toolbar .key-note { margin: 0; }
+
+.subtitle-controls { display: grid; gap: 16px; }
+.subtitle-control-group { padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; }
+.subtitle-control-group h3 { margin: 0; font-size: 15px; letter-spacing: -.01em; }
+.subtitle-control-group .key-note { margin-top: 6px; }
+.subtitle-control-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin-top: 12px; }
+.subtitle-control-row .field-label { flex: 1 1 150px; min-width: 0; }
+.subtitle-control-row .button { min-height: 44px; }
+
+.subtitle-list { display: grid; gap: 10px; margin: 16px 0 0; padding: 0; list-style: none; }
+.subtitle-cue { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: white; }
+.subtitle-cue-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.subtitle-cue-index { color: var(--muted); font-size: 12.5px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.subtitle-cue-time { font-family: "SFMono-Regular", Consolas, Menlo, monospace; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.subtitle-cue-head .gantt-row-delete { margin-left: auto; }
+.subtitle-cue-text { width: 100%; resize: vertical; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #faf9f6; color: var(--ink); font: inherit; font-size: 14px; line-height: 1.6; outline: none; }
+.subtitle-cue-text:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+
+[data-theme="dark"] .subtitle-cue { background: #141b29; border-color: #2b3446; }
+[data-theme="dark"] .subtitle-control-group { border-color: #2b3446; }
+[data-theme="dark"] .subtitle-cue-text { background: #0e1421; border-color: #2b3446; color: var(--ink); }
+
+@media (max-width: 640px) {
+  .subtitle-control-row .field-label { flex-basis: 100%; }
+  .subtitle-control-row .button { width: 100%; }
+}
+
