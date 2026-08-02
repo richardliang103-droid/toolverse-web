@@ -215,7 +215,7 @@ test("Workspace manifest 與工具頁的實際儲存按鈕一致", () => {
 test("接力目標由 manifest 的 canReceive 與 kind 推導", () => {
   assert.deepEqual(
     toolsAcceptingHandoff("file").map((manifest) => manifest.slug),
-    ["background-remover", "image-compressor", "exif-cleaner", "image-crop", "image-converter"],
+    ["background-remover", "image-compressor", "exif-cleaner", "image-crop", "image-converter", "screenshot-beautifier"],
   );
   assert.deepEqual(
     toolsAcceptingHandoff("text").map((manifest) => manifest.slug),

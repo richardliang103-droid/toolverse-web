@@ -1262,3 +1262,45 @@ body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-eve
   .quote-workspace { grid-template-columns: 1fr; }
   .quote-canvas { max-height: none; }
 }
+
+
+/* === 截圖美化 === */
+
+.shot-fieldset { margin: 0 0 16px; padding: 0; border: 0; }
+.shot-fieldset > .field-label { margin-bottom: 10px; padding: 0; }
+.shot-workspace .crop-aspect-row { margin-bottom: 0; }
+.shot-workspace .field-label + .field-label { margin-top: 16px; }
+
+.shot-swatch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 10px; }
+.shot-swatch { display: grid; gap: 6px; min-height: 44px; padding: 6px; border: 1.5px solid var(--line); border-radius: 11px; background: white; color: var(--ink); font: inherit; font-size: 12px; text-align: center; cursor: pointer; }
+.shot-swatch:hover { border-color: var(--blue); }
+.shot-swatch.on { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+.shot-swatch-chip { display: block; height: 32px; border: 1px solid rgba(16,22,40,.14); border-radius: 7px; }
+/* 透明色票用棋盤格表示，跟輸出面的預覽底一致。 */
+.shot-swatch-chip-transparent { background-color: #fff; background-image: linear-gradient(45deg,#d8d8d8 25%,transparent 25%),linear-gradient(-45deg,#d8d8d8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#d8d8d8 75%),linear-gradient(-45deg,transparent 75%,#d8d8d8 75%); background-size: 12px 12px; background-position: 0 0,0 6px,6px -6px,-6px 0; }
+.shot-swatch-label { display: block; line-height: 1.3; }
+
+.shot-toggle { display: flex; align-items: center; gap: 9px; min-height: 44px; margin-top: 14px; color: var(--ink); font-size: 13px; font-weight: 720; cursor: pointer; }
+.shot-toggle input { width: 18px; height: 18px; accent-color: var(--blue); cursor: pointer; }
+
+/* 輸出面：跟條碼、甘特 SVG、QR 預覽一樣刻意維持固定配色，
+   深色主題不覆蓋，使用者看到的預覽才等於下載到的檔案。 */
+.shot-preview-stage { display: grid; place-items: center; min-height: 330px; padding: 20px; border: 1px solid #cfc9bd; border-radius: 14px; background-color: #fff; background-image: linear-gradient(45deg,#e5e5e5 25%,transparent 25%),linear-gradient(-45deg,#e5e5e5 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e5e5e5 75%),linear-gradient(-45deg,transparent 75%,#e5e5e5 75%); background-size: 20px 20px; background-position: 0 0,0 10px,10px -10px,-10px 0; }
+.shot-preview-stage .result-empty { color: #656a76; }
+.shot-preview-stage .result-empty strong { color: #101628; }
+.shot-preview-canvas { max-width: 100%; max-height: 420px; border-radius: 4px; animation: shot-preview-in .28s ease both; }
+
+/* 只動 transform：內容在動畫的任何一刻都完整可讀。 */
+@keyframes shot-preview-in { from { transform: scale(.985); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .shot-preview-canvas { animation: none; }
+}
+
+[data-theme="dark"] .shot-swatch { background: #141b29; border-color: #2b3446; color: #e9edf6; }
+[data-theme="dark"] .shot-swatch:hover, [data-theme="dark"] .shot-swatch.on { border-color: var(--blue); }
+[data-theme="dark"] .shot-swatch.on { box-shadow: 0 0 0 3px rgba(53,87,255,.28); }
+
+@media (max-width: 640px) {
+  .shot-swatch-grid { grid-template-columns: repeat(auto-fill, minmax(66px, 1fr)); }
+}

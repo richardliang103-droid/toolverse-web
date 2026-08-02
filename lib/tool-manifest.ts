@@ -713,6 +713,27 @@ export const toolManifests: readonly ToolManifest[] = [
     privacy: "local-only",
     privacyNote: "抬頭、客戶、品項與金額只留在這台裝置的 localStorage，PNG／SVG／JSON 也都在本機產生。",
   },
+  {
+    slug: "screenshot-beautifier",
+    name: "截圖美化",
+    description: "幫截圖加上日系和色漸層背景、留白、圓角與陰影，輸出社群常用比例的 PNG、JPG。",
+    category: "image",
+    symbol: "▣",
+    accent: "blue",
+    status: "active",
+    processing: "local",
+    engines: ["native"],
+    inputs: [{ kind: "file", mimeTypes: ["image/jpeg", "image/png", "image/webp"], maxFiles: 1, maxSizeBytes: 25 * MB }],
+    outputs: [{ kind: "file", mimeTypes: ["image/png", "image/jpeg"], extensions: [".png", ".jpg"] }],
+    supportsBatch: false,
+    supportsWorkspace: true,
+    supportsRecipe: false,
+    supportsOffline: true,
+    handoff: { canSend: true, canReceive: true, kinds: ["file"] },
+    suggestedNextTools: ["image-compressor", "image-converter", "image-crop"],
+    privacy: "local-only",
+    privacyNote: "背景、留白、圓角與陰影都用 Canvas 在本機合成，截圖不會離開瀏覽器。",
+  },
 ];
 
 const BY_SLUG = new Map<string, ToolManifest>(toolManifests.map((manifest) => [manifest.slug, manifest]));
