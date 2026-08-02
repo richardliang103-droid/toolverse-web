@@ -104,7 +104,7 @@ test("handoffSourceName：系統來源與工具 slug 都顯示友善名稱", () 
 test("接力目標由 manifest 推導，且都是已註冊的工具 slug", async () => {
   const { tools } = await import("../lib/tools.ts");
   const slugs = new Set(tools.map((tool) => tool.slug));
-  assert.deepEqual(IMAGE_TOOL_SLUGS, ["background-remover", "image-compressor", "exif-cleaner", "image-crop", "image-converter"]);
+  assert.deepEqual(IMAGE_TOOL_SLUGS, ["background-remover", "image-compressor", "exif-cleaner", "image-crop", "image-converter", "screenshot-beautifier"]);
   assert.deepEqual(TEXT_TOOL_SLUGS, ["text-cleaner", "chinese-converter", "text-compare", "markdown-editor", "subtitle-editor"]);
   for (const slug of [...IMAGE_TOOL_SLUGS, ...TEXT_TOOL_SLUGS]) assert.ok(slugs.has(slug), `${slug} 不在工具註冊表`);
 });
@@ -117,7 +117,7 @@ test("首頁最近輸出：單張圖片依來源推薦排序相容的下一站",
   assert.ok(item);
   assert.deepEqual(
     workspaceContinuationTargets(item, items).map((manifest) => manifest.slug),
-    ["image-compressor", "image-converter", "exif-cleaner", "background-remover"],
+    ["image-compressor", "image-converter", "exif-cleaner", "background-remover", "screenshot-beautifier"],
   );
 });
 
