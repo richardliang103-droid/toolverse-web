@@ -200,10 +200,10 @@ test("recommendToolsForFile：只推薦 manifest 真的宣告吃得下這個格�
   assert.equal(recommendedTools[0]?.slug, "exif-cleaner");
 });
 
-test("recommendToolsForFile：PDF 只有一個工具吃得下，仍然正確回傳", () => {
+test("recommendToolsForFile：PDF 的相容工具都會正確回傳", () => {
   const detection = { mimeType: "application/pdf", category: "pdf", label: "PDF 文件", extension: ".pdf", confidence: 1, source: "magic-bytes", mismatch: false };
   const { recommendedTools } = recommendToolsForFile(detection);
-  assert.deepEqual(recommendedTools.map((item) => item.slug), ["pdf-toolkit"]);
+  assert.deepEqual(recommendedTools.map((item) => item.slug), ["pdf-toolkit", "document-to-markdown"]);
 });
 
 test("recommendToolsForFile：判斷不出格式時完全不推薦", () => {
@@ -240,7 +240,7 @@ test("buildFileIntakeDetection／buildTextIntakeDetection：組出完整的 Inta
   assert.equal(fileIntake.kind, "file");
   assert.equal(fileIntake.type, "application/pdf");
   assert.equal(fileIntake.label, "PDF 文件");
-  assert.deepEqual(fileIntake.recommendedTools.map((item) => item.slug), ["pdf-toolkit"]);
+  assert.deepEqual(fileIntake.recommendedTools.map((item) => item.slug), ["pdf-toolkit", "document-to-markdown"]);
 
   const textIntake = buildTextIntakeDetection(detectTextType("name,age\nAlice,30"));
   assert.equal(textIntake.kind, "text");

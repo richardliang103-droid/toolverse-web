@@ -140,6 +140,10 @@ a.tool-card:hover { transform: translate(-3px,-3px); box-shadow: 7px 7px 0 var(-
 .send-to-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
 .send-to-label { color: var(--muted); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; letter-spacing: .08em; }
 .send-to-label::after { content: " →"; }
+.file-drop-zone { display: grid; justify-items: center; gap: 10px; min-height: 190px; padding: 28px; border: 1px dashed #9da6cc; border-radius: 14px; background: #faf9f6; text-align: center; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+.file-drop-zone-active { border-color: var(--blue); background: var(--blue-soft); transform: scale(1.01); }
+.file-drop-title { margin: 0; font-size: 20px; font-weight: 800; }
+.tool-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
 .error-message { margin: 13px 0 0; color: #b72a22; font-size: 14px; }
 .history { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--line); }
 .history h3 { margin: 0 0 12px; font-size: 14px; }

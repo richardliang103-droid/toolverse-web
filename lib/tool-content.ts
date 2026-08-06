@@ -230,6 +230,20 @@ export const toolContent: Record<string, ToolContent> = {
       { q: "「忽略空白」是什麼意思？", a: "開啟後，連續空格視為一個、行首行尾空白不計，適合比較排版被改過但內容相同的文字。" },
     ],
   },
+  "document-to-markdown": {
+    steps: [
+      "拖入或選擇 Word、Excel、PowerPoint、PDF、EPUB、RTF、OpenDocument 或 CSV 文件。",
+      "工具在瀏覽器本機用 WASM 解析文件結構，轉換期間不會上傳檔案。",
+      "檢查產生的 Markdown，可直接編輯內容。",
+      "下載 .md，或存到工作區接續使用 Markdown 編輯器與文字清理器。",
+    ],
+    faq: [
+      { q: "文件會上傳到伺服器嗎？", a: "不會。文件在瀏覽器內用 Web Worker 與 WASM 轉換，檔案內容不會送到 ToolVerse 或第三方 API。首次開啟工具時會下載轉換元件。" },
+      { q: "支援掃描 PDF 嗎？", a: "目前只支援有文字層的 PDF。掃描 PDF 只有圖片，anydoc 不含 OCR，需要先用 OCR 工具轉成文字。" },
+      { q: "哪些文件格式可以轉換？", a: "支援 Word、Excel、PowerPoint、OpenDocument、RTF、EPUB、CSV 與 PDF；文件若加密、損壞或沒有可擷取內容，工具會顯示原因。" },
+      { q: "轉換後的圖片會保留嗎？", a: "文件文字、表格、標題、連結與圖片替代文字會轉入 Markdown；內嵌圖片資產的完整打包輸出目前不在初版範圍。" },
+    ],
+  },
   "markdown-editor": {
     steps: [
       "左邊輸入 Markdown，右邊即時預覽。",

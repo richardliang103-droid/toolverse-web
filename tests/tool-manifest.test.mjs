@@ -166,7 +166,7 @@ test("toolsAcceptingFile：依 MIME 找得到吃這個格式的工具", () => {
   }
   assert.ok(!jpeg.includes("text-cleaner"));
 
-  assert.deepEqual(toolsAcceptingFile("application/pdf").map((manifest) => manifest.slug), ["pdf-toolkit"]);
+  assert.deepEqual(toolsAcceptingFile("application/pdf").map((manifest) => manifest.slug), ["pdf-toolkit", "document-to-markdown"]);
   assert.deepEqual(toolsAcceptingFile("", ".tsv").map((manifest) => manifest.slug), ["csv-editor"]);
   assert.deepEqual(toolsAcceptingFile("application/x-unknown").map((manifest) => manifest.slug), []);
 });
