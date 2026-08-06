@@ -21,6 +21,7 @@
 - 圖片裁切：自由框選或固定比例，本機輸出 PNG、JPG。
 - 文字比較：逐行／逐詞／逐字 diff，標示新增刪除修改，本機比較。
 - Markdown 編輯器：即時預覽、GFM 支援、自動儲存草稿。
+- 文件轉 Markdown：本機 WASM 把 Word、Excel、PowerPoint、PDF、EPUB、RTF、OpenDocument 與 CSV 轉成 Markdown，檔案不上傳。
 - CSV 編輯器：表格編輯、排序、增刪欄列，匯出 CSV／JSON。
 - 圖片格式轉換：批次轉 WebP／PNG／JPG，支援 GIF、BMP、SVG 輸入。
 - 音訊剪輯：波形選段、試聽、輸出無損 WAV。
